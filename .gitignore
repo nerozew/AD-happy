@@ -1,0 +1,6 @@
+.tmp-altium-check/
+.superpowers/
+__pycache__/
+*.pyc
+node_modules/
+analysis/
