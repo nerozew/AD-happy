@@ -54,6 +54,44 @@ test('端到端产出全部文件', () => {
   assert.ok(summary.report)
 })
 
+test('finding 可见文本为中文，不残留上游英文', () => {
+  const outDir = freshOut()
+  const r = runAnalyze(['--project', root, '--out', outDir])
+  assert.equal(r.status, 0, r.stderr)
+  const findings = readJson(outDir, 'findings.json')
+  assert.ok(findings.length > 0)
+  const englishPhrases = [
+    'Voltage divider',
+    'Resistive voltage divider',
+    'Power regulator',
+    'Regulator ',
+    'min trace',
+    'Single-pin net',
+    'Track width',
+    'Annular ring',
+  ]
+  for (const finding of findings) {
+    // 与 report.mjs 一致：title 优先 summary，evidence 优先 description。
+    const texts = [
+      finding.title || finding.summary,
+      finding.evidence || finding.description,
+    ].filter(Boolean)
+    for (const text of texts) {
+      assert.match(text, /[一-鿿]/, `缺少中文：${text}`)
+      // 只统计字母（含中文），允许 R1/IC1/GND/PD-DET/mm 等标识符。
+      const letters = [...text].filter(char => /[\p{L}]/u.test(char))
+      const asciiLetters = letters.filter(char => char.charCodeAt(0) < 128)
+      if (letters.length) {
+        assert.ok(asciiLetters.length / letters.length < 0.5, `英文占比过高：${text}`)
+      }
+      assert.ok(!text.includes('（检测器原文）'), `夹具不应出现未翻译原文：${text}`)
+      for (const phrase of englishPhrases) {
+        assert.ok(!text.includes(phrase), `残留英文 ${phrase}：${text}`)
+      }
+    }
+  }
+})
+
 test('无效路径退出码 2', () => {
   try {
     execFileSync('node', ['.agents/skills/ad-happy/scripts/analyze.mjs', '--project', 'Z:/nope'], { stdio: 'pipe' })
