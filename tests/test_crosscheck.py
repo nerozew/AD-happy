@@ -30,6 +30,8 @@ def test_positive_sample_is_consistent():
 def test_negative_sample_detects_mismatch():
     r = cross_check(to_context(NEG_RAW), PCB)
     assert r["status"]["pin_pad"] == "found"
+    # 只改了一个引脚，只应报一条；其余 21 对不能有噪音。
+    assert len(r["findings"]) == 1
     assert any(f["rule_id"].startswith("XP-") for f in r["findings"])
 
 
@@ -57,6 +59,9 @@ def test_positive_compares_all_pins_and_aliases_unnamed_net():
     r = cross_check(to_context(RAW), PCB)
     assert r["findings"] == []
     assert r["coverage"]["compared"] == 22
+    # 锁住主匹配路径：22 对全部按 (位号, 引脚号) 命中，没有走降级分支。
+    assert r["coverage"]["exact"] == 22
+    assert r["coverage"]["by_net_name"] == 0
     aliases = {
         (alias["schematic_net"], alias["pcb_net"])
         for alias in r["coverage"]["net_aliases"]
@@ -128,7 +133,8 @@ def test_pad_name_mismatch_falls_back_to_net_name():
 
 
 def test_name_fallback_finding_notes_name_matching():
-    # 焊盘名不一致且网络名也对不上：必须生成带「按名称匹配」说明的 XP finding。
+    # 焊盘名不一致且网络名也对不上：必须生成带「按名称匹配」说明的 XP finding，
+    # 并带焊盘号与 PCB 网络；未映射焊盘单独列出，不能混成网络不一致。
     ctx = SimpleNamespace(
         pin_net={("U1", "1"): ("VCC", {}), ("U1", "2"): ("GND", {})},
         nets={
@@ -141,6 +147,7 @@ def test_name_fallback_finding_notes_name_matching():
         "pads": [
             {"componentIndex": 0, "name": "A1", "netIndex": 0},
             {"componentIndex": 0, "name": "A2", "netIndex": 0},
+            {"componentIndex": 0, "name": "A3", "netIndex": -1},
         ],
         "nets": ["GND"],
     }
@@ -151,8 +158,37 @@ def test_name_fallback_finding_notes_name_matching():
     assert "按名称匹配" in finding["summary"]
     assert finding["match_mode"] == "name"
     assert finding["schematic_net"] == "VCC"
-    assert finding["pcb_net"] is None
-    assert "GND" in finding["pcb_nets"]
+    assert finding["pcb_net"] == "GND"
+    assert set(finding["pad_number"].split("/")) == {"A1", "A2"}
+    assert finding["pcb_nets"] == ["GND"]
+    assert finding["unmapped_pads"] == ["A3"]
+    assert {entry["number"] for entry in finding["pcb_pads"]} == {"A1", "A2", "A3"}
+    skipped = [
+        item for item in r["coverage"]["skipped"] if item.get("pad") == "A3"
+    ]
+    assert skipped and "netIndex" in skipped[0]["reason"]
+
+
+def test_missing_or_unmapped_pads_are_not_mismatches():
+    # 评审反例：原理图 U1.1=VCC，PCB 只有焊盘 A1 且 netIndex=-1。
+    # 这是数据缺口，不能生成 XP-001，也不能计为已比对。
+    ctx = SimpleNamespace(
+        pin_net={("U1", "1"): ("VCC", {})},
+        nets={"VCC": {"pins": [{"component": "U1", "pin_number": "1"}]}},
+    )
+    cases = [
+        ([], [], "无焊盘"),
+        ([{"componentIndex": 0, "name": "A1", "netIndex": -1}], [], "netIndex"),
+    ]
+    for pads, nets, expected_reason in cases:
+        r = cross_check(
+            ctx,
+            {"components": [{"reference": "U1"}], "pads": pads, "nets": nets},
+        )
+        assert r["status"]["pin_pad"] == "not_evaluated"
+        assert r["findings"] == []
+        assert r["coverage"]["compared"] == 0
+        assert expected_reason in r["coverage"]["skipped"][0]["reason"]
 
 
 def test_unmapped_pad_net_is_skipped_and_reported():

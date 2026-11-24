@@ -167,9 +167,27 @@ def _compare_pin(
         )
 
     # 焊盘名与引脚号不一致：降级为按网络名比对。
+    mapped_pads = sorted(name for name, names in pads.items() if any(names))
+    unmapped_pads = sorted(name for name, names in pads.items() if not any(names))
     component_pad_nets = sorted({
         name for names in pads.values() for name in names if name
     })
+
+    if not component_pad_nets:
+        # 没有焊盘，或全部焊盘的 netIndex 都未映射：这是数据缺口，不是网络
+        # 不一致，不能生成 XP-001。
+        coverage["skipped"].append({
+            "reference": ref,
+            "pin": pin_number,
+            "reason": (
+                "PCB 上该元件无焊盘，无法按名称比对"
+                if not pads
+                else "PCB 上该元件焊盘网络均未映射（netIndex 未映射），无法比对"
+            ),
+            **({"pads": unmapped_pads} if unmapped_pads else {}),
+        })
+        return None
+
     coverage["compared"] += 1
     coverage["by_net_name"] += 1
     for candidate in component_pad_nets:
@@ -179,8 +197,24 @@ def _compare_pin(
             if candidate != sch_net:
                 _record_alias(coverage, sch_net, candidate, ref, pin_number)
             return None
+
+    # 有已映射网络但对不上：真实不一致。未映射焊盘不参与判定，但要在
+    # coverage 与 finding 里列出，避免把数据缺口藏进差异里。
+    for pad_name in unmapped_pads:
+        coverage["skipped"].append({
+            "reference": ref,
+            "pin": pin_number,
+            "pad": pad_name,
+            "reason": f"PCB 焊盘 {pad_name} 无网络（netIndex 未映射），不参与比对",
+        })
     return _name_mismatch_finding(
-        ref, pin_number, sch_net, component_pad_nets,
+        ref,
+        pin_number,
+        sch_net,
+        component_pad_nets,
+        pad_numbers=mapped_pads,
+        unmapped_pads=unmapped_pads,
+        pcb_pads=_pad_net_pairs(pads),
     )
 
 
@@ -335,9 +369,29 @@ def _mismatch_finding(ref, pin_number, sch_net, pcb_net, *, match_mode, pad_numb
     )
 
 
-def _name_mismatch_finding(ref, pin_number, sch_net, component_pad_nets):
+def _name_mismatch_finding(
+    ref,
+    pin_number,
+    sch_net,
+    component_pad_nets,
+    *,
+    pad_numbers,
+    unmapped_pads,
+    pcb_pads,
+):
     nets = _ordered_nets(sch_net, *component_pad_nets)
-    pcb_nets_text = "、".join(component_pad_nets) or "无"
+    pcb_net = _join_nets(component_pad_nets)
+    # 降级路径没有同名焊盘，pad_number 记录实际参与比对的候选焊盘；
+    # 多个候选时用 "/" 连接，具体列表见 pcb_pads。
+    pad_number = "/".join(pad_numbers)
+    pads_text = "、".join(
+        f"{entry['number']}（{entry['net'] or '未映射'}）"
+        for entry in pcb_pads
+    ) or "无"
+    unmapped_text = (
+        f"未映射网络（netIndex 未映射）的焊盘：{'、'.join(unmapped_pads)}。"
+        if unmapped_pads else ""
+    )
     return make_finding(
         detector="crosscheck",
         rule_id="XP-001",
@@ -345,12 +399,13 @@ def _name_mismatch_finding(ref, pin_number, sch_net, component_pad_nets):
         detection_id=f"pin-pad-{ref}.{pin_number}",
         summary=(
             f"{ref}.{pin_number} 网络不一致："
-            f"原理图 {sch_net} / PCB 无对应焊盘（按名称匹配）"
+            f"原理图 {sch_net} / PCB {pcb_net}（按名称匹配）"
         ),
         description=(
             f"PCB 上元件 {ref} 没有名为 {pin_number!r} 的焊盘；"
             f"按网络名比对，该元件也没有焊盘连接网络 {sch_net!r}。"
-            f"该元件现有焊盘网络：{pcb_nets_text}。匹配方式：按名称匹配。"
+            f"该元件焊盘：{pads_text}。{unmapped_text}"
+            "焊盘可能已改名或缺失，匹配方式：按名称匹配。"
         ),
         severity="error",
         confidence="deterministic",
@@ -366,10 +421,12 @@ def _name_mismatch_finding(ref, pin_number, sch_net, component_pad_nets):
         source="crosscheck",
         match_mode="name",
         schematic_net=sch_net,
-        pcb_net=None,
+        pcb_net=pcb_net,
         pcb_nets=component_pad_nets,
+        pcb_pads=pcb_pads,
+        unmapped_pads=unmapped_pads,
         pin_number=pin_number,
-        pad_number=None,
+        pad_number=pad_number,
     )
 
 
@@ -422,6 +479,21 @@ def _net_name(value):
 def _join_nets(net_names):
     unique = sorted({name for name in net_names if name})
     return "/".join(unique)
+
+
+def _pad_net_pairs(pads):
+    """``{焊盘名: [网络名或 None]}`` -> ``[{number, net}]``，供 finding 举证。"""
+    pairs = []
+    for pad_name in sorted(pads):
+        nets = sorted({name for name in pads[pad_name] if name})
+        if not nets:
+            net_text = None
+        elif len(nets) == 1:
+            net_text = nets[0]
+        else:
+            net_text = "/".join(nets)
+        pairs.append({"number": pad_name, "net": net_text})
+    return pairs
 
 
 def _ordered_nets(*net_names):
