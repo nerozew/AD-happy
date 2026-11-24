@@ -7,8 +7,8 @@
 // 连接模型（与 Altium 一致）：
 // - 每条导线的相邻顶点连成线段；wire.points 必须全部消费，只取 x1/y1/x2/y2
 //   会丢掉中间顶点，导致 T 型连接与中段标签丢失。
-// - 引脚热点 = (x, y) + 引脚长度 × 方向向量；热点吸附到最近线段（点到线段的距离 ≤ tolerance）。
-// - 导线顶点的 T 型连接、junction 坐标、网络标签、电源端口同样吸附到最近线段。
+// - 引脚热点 = (x, y) + 引脚长度 × 方向向量；热点吸附到所有距离 ≤ tolerance 的线段。
+// - 导线顶点的 T 型连接、junction 坐标、网络标签、电源端口同样吸附到所有容差内线段。
 // - 只在节点与线段之间吸附；两条线段在中间交叉且无 junction 时不导通（Altium 规则）。
 // - 最后按名称合并同名网络（如 6 个分散的 GND 电源端口），未命名网络编号 __unnamed_N。
 import { PIN_DIRECTIONS } from './sch.mjs'
@@ -83,19 +83,27 @@ export function buildNets(sch, tolerance = DEFAULT_TOLERANCE) {
   // junction 本身不需要记录归属，入图后由下面的统一吸附处理。
   for (const junction of sch.junctions ?? []) nodeAt(junction.x, junction.y)
 
-  // 4. 并查集：先连导线自身的相邻顶点，再让每个节点吸附最近线段。
+  // 4. 并查集：先连导线自身的相邻顶点，再让每个节点吸附所有容差内的线段。
   const unionFind = new UnionFind(nodes.length)
   for (const segment of segments) unionFind.union(segment.a, segment.b)
 
   // 吸附覆盖三类连接：
   // - 引脚/标签落在导线段中段（点到线段距离，而非只比较端点）；
   // - T 型连接：一条导线的顶点落在另一条导线的中段；
-  // - junction 显式标在交点上。
+  // - junction 显式标在交点上（交点可能不是任何导线的顶点）。
+  //
+  // 关键：必须 union 所有距离 ≤ tolerance 的线段，而不是只取最近一条。
+  // 导线端点的最近线段永远是它自己的线段（距离 0），只取最近一条时：
+  //   - T 型连接是否成立取决于 wires 的记录顺序；
+  //   - 十字交叉处的 junction 只会并入先遍历到的线段；
+  //   - 两个相距小于容差的端点永远吸附到各自的线段，容差形同虚设。
+  // 因此这里对每个节点遍历全部线段，容差内全部并入。
   for (let node = 0; node < nodes.length; node++) {
-    const nearest = nearestSegment(nodes[node], nodes, segments)
-    if (nearest.segment === undefined || nearest.distance > tolerance) continue
-    unionFind.union(node, nearest.segment.a)
-    unionFind.union(node, nearest.segment.b)
+    for (const segment of segments) {
+      if (distanceToSegment(nodes[node], segment, nodes) > tolerance) continue
+      unionFind.union(node, segment.a)
+      unionFind.union(node, segment.b)
+    }
   }
 
   // 5. 汇总每个连通分量上的引脚与网络名。
@@ -179,19 +187,6 @@ function distanceToSegment(point, segment, nodes) {
   if (lengthSquared === 0) return Math.hypot(point.x - a.x, point.y - a.y)
   const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared))
   return Math.hypot(point.x - (a.x + t * dx), point.y - (a.y + t * dy))
-}
-
-function nearestSegment(point, nodes, segments) {
-  let best
-  let bestDistance = Infinity
-  for (const segment of segments) {
-    const distance = distanceToSegment(point, segment, nodes)
-    if (distance < bestDistance) {
-      bestDistance = distance
-      best = segment
-    }
-  }
-  return { segment: best, distance: bestDistance }
 }
 
 // 并查集（路径压缩）。样板规模只有几十个节点，不需要按秩合并。
