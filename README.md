@@ -45,7 +45,7 @@ node .agents/skills/ad-happy/scripts/analyze.mjs --project "<工程目录或 .Pr
 - Python 分析阶段超时 120 秒；超时会写 manifest 错误并退出码 3。
 - 不解析 `.SchLib` / `.PcbLib` / `.IntLib`；层次原理图、总线、装配变体与自动修复不在首版范围。
 - 网表匹配率不足（引脚未全部入网）时，依赖网表的原理图规则标记为 `not_evaluated`，不会当作通过。
-- 部分 finding 描述来自上游 kicad-happy 检测器原文（英文），报告会注明。
+- 上游 kicad-happy 检测器的 finding 文案已由适配层翻译成中文；原文保留在 `findings.json` 的 `source_text` 中，个别无法安全翻译的文本以「（检测器原文）」标注。
 
 ## 许可
 

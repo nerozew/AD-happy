@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "run": {
+    "id": "20261124-225528-621f",
+    "startedAt": "2026-11-24T14:55:28.658Z",
+    "argv": [
+      "--project",
+      "tests/fixtures/Student-DCDC-Buck-Converter",
+      "--out",
+      "docs/sample-report"
+    ],
+    "cwd": "d:\\Code_all\\ad-happy",
+    "outDir": "d:\\Code_all\\ad-happy\\docs\\sample-report"
+  },
+  "project": {
+    "name": "DCDC Buck Converter",
+    "folder": "Student-DCDC-Buck-Converter",
+    "path": "d:\\Code_all\\ad-happy\\tests\\fixtures\\Student-DCDC-Buck-Converter",
+    "projectPath": "d:\\Code_all\\ad-happy\\tests\\fixtures\\Student-DCDC-Buck-Converter\\DCDC Buck Converter.PrjPcb",
+    "selectedBoard": "PCB4 (Manual routing).PcbDoc",
+    "selectedSchematic": "SCH1_Main.SchDoc",
+    "boards": [
+      {
+        "name": "PCB1 (First design).PcbDoc",
+        "selected": false,
+        "status": "not_evaluated"
+      },
+      {
+        "name": "PCB2 (Failed design).PcbDoc",
+        "selected": false,
+        "status": "not_evaluated"
+      },
+      {
+        "name": "PCB3 (Failed design).PcbDoc",
+        "selected": false,
+        "status": "not_evaluated"
+      },
+      {
+        "name": "PCB4 (Final Design).PcbDoc",
+        "selected": false,
+        "status": "not_evaluated"
+      },
+      {
+        "name": "PCB4 (Manual routing).PcbDoc",
+        "selected": true,
+        "status": "parsed"
+      }
+    ]
+  },
+  "environment": {
+    "ok": true,
+    "node": "v24.18.0",
+    "altiumts": "0.0.95",
+    "python": "3.13.12",
+    "kicadHappy": "D:/Tools/kicad-happy/skills/kicad/scripts",
+    "errors": []
+  },
+  "stages": {
+    "selfcheck": "pass",
+    "discover": "pass",
+    "parse": "pass",
+    "connectivity": "pass",
+    "python": "pass",
+    "report": "pass"
+  },
+  "documents": [
+    {
+      "name": "SCH1_Main.SchDoc",
+      "path": "d:\\Code_all\\ad-happy\\tests\\fixtures\\Student-DCDC-Buck-Converter\\SCH1_Main.SchDoc",
+      "kind": "sch",
+      "exists": true,
+      "status": "parsed"
+    },
+    {
+      "name": "PCB_Lib.PcbLib",
+      "path": "d:\\Code_all\\ad-happy\\tests\\fixtures\\Student-DCDC-Buck-Converter\\PCB_Lib.PcbLib",
+      "kind": "lib",
+      "exists": true,
+      "status": "not_evaluated",
+      "reason": "库文件不做独立解析"
+    },
+    {
+      "name": "SCH_Lib.SchLib",
+      "path": "d:\\Code_all\\ad-happy\\tests\\fixtures\\Student-DCDC-Buck-Converter\\SCH_Lib.SchLib",
+      "kind": "lib",
+      "exists": true,
+      "status": "not_evaluated",
+      "reason": "库文件不做独立解析"
+    },
+    {
+      "name": "DCDC Buck Converter.IntLib",
+      "path": "d:\\Code_all\\ad-happy\\tests\\fixtures\\Student-DCDC-Buck-Converter\\DCDC Buck Converter.IntLib",
+      "kind": "lib",
+      "exists": true,
+      "status": "not_evaluated",
+      "reason": "库文件不做独立解析"
+    },
+    {
+      "name": "PCB1 (First design).PcbDoc",
+      "path": "d:\\Code_all\\ad-happy\\tests\\fixtures\\Student-DCDC-Buck-Converter\\PCB1 (First design).PcbDoc",
+      "kind": "pcb",
+      "exists": true,
+      "status": "not_evaluated",
+      "reason": "仅解析选中的板卡"
+    },
+    {
+      "name": "PCB2 (Failed design).PcbDoc",
+      "path": "d:\\Code_all\\ad-happy\\tests\\fixtures\\Student-DCDC-Buck-Converter\\PCB2 (Failed design).PcbDoc",
+      "kind": "pcb",
+      "exists": true,
+      "status": "not_evaluated",
+      "reason": "仅解析选中的板卡"
+    },
+    {
+      "name": "PCB3 (Failed design).PcbDoc",
+      "path": "d:\\Code_all\\ad-happy\\tests\\fixtures\\Student-DCDC-Buck-Converter\\PCB3 (Failed design).PcbDoc",
+      "kind": "pcb",
+      "exists": true,
+      "status": "not_evaluated",
+      "reason": "仅解析选中的板卡"
+    },
+    {
+      "name": "PCB4 (Final Design).PcbDoc",
+      "path": "d:\\Code_all\\ad-happy\\tests\\fixtures\\Student-DCDC-Buck-Converter\\PCB4 (Final Design).PcbDoc",
+      "kind": "pcb",
+      "exists": true,
+      "status": "not_evaluated",
+      "reason": "仅解析选中的板卡"
+    },
+    {
+      "name": "PCB4 (Manual routing).PcbDoc",
+      "path": "d:\\Code_all\\ad-happy\\tests\\fixtures\\Student-DCDC-Buck-Converter\\PCB4 (Manual routing).PcbDoc",
+      "kind": "pcb",
+      "exists": true,
+      "status": "parsed"
+    }
+  ],
+  "errors": [],
+  "warnings": [],
+  "svg": {
+    "requested": false,
+    "rendered": false
+  },
+  "artifacts": {
+    "manifest": "manifest.json",
+    "snapshot": "snapshot.json",
+    "raw": "raw.json",
+    "pcb": "pcb.json",
+    "findings": "findings.json",
+    "pipelineSummary": "pipeline-summary.json",
+    "report": "report.html",
+    "summary": "summary.json"
+  },
+  "status": "complete",
+  "exitCode": 0,
+  "finishedAt": "2026-11-24T14:55:29.064Z",
+  "durationMs": 376
+}

@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DCDC Buck Converter · AD-Happy 设计审查报告</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f2f4f7;
+    --panel: #ffffff;
+    --text: #101828;
+    --muted: #475467;
+    --border: #d0d5dd;
+    --accent: #1d4ed8;
+    --must-fg: #b42318;
+    --must-bg: #fef3f2;
+    --must-border: #fda29b;
+    --should-fg: #b54708;
+    --should-bg: #fffaeb;
+    --should-border: #fec84b;
+    --nice-fg: #175cd3;
+    --nice-bg: #eff8ff;
+    --nice-border: #84caff;
+    --pass-fg: #067647;
+    --pass-bg: #ecfdf3;
+    --pass-border: #75e0a7;
+    --na-fg: #475467;
+    --na-bg: #f2f4f7;
+    --na-border: #98a2b3;
+    --partial-fg: #7a5af8;
+    --partial-bg: #f4f3ff;
+    --partial-border: #bdb4fe;
+    --fail-fg: #912018;
+    --fail-bg: #fee4e2;
+    --fail-border: #fda29b;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    padding: 32px 16px 56px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+  }
+  .report { max-width: 1040px; margin: 0 auto; }
+  code {
+    font-family: "Cascadia Mono", Consolas, "SFMono-Regular", monospace;
+    font-size: 0.92em;
+  }
+  .report-header {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-top: 5px solid var(--accent);
+    border-radius: 12px;
+    padding: 26px 30px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  }
+  .kicker {
+    margin: 0 0 6px;
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .report-header h1 {
+    margin: 0 0 16px;
+    font-size: 28px;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 32px; margin: 0; }
+  .meta div { display: flex; gap: 8px; align-items: baseline; }
+  .meta dt { color: var(--muted); font-size: 13px; }
+  .meta dd { margin: 0; font-size: 14px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 30px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  }
+  .panel > h2 { margin: 0 0 16px; font-size: 20px; }
+  .panel h3 { margin: 24px 0 10px; font-size: 16px; }
+  .verdict { margin: 0 0 18px; font-size: 16px; font-weight: 600; }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin: 0 0 16px;
+    padding: 0;
+    list-style: none;
+  }
+  .stat {
+    background: #fcfcfd;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .stat-value { display: block; font-size: 26px; font-weight: 700; line-height: 1.2; }
+  .stat-label { display: block; color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .stat.must_fix .stat-value { color: var(--must-fg); }
+  .stat.should_fix .stat-value { color: var(--should-fg); }
+  .stat.nice_to_have .stat-value { color: var(--nice-fg); }
+  .stat.facts .stat-value { color: var(--muted); }
+  .stat.na .stat-value { color: var(--na-fg); }
+  .stat.partial .stat-value { color: var(--partial-fg); }
+  .stat.failed .stat-value { color: var(--fail-fg); }
+  .note {
+    margin: 0;
+    padding: 10px 14px;
+    background: #f8fafc;
+    border-left: 4px solid var(--na-border);
+    border-radius: 6px;
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .hint { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+  .note-warn {
+    margin: 0 0 14px;
+    background: var(--should-bg);
+    border-left-color: var(--should-border);
+    color: var(--should-fg);
+  }
+  .severity-group { margin-top: 22px; }
+  .severity-group:first-of-type { margin-top: 0; }
+  .group-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 8px;
+  }
+  .group-head h3 { margin: 0; font-size: 18px; }
+  .group-count { color: var(--muted); font-size: 13px; }
+  .group-desc { margin: 6px 0 12px; color: var(--muted); font-size: 13px; }
+  #group-must_fix .group-head { border-color: var(--must-border); }
+  #group-should_fix .group-head { border-color: var(--should-border); }
+  #group-nice_to_have .group-head { border-color: var(--nice-border); }
+  .finding {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-left: 5px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  #group-must_fix .finding { border-left-color: var(--must-fg); }
+  #group-should_fix .finding { border-left-color: var(--should-fg); }
+  #group-nice_to_have .finding { border-left-color: var(--nice-fg); }
+  .finding-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .rule-id {
+    background: #f2f4f7;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-weight: 700;
+  }
+  .badge {
+    display: inline-block;
+    border: 1px solid;
+    border-radius: 999px;
+    padding: 1px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .badge-must_fix { color: var(--must-fg); background: var(--must-bg); border-color: var(--must-border); }
+  .badge-should_fix { color: var(--should-fg); background: var(--should-bg); border-color: var(--should-border); }
+  .badge-nice_to_have { color: var(--nice-fg); background: var(--nice-bg); border-color: var(--nice-border); }
+  .badge-fact { color: var(--muted); background: #f8fafc; border-color: var(--border); }
+  .badge-pass { color: var(--pass-fg); background: var(--pass-bg); border-color: var(--pass-border); }
+  .badge-found { color: var(--must-fg); background: var(--must-bg); border-color: var(--must-border); }
+  .badge-not_evaluated, .badge-unknown { color: var(--na-fg); background: var(--na-bg); border-color: var(--na-border); }
+  .badge-partial { color: var(--partial-fg); background: var(--partial-bg); border-color: var(--partial-border); }
+  .badge-failed { color: var(--fail-fg); background: var(--fail-bg); border-color: var(--fail-border); }
+  .finding-title { margin: 4px 0 8px; font-size: 15px; line-height: 1.5; word-break: break-word; }
+  .finding p { margin: 6px 0; }
+  .label {
+    display: inline-block;
+    min-width: 3em;
+    margin-right: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .locators {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    list-style: none;
+    margin: 8px 0;
+    padding: 0;
+    font-size: 13px;
+  }
+  .locator-key { color: var(--muted); margin-right: 6px; }
+  .empty { color: var(--muted); margin: 4px 0 0; }
+  .coverage-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin: 0 0 8px;
+  }
+  .coverage-grid div { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .coverage-grid dt { color: var(--muted); font-size: 13px; }
+  .coverage-grid dd { margin: 2px 0 0; font-size: 24px; font-weight: 700; }
+  .status-list { list-style: none; margin: 0; padding: 0; }
+  .status-list li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+  }
+  .status-list .rule-name { color: var(--muted); }
+  .status-list .detail { flex-basis: 100%; color: var(--muted); font-size: 13px; }
+  .status-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .status-table th, .status-table td {
+    border-bottom: 1px solid var(--border);
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  .status-table thead th { background: #f8fafc; color: var(--muted); font-size: 13px; }
+  .status-table tbody tr:last-child th, .status-table tbody tr:last-child td { border-bottom: none; }
+  .status-table th { font-weight: 600; }
+  .status-table code { display: block; color: var(--muted); font-weight: 400; }
+  .doc-table th { word-break: break-word; }
+  .doc-table tbody tr.doc-selected th, .doc-table tbody tr.doc-selected td { background: #eff8ff; }
+  .doc-table tbody tr.doc-selected th { color: var(--nice-fg); }
+  .figure { margin: 0 0 18px; padding: 0; }
+  .figure figcaption { margin-bottom: 8px; font-size: 14px; font-weight: 600; }
+  .svg-wrap {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: auto;
+    padding: 8px;
+  }
+  .svg-wrap svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+  .report-footer { color: var(--muted); font-size: 13px; text-align: center; margin-top: 24px; }
+  @media (max-width: 640px) {
+    body { padding: 16px 10px 40px; }
+    .report-header, .panel { padding: 18px 16px; border-radius: 10px; }
+    .report-header h1 { font-size: 22px; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .report-header, .panel { box-shadow: none; break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="report">
+  <header class="report-header">
+    <p class="kicker">AD-Happy 设计审查报告</p>
+    <h1>DCDC Buck Converter</h1>
+    <dl class="meta">
+      <div><dt>生成时间</dt><dd>2026-11-24 22:55:28</dd></div>
+    </dl>
+  </header>
+  <main>
+<section class="panel" id="conclusion">
+  <h2>结论</h2>
+  <p class="verdict">未发现必须修复或建议修复的问题，有 2 项可优化；有 1 条规则未评估，不能据此认为全部通过。</p>
+  <ul class="stat-grid"><li class="stat must_fix"><span class="stat-value">0</span><span class="stat-label">必须修复</span></li><li class="stat should_fix"><span class="stat-value">0</span><span class="stat-label">建议修复</span></li><li class="stat nice_to_have"><span class="stat-value">2</span><span class="stat-label">可优化</span></li><li class="stat facts"><span class="stat-value">8</span><span class="stat-label">实测事实</span></li><li class="stat partial"><span class="stat-value">0</span><span class="stat-label">部分完成规则</span></li><li class="stat na"><span class="stat-value">1</span><span class="stat-label">未评估规则</span></li><li class="stat failed"><span class="stat-value">0</span><span class="stat-label">失败规则</span></li></ul>
+  <p class="note">「未评估」表示输入数据不足，本次没有得出通过或失败的结论；「部分完成」表示规则已运行但部分子检查被跳过。两者都不等同于「通过」。</p>
+</section>
+<section class="panel" id="overview">
+  <h2>工程概览</h2>
+  <dl class="coverage-grid">
+    <div><dt>原理图元件</dt><dd>9</dd></div>
+    <div><dt>原理图引脚</dt><dd>22</dd></div>
+    <div><dt>原理图网络</dt><dd>6</dd></div>
+    <div><dt>入网引脚</dt><dd>22/22</dd></div>
+    <div><dt>PCB 元件</dt><dd>9</dd></div>
+    <div><dt>PCB 焊盘</dt><dd>22</dd></div>
+    <div><dt>PCB 网络</dt><dd>6</dd></div>
+    <div><dt>铜走线</dt><dd>73</dd></div>
+    <div><dt>铜圆弧</dt><dd>0</dd></div>
+    <div><dt>过孔</dt><dd>7</dd></div>
+    <div><dt>AD 规则</dt><dd>35</dd></div>
+  </dl>
+  <p class="hint">原理图网表匹配率：22/22；PCB 规则来自 AD 工程文件，仅展示清单，不判定对象命中关系。</p>
+  <h3>AD 规则清单</h3>
+  <table class="status-table">
+    <thead><tr><th scope="col">规则名</th><th scope="col">类型</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">UnpouredPolygon</th><td><code>UnpouredPolygon</code></td></tr>
+      <tr><th scope="row">NetAntennae</th><td><code>NetAntennae</code></td></tr>
+      <tr><th scope="row">SilkToBoardRegionClearance</th><td><code>SilkToBoardRegionClearance</code></td></tr>
+      <tr><th scope="row">SilkToSilkClearance</th><td><code>SilkToSilkClearance</code></td></tr>
+      <tr><th scope="row">SilkToSolderMaskClearance</th><td><code>SilkToSolderMaskClearance</code></td></tr>
+      <tr><th scope="row">MinimumSolderMaskSliver</th><td><code>MinimumSolderMaskSliver</code></td></tr>
+      <tr><th scope="row">HoleToHoleClearance</th><td><code>HoleToHoleClearance</code></td></tr>
+      <tr><th scope="row">DiffPairsRouting</th><td><code>DiffPairsRouting</code></td></tr>
+      <tr><th scope="row">Fanout_BGA</th><td><code>FanoutControl</code></td></tr>
+      <tr><th scope="row">Fanout_LCC</th><td><code>FanoutControl</code></td></tr>
+      <tr><th scope="row">Fanout_SOIC</th><td><code>FanoutControl</code></td></tr>
+      <tr><th scope="row">Fanout_Small</th><td><code>FanoutControl</code></td></tr>
+      <tr><th scope="row">Fanout_Default</th><td><code>FanoutControl</code></td></tr>
+      <tr><th scope="row">HoleSize</th><td><code>HoleSize</code></td></tr>
+      <tr><th scope="row">LayerPairs</th><td><code>LayerPairs</code></td></tr>
+      <tr><th scope="row">Height</th><td><code>Height</code></td></tr>
+      <tr><th scope="row">ComponentClearance</th><td><code>ComponentClearance</code></td></tr>
+      <tr><th scope="row">AssemblyTestpoint</th><td><code>AssemblyTestpoint</code></td></tr>
+      <tr><th scope="row">AssemblyTestPointUsage</th><td><code>AssemblyTestPointUsage</code></td></tr>
+      <tr><th scope="row">FabricationTestpoint</th><td><code>FabricationTestpoint</code></td></tr>
+      <tr><th scope="row">FabricationTestPointUsage</th><td><code>FabricationTestPointUsage</code></td></tr>
+      <tr><th scope="row">RoutingTopology</th><td><code>RoutingTopology</code></td></tr>
+      <tr><th scope="row">SolderMaskExpansion</th><td><code>SolderMaskExpansion</code></td></tr>
+      <tr><th scope="row">PasteMaskExpansion</th><td><code>PasteMaskExpansion</code></td></tr>
+      <tr><th scope="row">RoutingVias</th><td><code>RoutingVias</code></td></tr>
+      <tr><th scope="row">RoutingCorners</th><td><code>RoutingCorners</code></td></tr>
+      <tr><th scope="row">RoutingLayers</th><td><code>RoutingLayers</code></td></tr>
+      <tr><th scope="row">RoutingPriority</th><td><code>RoutingPriority</code></td></tr>
+      <tr><th scope="row">Width</th><td><code>Width</code></td></tr>
+      <tr><th scope="row">PolygonConnect</th><td><code>PolygonConnect</code></td></tr>
+      <tr><th scope="row">PlaneClearance</th><td><code>PlaneClearance</code></td></tr>
+      <tr><th scope="row">PlaneConnect</th><td><code>PlaneConnect</code></td></tr>
+      <tr><th scope="row">Clearance</th><td><code>Clearance</code></td></tr>
+      <tr><th scope="row">UnRoutedNet</th><td><code>UnRoutedNet</code></td></tr>
+      <tr><th scope="row">ShortCircuit</th><td><code>ShortCircuit</code></td></tr>
+    </tbody>
+  </table>
+</section>
+<section class="panel" id="documents">
+  <h2>板卡与文档</h2>
+  <p class="hint">共 9 个文档；库文件不做独立解析。</p>
+  <table class="status-table doc-table">
+    <thead><tr><th scope="col">文档</th><th scope="col">类型</th><th scope="col">本次分析</th></tr></thead>
+    <tbody>
+      <tr class="doc-selected"><th scope="row">SCH1_Main.SchDoc</th><td>原理图</td><td><span class="badge badge-pass">本次解析</span></td></tr>
+      <tr><th scope="row">PCB_Lib.PcbLib</th><td>库文件</td><td>—</td></tr>
+      <tr><th scope="row">SCH_Lib.SchLib</th><td>库文件</td><td>—</td></tr>
+      <tr><th scope="row">DCDC Buck Converter.IntLib</th><td>库文件</td><td>—</td></tr>
+      <tr><th scope="row">PCB1 (First design).PcbDoc</th><td>PCB</td><td>—</td></tr>
+      <tr><th scope="row">PCB2 (Failed design).PcbDoc</th><td>PCB</td><td>—</td></tr>
+      <tr><th scope="row">PCB3 (Failed design).PcbDoc</th><td>PCB</td><td>—</td></tr>
+      <tr><th scope="row">PCB4 (Final Design).PcbDoc</th><td>PCB</td><td>—</td></tr>
+      <tr class="doc-selected"><th scope="row">PCB4 (Manual routing).PcbDoc</th><td>PCB</td><td><span class="badge badge-pass">本次审查</span></td></tr>
+    </tbody>
+  </table>
+</section>
+<section class="panel" id="findings">
+  <h2>问题清单</h2>
+  <p class="hint">共 2 条问题；按严重度分组，组内按规则 ID 排序。实测事实单独列在下一节，不计入问题数量。上游检测器文案已由本地化层翻译成中文；个别无法安全翻译的原文以「（检测器原文）」标注，完整原文见 findings.json 的 source_text。</p>
+    <section class="severity-group" id="group-must_fix">
+      <div class="group-head"><h3>必须修复</h3><span class="group-count">0 条</span></div>
+      <p class="group-desc">不修复会导致功能错误或可靠性风险，建议定版前处理。</p>
+      <p class="empty">没有此类问题。</p>
+    </section>
+    <section class="severity-group" id="group-should_fix">
+      <div class="group-head"><h3>建议修复</h3><span class="group-count">0 条</span></div>
+      <p class="group-desc">存在设计风险或明显的改进空间。</p>
+      <p class="empty">没有此类问题。</p>
+    </section>
+    <section class="severity-group" id="group-nice_to_have">
+      <div class="group-head"><h3>可优化</h3><span class="group-count">2 条</span></div>
+      <p class="group-desc">不影响当前功能，可择机优化。</p>
+      <article class="finding">
+        <div class="finding-meta"><code class="rule-id">PR-DET</code><span class="badge badge-nice_to_have">可优化</span></div>
+        <h4 class="finding-title">稳压器 IC1（开关型）</h4>
+        <p class="finding-evidence"><span class="label">证据</span>检测到电源稳压器（开关型）</p>
+        <ul class="locators"><li><span class="locator-key">元件</span>IC1</li></ul>
+      </article>
+      <article class="finding">
+        <div class="finding-meta"><code class="rule-id">VD-DET</code><span class="badge badge-nice_to_have">可优化</span></div>
+        <h4 class="finding-title">分压器 R1/R2</h4>
+        <p class="finding-evidence"><span class="label">证据</span>检测到电阻分压器</p>
+        <ul class="locators"><li><span class="locator-key">元件</span>R1、R2</li></ul>
+      </article>
+    </section>
+</section>
+<section class="panel" id="facts">
+  <h2>实测事实</h2>
+  <p class="hint">共 8 条测量结果，不计入问题计数；完整数据见 findings.json。</p>
+      <article class="finding">
+        <div class="finding-meta"><code class="rule-id">CC-DET</code><span class="badge badge-fact">实测事实</span></div>
+        <h4 class="finding-title">电源网络 GND：最小走线 0.254mm</h4>
+        <p class="finding-evidence"><span class="label">证据</span>电源/地网络 GND：最小走线 0.254mm，最大 0.254mm，共 24 条线段。</p>
+        <ul class="locators"><li><span class="locator-key">网络</span>GND</li></ul>
+      </article>
+      <article class="finding">
+        <div class="finding-meta"><code class="rule-id">DC-DET</code><span class="badge badge-fact">实测事实</span></div>
+        <h4 class="finding-title">IC1：10 mm 内有 2 个去耦电容，最近距离 3.22 mm。</h4>
+        <p class="finding-evidence"><span class="label">证据</span>IC IC1 在共享非地网络的 10 mm 范围内有 2 个电容，最近的一个距离 3.22 mm。这是实测摆放事实，不是违规。</p>
+        <ul class="locators"><li><span class="locator-key">元件</span>IC1、C1、C2</li><li><span class="locator-key">网络</span>IN、NetC1_1、SW</li></ul>
+      </article>
+      <article class="finding">
+        <div class="finding-meta"><code class="rule-id">PD-DET</code><span class="badge badge-fact">实测事实</span></div>
+        <h4 class="finding-title">网络 FB：3 对焊盘间实测走线距离 2.16–5.126 mm，最大绕行比 2.21（代表焊盘对 R1.1-IC1.4）。</h4>
+        <p class="finding-evidence"><span class="label">证据</span>同一网络 &#39;FB&#39; 上共测量 3 对焊盘的实际走线距离（非直线距离）。代表焊盘对 R1.1-IC1.4 的走线距离为 5.126 mm，直线距离为 2.319 mm，绕行比 2.21。其中绕行比偏大的焊盘对：R1.1-IC1.4 绕行比 2.21。这是实测事实，不是违规。</p>
+        <ul class="locators"><li><span class="locator-key">元件</span>IC1、R1、R2</li><li><span class="locator-key">网络</span>FB</li><li><span class="locator-key">引脚</span>R2.2、R1.1、R2.2、IC1.4、R1.1、IC1.4</li></ul>
+      </article>
+      <article class="finding">
+        <div class="finding-meta"><code class="rule-id">PD-DET</code><span class="badge badge-fact">实测事实</span></div>
+        <h4 class="finding-title">网络 GND：15 对焊盘间实测走线距离 3.191–37.326 mm，最大绕行比 3.09（代表焊盘对 J1.2-C2.1）。</h4>
+        <p class="finding-evidence"><span class="label">证据</span>同一网络 &#39;GND&#39; 上共测量 15 对焊盘的实际走线距离（非直线距离）。代表焊盘对 J1.2-C2.1 的走线距离为 30.463 mm，直线距离为 9.849 mm，绕行比 3.09。其中绕行比偏大的焊盘对：J2.2-C2.1 绕行比 1.96；R2.1-J1.2 绕行比 1.87；J1.2-IC1.1 绕行比 2.05；J1.2-C3.1 绕行比 1.8；J1.2-C2.1 绕行比 3.09。这是实测事实，不是违规。</p>
+        <ul class="locators"><li><span class="locator-key">元件</span>C2、C3、IC1、J1、J2、R2</li><li><span class="locator-key">网络</span>GND</li><li><span class="locator-key">引脚</span>J2.2、R2.1、J2.2、J1.2、J2.2、IC1.1、J2.2、C3.1、J2.2、C2.1、R2.1、J1.2、R2.1、IC1.1、R2.1、C3.1、R2.1、C2.1、J1.2、IC1.1、J1.2、C3.1、J1.2、C2.1、IC1.1、C3.1、IC1.1、C2.1、C3.1、C2.1</li></ul>
+      </article>
+      <article class="finding">
+        <div class="finding-meta"><code class="rule-id">PD-DET</code><span class="badge badge-fact">实测事实</span></div>
+        <h4 class="finding-title">网络 IN：6 对焊盘间实测走线距离 3.589–22.805 mm，最大绕行比 3.26（代表焊盘对 IC1.3-IC1.5）。</h4>
+        <p class="finding-evidence"><span class="label">证据</span>同一网络 &#39;IN&#39; 上共测量 6 对焊盘的实际走线距离（非直线距离）。代表焊盘对 IC1.3-IC1.5 的走线距离为 8.718 mm，直线距离为 2.674 mm，绕行比 3.26。其中绕行比偏大的焊盘对：IC1.3-IC1.5 绕行比 3.26；IC1.5-C2.2 绕行比 2.03。这是实测事实，不是违规。</p>
+        <ul class="locators"><li><span class="locator-key">元件</span>C2、IC1、J1</li><li><span class="locator-key">网络</span>IN</li><li><span class="locator-key">引脚</span>J1.1、IC1.3、J1.1、IC1.5、J1.1、C2.2、IC1.3、IC1.5、IC1.3、C2.2、IC1.5、C2.2</li></ul>
+      </article>
+      <article class="finding">
+        <div class="finding-meta"><code class="rule-id">PD-DET</code><span class="badge badge-fact">实测事实</span></div>
+        <h4 class="finding-title">网络 NetC1_1：1 对焊盘间实测走线距离 3.054–3.054 mm，最大绕行比 1.14（代表焊盘对 IC1.6-C1.1）。</h4>
+        <p class="finding-evidence"><span class="label">证据</span>同一网络 &#39;NetC1_1&#39; 上共测量 1 对焊盘的实际走线距离（非直线距离）。代表焊盘对 IC1.6-C1.1 的走线距离为 3.054 mm，直线距离为 2.672 mm，绕行比 1.14。这是实测事实，不是违规。</p>
+        <ul class="locators"><li><span class="locator-key">元件</span>C1、IC1</li><li><span class="locator-key">网络</span>NetC1_1</li><li><span class="locator-key">引脚</span>IC1.6、C1.1</li></ul>
+      </article>
+      <article class="finding">
+        <div class="finding-meta"><code class="rule-id">PD-DET</code><span class="badge badge-fact">实测事实</span></div>
+        <h4 class="finding-title">网络 OUT：6 对焊盘间实测走线距离 2.882–26.883 mm，最大绕行比 1.55（代表焊盘对 R1.2-C3.2）。</h4>
+        <p class="finding-evidence"><span class="label">证据</span>同一网络 &#39;OUT&#39; 上共测量 6 对焊盘的实际走线距离（非直线距离）。代表焊盘对 R1.2-C3.2 的走线距离为 16.415 mm，直线距离为 10.613 mm，绕行比 1.55。其中绕行比偏大的焊盘对：R1.2-C3.2 绕行比 1.55。这是实测事实，不是违规。</p>
+        <ul class="locators"><li><span class="locator-key">元件</span>C3、J2、L1、R1</li><li><span class="locator-key">网络</span>OUT</li><li><span class="locator-key">引脚</span>J2.1、R1.2、J2.1、L1.2、J2.1、C3.2、R1.2、L1.2、R1.2、C3.2、L1.2、C3.2</li></ul>
+      </article>
+      <article class="finding">
+        <div class="finding-meta"><code class="rule-id">PD-DET</code><span class="badge badge-fact">实测事实</span></div>
+        <h4 class="finding-title">网络 SW：3 对焊盘间实测走线距离 7.248–12.791 mm，最大绕行比 2.2（代表焊盘对 IC1.2-C1.2）。</h4>
+        <p class="finding-evidence"><span class="label">证据</span>同一网络 &#39;SW&#39; 上共测量 3 对焊盘的实际走线距离（非直线距离）。代表焊盘对 IC1.2-C1.2 的走线距离为 8.707 mm，直线距离为 3.959 mm，绕行比 2.2。其中绕行比偏大的焊盘对：L1.1-C1.2 绕行比 1.55；IC1.2-C1.2 绕行比 2.2。这是实测事实，不是违规。</p>
+        <ul class="locators"><li><span class="locator-key">元件</span>C1、IC1、L1</li><li><span class="locator-key">网络</span>SW</li><li><span class="locator-key">引脚</span>L1.1、IC1.2、L1.1、C1.2、IC1.2、C1.2</li></ul>
+      </article>
+</section>
+<section class="panel" id="coverage">
+  <h2>数据覆盖与未评估</h2>
+  <dl class="coverage-grid">
+    <div><dt>文档总数</dt><dd>9</dd></div>
+    <div><dt>已解析</dt><dd>2</dd></div>
+    <div><dt>未评估文档</dt><dd>7</dd></div>
+  </dl>
+  <p class="hint">原理图网表匹配：22/22 个引脚；全部引脚已进入网表。</p>
+  <p class="hint">数据覆盖只反映本次解析的文档范围；未覆盖的文档没有参与规则评估。</p>
+
+  <h3>未评估的规则</h3>
+  <div id="not-evaluated">
+      <ul class="status-list">
+      <li><code>decoupling</code><span class="rule-name">去耦电容检查</span><span class="badge badge-not_evaluated">未评估</span><span class="detail">规则所需输入不足，本次没有结论；此状态不等于「通过」。</span></li>
+      </ul>
+  </div>
+  <h3>部分完成的规则</h3>
+  <div id="partial-rules">
+    <p class="empty">没有部分完成的规则。</p>
+  </div>
+  <h3>执行失败的规则</h3>
+  <div id="failed-rules">
+    <p class="empty">没有执行失败的规则。</p>
+  </div>
+  <h3>规则状态一览</h3>
+  <div id="rules-status">
+    <table class="status-table">
+      <thead><tr><th scope="col">规则</th><th scope="col">状态</th></tr></thead>
+      <tbody>
+      <tr><th scope="row"><span class="rule-name">连通性检查</span><code>connectivity</code></th><td><span class="badge badge-pass">通过</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">载流能力检查</span><code>current_capacity</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">去耦电容检查</span><code>decoupling</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">去耦布局检查</span><code>decoupling_placement</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">DFM 制造规则检查</span><code>dfm</code></th><td><span class="badge badge-pass">通过</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">焊盘间距检查</span><code>pad_distance</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">原理图与 PCB 引脚网络对照</span><code>pin_pad</code></th><td><span class="badge badge-pass">通过</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">稳压器识别</span><code>power_regulator</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">RC 滤波识别</span><code>rc_filter</code></th><td><span class="badge badge-pass">通过</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">短路元件检查</span><code>shorted_component</code></th><td><span class="badge badge-pass">通过</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">分压器识别</span><code>voltage_divider</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+  </main>
+  <footer class="report-footer">本报告由 AD-Happy 离线生成；样式与图形均内嵌，不依赖外部资源。</footer>
+</div>
+</body>
+</html>

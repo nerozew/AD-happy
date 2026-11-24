@@ -1,0 +1,356 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "name": "DCDC Buck Converter",
+    "folder": "Student-DCDC-Buck-Converter",
+    "path": "d:\\Code_all\\ad-happy\\tests\\fixtures\\Student-DCDC-Buck-Converter",
+    "projectPath": "d:\\Code_all\\ad-happy\\tests\\fixtures\\Student-DCDC-Buck-Converter\\DCDC Buck Converter.PrjPcb",
+    "selectedBoard": "PCB4 (Manual routing).PcbDoc",
+    "selectedSchematic": "SCH1_Main.SchDoc",
+    "boards": [
+      {
+        "name": "PCB1 (First design).PcbDoc",
+        "selected": false,
+        "status": "not_evaluated"
+      },
+      {
+        "name": "PCB2 (Failed design).PcbDoc",
+        "selected": false,
+        "status": "not_evaluated"
+      },
+      {
+        "name": "PCB3 (Failed design).PcbDoc",
+        "selected": false,
+        "status": "not_evaluated"
+      },
+      {
+        "name": "PCB4 (Final Design).PcbDoc",
+        "selected": false,
+        "status": "not_evaluated"
+      },
+      {
+        "name": "PCB4 (Manual routing).PcbDoc",
+        "selected": true,
+        "status": "parsed"
+      }
+    ]
+  },
+  "generatedAt": "2026-11-24 22:55:28",
+  "status": "complete",
+  "schematic": {
+    "components": 9,
+    "pins": 22,
+    "nets": 6,
+    "pinsMatched": 22,
+    "pinsTotal": 22,
+    "pinsMatchRate": 1
+  },
+  "pcb": {
+    "components": 9,
+    "pads": 22,
+    "nets": 6,
+    "tracks": 73,
+    "arcs": 0,
+    "vias": 7,
+    "rules": 35
+  },
+  "coverage": {
+    "documents": 9,
+    "parsed": 2,
+    "notEvaluated": 7,
+    "pcb": {
+      "skippedChecks": []
+    },
+    "netlist": {
+      "pinsMatched": 22,
+      "pinsTotal": 22,
+      "complete": true
+    },
+    "crossCheck": {
+      "compared": 22,
+      "exact": 22,
+      "byNetName": 0,
+      "netAliases": 1,
+      "skipped": 0
+    }
+  },
+  "counts": {
+    "must_fix": 0,
+    "should_fix": 0,
+    "nice_to_have": 2,
+    "total": 2,
+    "facts": 8,
+    "rules": {
+      "pass": 5,
+      "found": 5,
+      "partial": 0,
+      "not_evaluated": 1,
+      "failed": 0
+    }
+  },
+  "rules": {
+    "voltage_divider": "found",
+    "rc_filter": "pass",
+    "decoupling": "not_evaluated",
+    "power_regulator": "found",
+    "connectivity": "pass",
+    "shorted_component": "pass",
+    "dfm": "pass",
+    "pad_distance": "found",
+    "current_capacity": "found",
+    "decoupling_placement": "found",
+    "pin_pad": "pass"
+  },
+  "findings": [
+    {
+      "rule_id": "VD-DET",
+      "detector": "voltage_divider",
+      "kind": "issue",
+      "severity": "info",
+      "group": "nice_to_have",
+      "title": "分压器 R1/R2",
+      "evidence": "检测到电阻分压器",
+      "components": [
+        "R1",
+        "R2"
+      ],
+      "nets": [],
+      "pins": []
+    },
+    {
+      "rule_id": "PR-DET",
+      "detector": "power_regulator",
+      "kind": "issue",
+      "severity": "info",
+      "group": "nice_to_have",
+      "title": "稳压器 IC1（开关型）",
+      "evidence": "检测到电源稳压器（开关型）",
+      "components": [
+        "IC1"
+      ],
+      "nets": [],
+      "pins": []
+    },
+    {
+      "rule_id": "PD-DET",
+      "detector": "pad_distance",
+      "kind": "fact",
+      "severity": "info",
+      "group": "nice_to_have",
+      "title": "网络 FB：3 对焊盘间实测走线距离 2.16–5.126 mm，最大绕行比 2.21（代表焊盘对 R1.1-IC1.4）。",
+      "evidence": "同一网络 'FB' 上共测量 3 对焊盘的实际走线距离（非直线距离）。代表焊盘对 R1.1-IC1.4 的走线距离为 5.126 mm，直线距离为 2.319 mm，绕行比 2.21。其中绕行比偏大的焊盘对：R1.1-IC1.4 绕行比 2.21。这是实测事实，不是违规。",
+      "components": [
+        "IC1",
+        "R1",
+        "R2"
+      ],
+      "nets": [
+        "FB"
+      ],
+      "pins": [
+        "R2.2",
+        "R1.1",
+        "R2.2",
+        "IC1.4",
+        "R1.1",
+        "IC1.4"
+      ]
+    },
+    {
+      "rule_id": "CC-DET",
+      "detector": "current_capacity",
+      "kind": "fact",
+      "severity": "info",
+      "group": "nice_to_have",
+      "title": "电源网络 GND：最小走线 0.254mm",
+      "evidence": "电源/地网络 GND：最小走线 0.254mm，最大 0.254mm，共 24 条线段。",
+      "components": [],
+      "nets": [
+        "GND"
+      ],
+      "pins": []
+    },
+    {
+      "rule_id": "DC-DET",
+      "detector": "decoupling_placement",
+      "kind": "fact",
+      "severity": "info",
+      "group": "nice_to_have",
+      "title": "IC1：10 mm 内有 2 个去耦电容，最近距离 3.22 mm。",
+      "evidence": "IC IC1 在共享非地网络的 10 mm 范围内有 2 个电容，最近的一个距离 3.22 mm。这是实测摆放事实，不是违规。",
+      "components": [
+        "IC1",
+        "C1",
+        "C2"
+      ],
+      "nets": [
+        "IN",
+        "NetC1_1",
+        "SW"
+      ],
+      "pins": []
+    },
+    {
+      "rule_id": "PD-DET",
+      "detector": "pad_distance",
+      "kind": "fact",
+      "severity": "info",
+      "group": "nice_to_have",
+      "title": "网络 GND：15 对焊盘间实测走线距离 3.191–37.326 mm，最大绕行比 3.09（代表焊盘对 J1.2-C2.1）。",
+      "evidence": "同一网络 'GND' 上共测量 15 对焊盘的实际走线距离（非直线距离）。代表焊盘对 J1.2-C2.1 的走线距离为 30.463 mm，直线距离为 9.849 mm，绕行比 3.09。其中绕行比偏大的焊盘对：J2.2-C2.1 绕行比 1.96；R2.1-J1.2 绕行比 1.87；J1.2-IC1.1 绕行比 2.05；J1.2-C3.1 绕行比 1.8；J1.2-C2.1 绕行比 3.09。这是实测事实，不是违规。",
+      "components": [
+        "C2",
+        "C3",
+        "IC1",
+        "J1",
+        "J2",
+        "R2"
+      ],
+      "nets": [
+        "GND"
+      ],
+      "pins": [
+        "J2.2",
+        "R2.1",
+        "J2.2",
+        "J1.2",
+        "J2.2",
+        "IC1.1",
+        "J2.2",
+        "C3.1",
+        "J2.2",
+        "C2.1",
+        "R2.1",
+        "J1.2",
+        "R2.1",
+        "IC1.1",
+        "R2.1",
+        "C3.1",
+        "R2.1",
+        "C2.1",
+        "J1.2",
+        "IC1.1",
+        "J1.2",
+        "C3.1",
+        "J1.2",
+        "C2.1",
+        "IC1.1",
+        "C3.1",
+        "IC1.1",
+        "C2.1",
+        "C3.1",
+        "C2.1"
+      ]
+    },
+    {
+      "rule_id": "PD-DET",
+      "detector": "pad_distance",
+      "kind": "fact",
+      "severity": "info",
+      "group": "nice_to_have",
+      "title": "网络 IN：6 对焊盘间实测走线距离 3.589–22.805 mm，最大绕行比 3.26（代表焊盘对 IC1.3-IC1.5）。",
+      "evidence": "同一网络 'IN' 上共测量 6 对焊盘的实际走线距离（非直线距离）。代表焊盘对 IC1.3-IC1.5 的走线距离为 8.718 mm，直线距离为 2.674 mm，绕行比 3.26。其中绕行比偏大的焊盘对：IC1.3-IC1.5 绕行比 3.26；IC1.5-C2.2 绕行比 2.03。这是实测事实，不是违规。",
+      "components": [
+        "C2",
+        "IC1",
+        "J1"
+      ],
+      "nets": [
+        "IN"
+      ],
+      "pins": [
+        "J1.1",
+        "IC1.3",
+        "J1.1",
+        "IC1.5",
+        "J1.1",
+        "C2.2",
+        "IC1.3",
+        "IC1.5",
+        "IC1.3",
+        "C2.2",
+        "IC1.5",
+        "C2.2"
+      ]
+    },
+    {
+      "rule_id": "PD-DET",
+      "detector": "pad_distance",
+      "kind": "fact",
+      "severity": "info",
+      "group": "nice_to_have",
+      "title": "网络 NetC1_1：1 对焊盘间实测走线距离 3.054–3.054 mm，最大绕行比 1.14（代表焊盘对 IC1.6-C1.1）。",
+      "evidence": "同一网络 'NetC1_1' 上共测量 1 对焊盘的实际走线距离（非直线距离）。代表焊盘对 IC1.6-C1.1 的走线距离为 3.054 mm，直线距离为 2.672 mm，绕行比 1.14。这是实测事实，不是违规。",
+      "components": [
+        "C1",
+        "IC1"
+      ],
+      "nets": [
+        "NetC1_1"
+      ],
+      "pins": [
+        "IC1.6",
+        "C1.1"
+      ]
+    },
+    {
+      "rule_id": "PD-DET",
+      "detector": "pad_distance",
+      "kind": "fact",
+      "severity": "info",
+      "group": "nice_to_have",
+      "title": "网络 OUT：6 对焊盘间实测走线距离 2.882–26.883 mm，最大绕行比 1.55（代表焊盘对 R1.2-C3.2）。",
+      "evidence": "同一网络 'OUT' 上共测量 6 对焊盘的实际走线距离（非直线距离）。代表焊盘对 R1.2-C3.2 的走线距离为 16.415 mm，直线距离为 10.613 mm，绕行比 1.55。其中绕行比偏大的焊盘对：R1.2-C3.2 绕行比 1.55。这是实测事实，不是违规。",
+      "components": [
+        "C3",
+        "J2",
+        "L1",
+        "R1"
+      ],
+      "nets": [
+        "OUT"
+      ],
+      "pins": [
+        "J2.1",
+        "R1.2",
+        "J2.1",
+        "L1.2",
+        "J2.1",
+        "C3.2",
+        "R1.2",
+        "L1.2",
+        "R1.2",
+        "C3.2",
+        "L1.2",
+        "C3.2"
+      ]
+    },
+    {
+      "rule_id": "PD-DET",
+      "detector": "pad_distance",
+      "kind": "fact",
+      "severity": "info",
+      "group": "nice_to_have",
+      "title": "网络 SW：3 对焊盘间实测走线距离 7.248–12.791 mm，最大绕行比 2.2（代表焊盘对 IC1.2-C1.2）。",
+      "evidence": "同一网络 'SW' 上共测量 3 对焊盘的实际走线距离（非直线距离）。代表焊盘对 IC1.2-C1.2 的走线距离为 8.707 mm，直线距离为 3.959 mm，绕行比 2.2。其中绕行比偏大的焊盘对：L1.1-C1.2 绕行比 1.55；IC1.2-C1.2 绕行比 2.2。这是实测事实，不是违规。",
+      "components": [
+        "C1",
+        "IC1",
+        "L1"
+      ],
+      "nets": [
+        "SW"
+      ],
+      "pins": [
+        "L1.1",
+        "IC1.2",
+        "L1.1",
+        "C1.2",
+        "IC1.2",
+        "C1.2"
+      ]
+    }
+  ],
+  "findingsOmitted": 0,
+  "report": "d:\\Code_all\\ad-happy\\docs\\sample-report\\report.html"
+}

@@ -1,0 +1,606 @@
+[
+  {
+    "detector": "voltage_divider",
+    "rule_id": "VD-DET",
+    "category": "voltage_dividers",
+    "summary": "分压器 R1/R2",
+    "description": "检测到电阻分压器",
+    "components": [
+      "R1",
+      "R2"
+    ],
+    "nets": [],
+    "pins": [],
+    "severity": "info",
+    "confidence": "deterministic",
+    "evidence_source": "topology",
+    "recommendation": "",
+    "report_context": {
+      "section": "Voltage Dividers",
+      "impact": "",
+      "standard_ref": ""
+    },
+    "kind": "issue",
+    "r_top": {
+      "ref": "R1",
+      "value": "56.2 kOhms",
+      "ohms": 56200.0
+    },
+    "r_bottom": {
+      "ref": "R2",
+      "value": "10 kOhms",
+      "ohms": 10000.0
+    },
+    "top_net": "OUT",
+    "mid_net": "FB",
+    "bottom_net": "GND",
+    "ratio": 0.151057,
+    "mid_point_connections": [
+      {
+        "component": "IC1",
+        "pin_number": "4",
+        "pin_name": "VFB",
+        "pin_type": "passive",
+        "x": 543.30738,
+        "y": 405.51203
+      }
+    ],
+    "is_feedback": true,
+    "provenance": {
+      "evidence": "vd_two_resistor",
+      "confidence": "deterministic",
+      "claimed_components": [
+        "R1",
+        "R2"
+      ],
+      "excluded_by": [],
+      "suppressed_candidates": []
+    },
+    "purpose": "feedback",
+    "finding_id": "schematic:VD-DET-r1",
+    "source_text": {
+      "summary": "Voltage divider R1/R2",
+      "description": "Resistive voltage divider detected"
+    }
+  },
+  {
+    "detector": "power_regulator",
+    "rule_id": "PR-DET",
+    "category": "power_management",
+    "summary": "稳压器 IC1（开关型）",
+    "description": "检测到电源稳压器（开关型）",
+    "components": [
+      "IC1"
+    ],
+    "nets": [],
+    "pins": [],
+    "severity": "info",
+    "confidence": "deterministic",
+    "evidence_source": "topology",
+    "recommendation": "",
+    "report_context": {
+      "section": "Power Management",
+      "impact": "",
+      "standard_ref": ""
+    },
+    "kind": "issue",
+    "ref": "IC1",
+    "value": "TPS561208DDCR",
+    "lib_id": "AD:TPS561208DDCR",
+    "topology": "switching",
+    "input_rail": "IN",
+    "fb_net": "FB",
+    "estimated_vout": 3.972,
+    "_estimated_vout_provenance": {
+      "source": "divider_plus_lookup",
+      "confidence": "heuristic"
+    },
+    "assumed_vref": 0.6,
+    "vref_source": "lookup",
+    "feedback_divider": {
+      "r_top": {
+        "ref": "R1",
+        "ohms": 56200.0,
+        "value": "56.2 kOhms"
+      },
+      "r_bottom": {
+        "ref": "R2",
+        "ohms": 10000.0,
+        "value": "10 kOhms"
+      },
+      "ratio": 0.151057
+    },
+    "switching_frequency_hz": 500000.0,
+    "freq_source": "topology_default",
+    "provenance": {
+      "evidence": "reg_sw_pin_only",
+      "confidence": "heuristic",
+      "claimed_components": [
+        "IC1"
+      ],
+      "excluded_by": [],
+      "suppressed_candidates": []
+    },
+    "input_capacitors": [
+      {
+        "ref": "C2",
+        "value": "22µF",
+        "farads": 2.2e-05,
+        "package": "0805"
+      }
+    ],
+    "finding_id": "schematic:PR-DET-ic1",
+    "source_text": {
+      "summary": "Regulator IC1 switching",
+      "description": "Power regulator (switching) detected"
+    }
+  },
+  {
+    "detector": "pad_distance",
+    "rule_id": "PD-DET",
+    "category": "pad_distance",
+    "summary": "网络 FB：3 对焊盘间实测走线距离 2.16–5.126 mm，最大绕行比 2.21（代表焊盘对 R1.1-IC1.4）。",
+    "description": "同一网络 'FB' 上共测量 3 对焊盘的实际走线距离（非直线距离）。代表焊盘对 R1.1-IC1.4 的走线距离为 5.126 mm，直线距离为 2.319 mm，绕行比 2.21。其中绕行比偏大的焊盘对：R1.1-IC1.4 绕行比 2.21。这是实测事实，不是违规。",
+    "components": [
+      "IC1",
+      "R1",
+      "R2"
+    ],
+    "nets": [
+      "FB"
+    ],
+    "pins": [
+      "R2.2",
+      "R1.1",
+      "R2.2",
+      "IC1.4",
+      "R1.1",
+      "IC1.4"
+    ],
+    "severity": "info",
+    "confidence": "deterministic",
+    "evidence_source": "topology",
+    "recommendation": "",
+    "report_context": {
+      "section": "Pad Distances",
+      "impact": "",
+      "standard_ref": ""
+    },
+    "detection_id": "pad-distance-FB",
+    "kind": "fact",
+    "pair_count": 3,
+    "representative_pair": "R1.1-IC1.4",
+    "routed_distance_mm": 5.126,
+    "euclidean_distance_mm": 2.319,
+    "ratio": 2.21,
+    "min_routed_distance_mm": 2.16,
+    "max_routed_distance_mm": 5.126,
+    "max_ratio": 2.21,
+    "anomalies": [
+      {
+        "pair": "R1.1-IC1.4",
+        "routed_distance_mm": 5.126,
+        "euclidean_distance_mm": 2.319,
+        "ratio": 2.21
+      }
+    ],
+    "finding_id": "pcb:pad-distance-FB"
+  },
+  {
+    "detector": "pad_distance",
+    "rule_id": "PD-DET",
+    "category": "pad_distance",
+    "summary": "网络 GND：15 对焊盘间实测走线距离 3.191–37.326 mm，最大绕行比 3.09（代表焊盘对 J1.2-C2.1）。",
+    "description": "同一网络 'GND' 上共测量 15 对焊盘的实际走线距离（非直线距离）。代表焊盘对 J1.2-C2.1 的走线距离为 30.463 mm，直线距离为 9.849 mm，绕行比 3.09。其中绕行比偏大的焊盘对：J2.2-C2.1 绕行比 1.96；R2.1-J1.2 绕行比 1.87；J1.2-IC1.1 绕行比 2.05；J1.2-C3.1 绕行比 1.8；J1.2-C2.1 绕行比 3.09。这是实测事实，不是违规。",
+    "components": [
+      "C2",
+      "C3",
+      "IC1",
+      "J1",
+      "J2",
+      "R2"
+    ],
+    "nets": [
+      "GND"
+    ],
+    "pins": [
+      "J2.2",
+      "R2.1",
+      "J2.2",
+      "J1.2",
+      "J2.2",
+      "IC1.1",
+      "J2.2",
+      "C3.1",
+      "J2.2",
+      "C2.1",
+      "R2.1",
+      "J1.2",
+      "R2.1",
+      "IC1.1",
+      "R2.1",
+      "C3.1",
+      "R2.1",
+      "C2.1",
+      "J1.2",
+      "IC1.1",
+      "J1.2",
+      "C3.1",
+      "J1.2",
+      "C2.1",
+      "IC1.1",
+      "C3.1",
+      "IC1.1",
+      "C2.1",
+      "C3.1",
+      "C2.1"
+    ],
+    "severity": "info",
+    "confidence": "deterministic",
+    "evidence_source": "topology",
+    "recommendation": "",
+    "report_context": {
+      "section": "Pad Distances",
+      "impact": "",
+      "standard_ref": ""
+    },
+    "detection_id": "pad-distance-GND",
+    "kind": "fact",
+    "pair_count": 15,
+    "representative_pair": "J1.2-C2.1",
+    "routed_distance_mm": 30.463,
+    "euclidean_distance_mm": 9.849,
+    "ratio": 3.09,
+    "min_routed_distance_mm": 3.191,
+    "max_routed_distance_mm": 37.326,
+    "max_ratio": 3.09,
+    "anomalies": [
+      {
+        "pair": "J2.2-C2.1",
+        "routed_distance_mm": 22.225,
+        "euclidean_distance_mm": 11.335,
+        "ratio": 1.96
+      },
+      {
+        "pair": "R2.1-J1.2",
+        "routed_distance_mm": 37.326,
+        "euclidean_distance_mm": 20.01,
+        "ratio": 1.87
+      },
+      {
+        "pair": "J1.2-IC1.1",
+        "routed_distance_mm": 27.381,
+        "euclidean_distance_mm": 13.366,
+        "ratio": 2.05
+      },
+      {
+        "pair": "J1.2-C3.1",
+        "routed_distance_mm": 24.191,
+        "euclidean_distance_mm": 13.44,
+        "ratio": 1.8
+      },
+      {
+        "pair": "J1.2-C2.1",
+        "routed_distance_mm": 30.463,
+        "euclidean_distance_mm": 9.849,
+        "ratio": 3.09
+      }
+    ],
+    "finding_id": "pcb:pad-distance-GND"
+  },
+  {
+    "detector": "pad_distance",
+    "rule_id": "PD-DET",
+    "category": "pad_distance",
+    "summary": "网络 IN：6 对焊盘间实测走线距离 3.589–22.805 mm，最大绕行比 3.26（代表焊盘对 IC1.3-IC1.5）。",
+    "description": "同一网络 'IN' 上共测量 6 对焊盘的实际走线距离（非直线距离）。代表焊盘对 IC1.3-IC1.5 的走线距离为 8.718 mm，直线距离为 2.674 mm，绕行比 3.26。其中绕行比偏大的焊盘对：IC1.3-IC1.5 绕行比 3.26；IC1.5-C2.2 绕行比 2.03。这是实测事实，不是违规。",
+    "components": [
+      "C2",
+      "IC1",
+      "J1"
+    ],
+    "nets": [
+      "IN"
+    ],
+    "pins": [
+      "J1.1",
+      "IC1.3",
+      "J1.1",
+      "IC1.5",
+      "J1.1",
+      "C2.2",
+      "IC1.3",
+      "IC1.5",
+      "IC1.3",
+      "C2.2",
+      "IC1.5",
+      "C2.2"
+    ],
+    "severity": "info",
+    "confidence": "deterministic",
+    "evidence_source": "topology",
+    "recommendation": "",
+    "report_context": {
+      "section": "Pad Distances",
+      "impact": "",
+      "standard_ref": ""
+    },
+    "detection_id": "pad-distance-IN",
+    "kind": "fact",
+    "pair_count": 6,
+    "representative_pair": "IC1.3-IC1.5",
+    "routed_distance_mm": 8.718,
+    "euclidean_distance_mm": 2.674,
+    "ratio": 3.26,
+    "min_routed_distance_mm": 3.589,
+    "max_routed_distance_mm": 22.805,
+    "max_ratio": 3.26,
+    "anomalies": [
+      {
+        "pair": "IC1.3-IC1.5",
+        "routed_distance_mm": 8.718,
+        "euclidean_distance_mm": 2.674,
+        "ratio": 3.26
+      },
+      {
+        "pair": "IC1.5-C2.2",
+        "routed_distance_mm": 12.307,
+        "euclidean_distance_mm": 6.066,
+        "ratio": 2.03
+      }
+    ],
+    "finding_id": "pcb:pad-distance-IN"
+  },
+  {
+    "detector": "pad_distance",
+    "rule_id": "PD-DET",
+    "category": "pad_distance",
+    "summary": "网络 NetC1_1：1 对焊盘间实测走线距离 3.054–3.054 mm，最大绕行比 1.14（代表焊盘对 IC1.6-C1.1）。",
+    "description": "同一网络 'NetC1_1' 上共测量 1 对焊盘的实际走线距离（非直线距离）。代表焊盘对 IC1.6-C1.1 的走线距离为 3.054 mm，直线距离为 2.672 mm，绕行比 1.14。这是实测事实，不是违规。",
+    "components": [
+      "C1",
+      "IC1"
+    ],
+    "nets": [
+      "NetC1_1"
+    ],
+    "pins": [
+      "IC1.6",
+      "C1.1"
+    ],
+    "severity": "info",
+    "confidence": "deterministic",
+    "evidence_source": "topology",
+    "recommendation": "",
+    "report_context": {
+      "section": "Pad Distances",
+      "impact": "",
+      "standard_ref": ""
+    },
+    "detection_id": "pad-distance-NetC1_1",
+    "kind": "fact",
+    "pair_count": 1,
+    "representative_pair": "IC1.6-C1.1",
+    "routed_distance_mm": 3.054,
+    "euclidean_distance_mm": 2.672,
+    "ratio": 1.14,
+    "min_routed_distance_mm": 3.054,
+    "max_routed_distance_mm": 3.054,
+    "max_ratio": 1.14,
+    "anomalies": [],
+    "finding_id": "pcb:pad-distance-NetC1_1"
+  },
+  {
+    "detector": "pad_distance",
+    "rule_id": "PD-DET",
+    "category": "pad_distance",
+    "summary": "网络 OUT：6 对焊盘间实测走线距离 2.882–26.883 mm，最大绕行比 1.55（代表焊盘对 R1.2-C3.2）。",
+    "description": "同一网络 'OUT' 上共测量 6 对焊盘的实际走线距离（非直线距离）。代表焊盘对 R1.2-C3.2 的走线距离为 16.415 mm，直线距离为 10.613 mm，绕行比 1.55。其中绕行比偏大的焊盘对：R1.2-C3.2 绕行比 1.55。这是实测事实，不是违规。",
+    "components": [
+      "C3",
+      "J2",
+      "L1",
+      "R1"
+    ],
+    "nets": [
+      "OUT"
+    ],
+    "pins": [
+      "J2.1",
+      "R1.2",
+      "J2.1",
+      "L1.2",
+      "J2.1",
+      "C3.2",
+      "R1.2",
+      "L1.2",
+      "R1.2",
+      "C3.2",
+      "L1.2",
+      "C3.2"
+    ],
+    "severity": "info",
+    "confidence": "deterministic",
+    "evidence_source": "topology",
+    "recommendation": "",
+    "report_context": {
+      "section": "Pad Distances",
+      "impact": "",
+      "standard_ref": ""
+    },
+    "detection_id": "pad-distance-OUT",
+    "kind": "fact",
+    "pair_count": 6,
+    "representative_pair": "R1.2-C3.2",
+    "routed_distance_mm": 16.415,
+    "euclidean_distance_mm": 10.613,
+    "ratio": 1.55,
+    "min_routed_distance_mm": 2.882,
+    "max_routed_distance_mm": 26.883,
+    "max_ratio": 1.55,
+    "anomalies": [
+      {
+        "pair": "R1.2-C3.2",
+        "routed_distance_mm": 16.415,
+        "euclidean_distance_mm": 10.613,
+        "ratio": 1.55
+      }
+    ],
+    "finding_id": "pcb:pad-distance-OUT"
+  },
+  {
+    "detector": "pad_distance",
+    "rule_id": "PD-DET",
+    "category": "pad_distance",
+    "summary": "网络 SW：3 对焊盘间实测走线距离 7.248–12.791 mm，最大绕行比 2.2（代表焊盘对 IC1.2-C1.2）。",
+    "description": "同一网络 'SW' 上共测量 3 对焊盘的实际走线距离（非直线距离）。代表焊盘对 IC1.2-C1.2 的走线距离为 8.707 mm，直线距离为 3.959 mm，绕行比 2.2。其中绕行比偏大的焊盘对：L1.1-C1.2 绕行比 1.55；IC1.2-C1.2 绕行比 2.2。这是实测事实，不是违规。",
+    "components": [
+      "C1",
+      "IC1",
+      "L1"
+    ],
+    "nets": [
+      "SW"
+    ],
+    "pins": [
+      "L1.1",
+      "IC1.2",
+      "L1.1",
+      "C1.2",
+      "IC1.2",
+      "C1.2"
+    ],
+    "severity": "info",
+    "confidence": "deterministic",
+    "evidence_source": "topology",
+    "recommendation": "",
+    "report_context": {
+      "section": "Pad Distances",
+      "impact": "",
+      "standard_ref": ""
+    },
+    "detection_id": "pad-distance-SW",
+    "kind": "fact",
+    "pair_count": 3,
+    "representative_pair": "IC1.2-C1.2",
+    "routed_distance_mm": 8.707,
+    "euclidean_distance_mm": 3.959,
+    "ratio": 2.2,
+    "min_routed_distance_mm": 7.248,
+    "max_routed_distance_mm": 12.791,
+    "max_ratio": 2.2,
+    "anomalies": [
+      {
+        "pair": "L1.1-C1.2",
+        "routed_distance_mm": 12.791,
+        "euclidean_distance_mm": 8.279,
+        "ratio": 1.55
+      },
+      {
+        "pair": "IC1.2-C1.2",
+        "routed_distance_mm": 8.707,
+        "euclidean_distance_mm": 3.959,
+        "ratio": 2.2
+      }
+    ],
+    "finding_id": "pcb:pad-distance-SW"
+  },
+  {
+    "detector": "current_capacity",
+    "rule_id": "CC-DET",
+    "category": "current_capacity",
+    "summary": "电源网络 GND：最小走线 0.254mm",
+    "description": "电源/地网络 GND：最小走线 0.254mm，最大 0.254mm，共 24 条线段。",
+    "components": [],
+    "nets": [
+      "GND"
+    ],
+    "pins": [],
+    "severity": "info",
+    "confidence": "deterministic",
+    "evidence_source": "topology",
+    "recommendation": "",
+    "report_context": {
+      "section": "Current Capacity",
+      "impact": "Power delivery",
+      "standard_ref": "IPC-2221"
+    },
+    "kind": "fact",
+    "net": "GND",
+    "net_number": 5,
+    "min_track_width_mm": 0.254,
+    "max_track_width_mm": 0.254,
+    "track_widths_used": [
+      0.254
+    ],
+    "copper_layers": [
+      "BOTTOM",
+      "TOP"
+    ],
+    "segment_count": 24,
+    "via_count": 2,
+    "via_drill_sizes_mm": [
+      0.29999939999999997
+    ],
+    "finding_id": "pcb:CC-DET-gnd",
+    "source_text": {
+      "summary": "Power net GND: 0.254mm min trace",
+      "description": "Power/ground net GND: min trace 0.254mm, max 0.254mm, 24 segments."
+    }
+  },
+  {
+    "detector": "decoupling_placement",
+    "rule_id": "DC-DET",
+    "category": "decoupling",
+    "summary": "IC1：10 mm 内有 2 个去耦电容，最近距离 3.22 mm。",
+    "description": "IC IC1 在共享非地网络的 10 mm 范围内有 2 个电容，最近的一个距离 3.22 mm。这是实测摆放事实，不是违规。",
+    "components": [
+      "IC1",
+      "C1",
+      "C2"
+    ],
+    "nets": [
+      "IN",
+      "NetC1_1",
+      "SW"
+    ],
+    "pins": [],
+    "severity": "info",
+    "confidence": "deterministic",
+    "evidence_source": "topology",
+    "recommendation": "",
+    "report_context": {
+      "section": "Decoupling",
+      "impact": "",
+      "standard_ref": ""
+    },
+    "detection_id": "decoupling-IC1",
+    "kind": "fact",
+    "nearby_caps": [
+      {
+        "cap": "C1",
+        "value": "",
+        "distance_mm": 3.22,
+        "shared_nets": [
+          "NetC1_1",
+          "SW"
+        ],
+        "same_side": true
+      },
+      {
+        "cap": "C2",
+        "value": "",
+        "distance_mm": 3.52,
+        "shared_nets": [
+          "IN"
+        ],
+        "same_side": true
+      }
+    ],
+    "closest_cap_mm": 3.22,
+    "gnd_only_caps": [
+      "C3"
+    ],
+    "finding_id": "pcb:decoupling-IC1"
+  }
+]
