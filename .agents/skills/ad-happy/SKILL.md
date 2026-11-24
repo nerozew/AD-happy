@@ -21,7 +21,7 @@ description: 审查 Altium Designer 工程（.PrjPcb/.SchDoc/.PcbDoc）：用户
 ### 1. 确认工程路径
 
 - 把用户给的路径解析为绝对路径，并确认它存在、可访问。
-- `--project` 只接受**目录**。用户给的是 `.PrjPcb` / `.SchDoc` / `.PcbDoc` 文件时，取它所在的目录。
+- `--project` 接受**目录**或 `.PrjPcb` 文件路径。用户给的是 `.SchDoc` / `.PcbDoc` 等文件时，取它所在的目录；给的是 `.PrjPcb` 时可直接传该文件，或传目录并追加 `--project-file "<文件名>"`。
 - 路径不存在或无法访问时，直接告知用户，不要运行命令。
 
 ### 2. 定位 `*.PrjPcb`
