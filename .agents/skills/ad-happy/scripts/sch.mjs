@@ -12,20 +12,25 @@ export const PIN_DIRECTIONS = [
   { x: 0, y: -1 },
 ]
 
-// Altium 的 TPinElectrical 数字枚举；6（开射极）与 7（未连接）在统一枚举里都记 unspecified。
-const ELECTRICAL_BY_NUMBER = ['input', 'output', 'bidirectional', 'passive', 'power', 'open_collector', 'unspecified', 'unspecified']
+// Altium 的 TPinElectrical 序数：0 Input、1 IO、2 Output、3 OpenCollector、4 Passive、
+// 5 HiZ、6 OpenEmitter、7 Power、8 Power2。统一枚举没有 HiZ/OpenEmitter，记 unspecified。
+const ELECTRICAL_BY_NUMBER = ['input', 'bidirectional', 'output', 'open_collector', 'passive', 'unspecified', 'unspecified', 'power', 'power']
 // 库生成的 ASCII 可能用名称而非数字；去掉分隔符后归一。
 const ELECTRICAL_BY_NAME = {
   input: 'input',
+  io: 'bidirectional',
   output: 'output',
   bidirectional: 'bidirectional',
   bidi: 'bidirectional',
   passive: 'passive',
   power: 'power',
+  power2: 'power',
   powerin: 'power',
   powerout: 'power',
   opencollector: 'open_collector',
   openemitter: 'unspecified',
+  hiz: 'unspecified',
+  tristate: 'unspecified',
   notconnected: 'unspecified',
   unspecified: 'unspecified',
 }
@@ -117,7 +122,7 @@ function toPin(record, componentIndexByRecordIndex) {
     componentIndex: componentIndexByRecordIndex.get(record.ownerIndex) ?? -1,
     number: record.designator ?? '',
     name: record.name ?? '',
-    electrical: normalizeElectrical(record.getCaseInsensitive('ELECTRICAL')),
+    electrical: electricalTypeName(record.getCaseInsensitive('ELECTRICAL')),
     x: position.x,
     y: position.y,
     orientation: readOrientation(record),
@@ -132,7 +137,14 @@ function readOrientation(record) {
   return raw & 0b11
 }
 
-function normalizeElectrical(raw) {
+/**
+ * 把 Altium ELECTRICAL 的原始值（数字序数或名称）归一为统一枚举。
+ * 数值序数按 Altium TPinElectrical：0 input、1 IO、2 output、3 open_collector、4 passive、
+ * 5 HiZ、6 open_emitter、7 power、8 power2。
+ * @param {number | string | undefined} raw
+ * @returns {'input'|'output'|'passive'|'power'|'bidirectional'|'open_collector'|'unspecified'}
+ */
+export function electricalTypeName(raw) {
   if (raw === undefined) return 'unspecified'
   const text = String(raw).trim()
   if (/^-?\d+$/u.test(text)) {

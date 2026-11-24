@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { parseSch } from '../.agents/skills/ad-happy/scripts/sch.mjs'
+import { electricalTypeName, parseSch } from '../.agents/skills/ad-happy/scripts/sch.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), 'fixtures/Student-DCDC-Buck-Converter')
 const sch = join(root, 'SCH1_Main.SchDoc')
@@ -19,6 +19,26 @@ test('引脚计数与电气类型', () => {
   const s = parseSch(sch)
   assert.equal(s.pins.length, 22)
   assert.ok(s.pins.every(p => ['input', 'output', 'passive', 'power', 'bidirectional', 'open_collector', 'unspecified'].includes(p.electrical)))
+})
+
+test('电气类型按 Altium TPinElectrical 序数解码', () => {
+  // 0 Input、1 IO、2 Output、3 OpenCollector、4 Passive、5 HiZ、6 OpenEmitter、7 Power、8 Power2。
+  assert.equal(electricalTypeName(0), 'input')
+  assert.equal(electricalTypeName(1), 'bidirectional')
+  assert.equal(electricalTypeName(2), 'output')
+  assert.equal(electricalTypeName(3), 'open_collector')
+  assert.equal(electricalTypeName(4), 'passive')
+  assert.equal(electricalTypeName(5), 'unspecified')
+  assert.equal(electricalTypeName(6), 'unspecified')
+  assert.equal(electricalTypeName(7), 'power')
+  assert.equal(electricalTypeName(8), 'power')
+  assert.equal(electricalTypeName('4'), 'passive')
+  assert.equal(electricalTypeName('Open Collector'), 'open_collector')
+  assert.equal(electricalTypeName(undefined), 'unspecified')
+
+  // 样板 22 个引脚的原始 ELECTRICAL 均为 4（Passive）。
+  const s = parseSch(sch)
+  assert.ok(s.pins.every(p => p.electrical === 'passive'))
 })
 
 test('电源端口与导线', () => {
