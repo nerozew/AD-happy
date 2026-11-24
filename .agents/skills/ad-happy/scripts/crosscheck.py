@@ -442,7 +442,7 @@ def _failure_finding(exc):
         severity="error",
         confidence="deterministic",
         evidence_source="topology",
-        summary=f"pin_pad cross-check failed: {message}",
+        summary=f"跨域交叉检查执行失败：{message}",
         description=(
             f"跨域交叉检查执行时抛出异常，本次无法给出跨域一致性结论。"
             f"异常：{message}"

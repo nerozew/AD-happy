@@ -26,6 +26,7 @@ from finding_schema import (  # noqa: E402
     make_finding,
     normalize_severity,
 )
+from localization import localize_findings  # noqa: E402
 from signal_detectors import (  # noqa: E402
     detect_decoupling,
     detect_power_regulators,
@@ -84,6 +85,8 @@ def run_schematic(ctx: AnalysisContext) -> dict:
 
     # 与 kicad-happy 主流程一致：序列化前统一生成稳定 finding_id。
     assign_finding_ids(findings, "schematic")
+    # 本地化放在 finding_id 生成之后：基于 summary 哈希的 ID 不会因翻译而漂移。
+    localize_findings(findings)
     return {"findings": findings, "status": status}
 
 
