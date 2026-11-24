@@ -105,16 +105,60 @@ def test_findings_align_with_finding_schema():
 
 
 def test_decoupling_evaluated_with_two_rails_including_non_ground():
+    net_v5 = {"pins": [
+        {"component": "C1", "pin_number": "1", "pin_name": "1",
+         "pin_type": "passive", "x": 0, "y": 0},
+    ]}
     context = AnalysisContext(
-        components=[_component("U1", "IC", "TESTIC", pins=2)],
+        components=[
+            _component("U1", "IC", "TESTIC", pins=2),
+            _component("C1", "100n", "capacitor"),
+        ],
+        nets={"+5V": net_v5},
+        lib_symbols={},
+        pin_net={("C1", "1"): ("+5V", net_v5)},
+        known_power_rails={"GND", "+5V"},
+    )
+    r = run_schematic(context)
+    assert r["status"]["decoupling"] == "pass"
+    assert not any(f["detector"] == "decoupling" for f in r["findings"])
+
+
+def test_decoupling_not_evaluated_without_nets():
+    # 有组件、有电源轨，但原理图没有网表：detect_decoupling 无法遍历电源轨。
+    context = AnalysisContext(
+        components=[
+            _component("U1", "IC", "TESTIC", pins=2),
+            _component("C1", "100n", "capacitor"),
+        ],
         nets={},
         lib_symbols={},
         pin_net={},
         known_power_rails={"GND", "+5V"},
     )
     r = run_schematic(context)
-    assert r["status"]["decoupling"] == "pass"
-    assert not any(f["detector"] == "decoupling" for f in r["findings"])
+    assert r["status"]["decoupling"] == "not_evaluated"
+
+
+def test_decoupling_not_evaluated_without_parsed_capacitor():
+    # 有组件、有网表与电源轨，但电容值不可解析：上游不会计入任何电容。
+    net_v5 = {"pins": [
+        {"component": "C1", "pin_number": "1", "pin_name": "1",
+         "pin_type": "passive", "x": 0, "y": 0},
+    ]}
+    context = AnalysisContext(
+        components=[
+            _component("U1", "IC", "TESTIC", pins=2),
+            _component("C1", "???", "capacitor"),
+        ],
+        nets={"+5V": net_v5},
+        lib_symbols={},
+        pin_net={("C1", "1"): ("+5V", net_v5)},
+        known_power_rails={"GND", "+5V"},
+    )
+    assert context.parsed_values == {}
+    r = run_schematic(context)
+    assert r["status"]["decoupling"] == "not_evaluated"
 
 
 def test_decoupling_not_evaluated_with_ground_rails_only():
@@ -167,11 +211,13 @@ def test_no_nets_does_not_report_pass():
     r = run_schematic(context)
     assert r["status"]["voltage_divider"] == "not_evaluated"
     assert r["status"]["rc_filter"] == "not_evaluated"
+    assert r["status"]["decoupling"] == "not_evaluated"
     assert r["status"]["power_regulator"] == "not_evaluated"
     assert r["status"]["shorted_component"] == "not_evaluated"
     assert "pass" not in {
         r["status"]["voltage_divider"],
         r["status"]["rc_filter"],
+        r["status"]["decoupling"],
         r["status"]["power_regulator"],
         r["status"]["shorted_component"],
     }
@@ -203,6 +249,7 @@ def test_unparsable_values_do_not_report_pass():
     r = run_schematic(context)
     assert r["status"]["voltage_divider"] == "not_evaluated"
     assert r["status"]["rc_filter"] == "not_evaluated"
+    assert r["status"]["decoupling"] == "not_evaluated"
     assert r["status"]["power_regulator"] == "not_evaluated"
 
 
@@ -247,8 +294,8 @@ def test_connectivity_raw_lists_become_findings():
     assert "多个驱动" in findings["NT-003"]["summary"]
     assert "Unconnected pin" not in findings["NT-002"]["summary"]
     assert "Multiple drivers" not in findings["NT-003"]["summary"]
-    # 有两条电源轨（含非地网络）时去耦规则可评估。
-    assert r["status"]["decoupling"] == "pass"
+    # 该上下文没有可解析的电容值，去耦规则不能下结论。
+    assert r["status"]["decoupling"] == "not_evaluated"
 
 
 def _no_erc_ctx():

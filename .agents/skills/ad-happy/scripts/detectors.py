@@ -110,8 +110,10 @@ def _rc_filter(ctx, dividers):
 
 def _decoupling(ctx):
     # R3：仅当已知电源轨 >= 2 且至少一条不是地网络时才可评估。
-    # 没有元件时即使电源端口存在，也无从判断去耦电容是否缺失。
-    if not ctx.components:
+    # detect_decoupling 会遍历 ctx.nets 并按可解析电容值统计（上游
+    # signal_detectors.py 的 detect_decoupling），因此没有网表或没有可解析
+    # 电容值时，空结果只是「没检查」，不能报 pass。
+    if not ctx.components or not ctx.nets or not _has_parsed(ctx, "capacitor"):
         return [], NOT_EVALUATED
     rails = set(getattr(ctx, "known_power_rails", ()) or ())
     non_ground_rails = [rail for rail in rails if not ctx.is_ground(rail)]

@@ -60,10 +60,12 @@ const SCH_RULES = [
 ]
 const PCB_RULES = ['dfm', 'pad_distance', 'current_capacity', 'decoupling_placement']
 const ALL_RULES = [...SCH_RULES, ...PCB_RULES, 'pin_pad']
-// 这些规则依赖原理图网表；引脚未全部入网时，空结果不能视为通过。
+// 这些规则依赖原理图网表（decoupling 还依赖可解析电容值）；引脚未全部
+// 入网时，空结果不能视为通过。
 const NETLIST_DEPENDENT_RULES = [
   'voltage_divider',
   'rc_filter',
+  'decoupling',
   'power_regulator',
   'shorted_component',
 ]
