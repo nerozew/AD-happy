@@ -1,0 +1,13 @@
+{
+  "name": "ad-happy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Altium 设计审查 Skill（离线解析 PrjPcb/SchDoc/PcbDoc）",
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "altiumts": "0.0.95"
+  }
+}
