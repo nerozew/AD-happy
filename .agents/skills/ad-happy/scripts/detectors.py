@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sys
 
-from adapter import kicad_happy_scripts
+from adapter import AnalysisContext, kicad_happy_scripts
 
 # 与 adapter 使用同一份 kicad-happy 路径约定（环境变量优先）。
 _SCRIPTS = kicad_happy_scripts()
@@ -48,7 +48,7 @@ _MAKE_FINDING_KEYS = frozenset({
 })
 
 
-def run_schematic(ctx) -> dict:
+def run_schematic(ctx: AnalysisContext) -> dict:
     """运行 6 条原理图规则，返回 ``{"findings": [...], "status": {...}}``。
 
     status 取值：

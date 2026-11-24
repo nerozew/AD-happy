@@ -100,7 +100,7 @@ def test_missing_inputs_are_not_evaluated_not_pass():
 
 
 def test_rc_filter_not_evaluated_without_capacitors():
-    ctx = AnalysisContext(
+    context = AnalysisContext(
         components=[{
             "reference": "R1", "value": "10k", "type": "resistor",
             "lib_id": "AD:Resistor", "footprint": "", "properties": {},
@@ -113,9 +113,9 @@ def test_rc_filter_not_evaluated_without_capacitors():
         lib_symbols={},
         pin_net={},
     )
-    r = run_schematic(ctx)
+    r = run_schematic(context)
     assert r["status"]["rc_filter"] == "not_evaluated"
-    assert ctx.parsed_values["R1"] == 10000.0
+    assert context.parsed_values["R1"] == 10000.0
 
 
 def _connectivity_ctx():
