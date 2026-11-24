@@ -79,154 +79,220 @@
       "netIndex": 4,
       "name": "2",
       "x": 140.77499912,
-      "y": 42.97000042
+      "y": 42.97000042,
+      "drillMil": 43.3071,
+      "plated": true,
+      "type": "thru_hole"
     },
     {
       "componentIndex": 0,
       "netIndex": 1,
       "name": "1",
       "x": 140.77499912,
-      "y": 40.43000042
+      "y": 40.43000042,
+      "drillMil": 43.3071,
+      "plated": true,
+      "type": "thru_hole"
     },
     {
       "componentIndex": 1,
       "netIndex": 5,
       "name": "2",
       "x": 158.82500112,
-      "y": 33.87499956
+      "y": 33.87499956,
+      "drillMil": 0,
+      "plated": true,
+      "type": "smd"
     },
     {
       "componentIndex": 1,
       "netIndex": 4,
       "name": "1",
       "x": 160.57500016,
-      "y": 33.87499956
+      "y": 33.87499956,
+      "drillMil": 0,
+      "plated": true,
+      "type": "smd"
     },
     {
       "componentIndex": 2,
       "netIndex": 1,
       "name": "2",
       "x": 160.59999883999998,
-      "y": 36.02500034
+      "y": 36.02500034,
+      "drillMil": 0,
+      "plated": true,
+      "type": "smd"
     },
     {
       "componentIndex": 2,
       "netIndex": 5,
       "name": "1",
       "x": 158.84999979999998,
-      "y": 36.02500034
+      "y": 36.02500034,
+      "drillMil": 0,
+      "plated": true,
+      "type": "smd"
     },
     {
       "componentIndex": 3,
       "netIndex": 1,
       "name": "2",
       "x": 148.209,
-      "y": 40.79699994
+      "y": 40.79699994,
+      "drillMil": 0,
+      "plated": true,
+      "type": "smd"
     },
     {
       "componentIndex": 3,
       "netIndex": 0,
       "name": "1",
       "x": 148.209,
-      "y": 38.19700006
+      "y": 38.19700006,
+      "drillMil": 0,
+      "plated": true,
+      "type": "smd"
     },
     {
       "componentIndex": 4,
       "netIndex": 4,
       "name": "2",
       "x": 140.75000044,
-      "y": 36.59000048
+      "y": 36.59000048,
+      "drillMil": 43.3071,
+      "plated": true,
+      "type": "thru_hole"
     },
     {
       "componentIndex": 4,
       "netIndex": 3,
       "name": "1",
       "x": 140.75000044,
-      "y": 34.05000048
+      "y": 34.05000048,
+      "drillMil": 43.3071,
+      "plated": true,
+      "type": "thru_hole"
     },
     {
       "componentIndex": 5,
       "netIndex": 4,
       "name": "1",
       "x": 154.09099992,
-      "y": 37.39900064
+      "y": 37.39900064,
+      "drillMil": 0,
+      "plated": false,
+      "type": "smd"
     },
     {
       "componentIndex": 5,
       "netIndex": 0,
       "name": "2",
       "x": 154.09099992,
-      "y": 36.449
+      "y": 36.449,
+      "drillMil": 0,
+      "plated": false,
+      "type": "smd"
     },
     {
       "componentIndex": 5,
       "netIndex": 3,
       "name": "3",
       "x": 154.09099992,
-      "y": 35.49899936
+      "y": 35.49899936,
+      "drillMil": 0,
+      "plated": false,
+      "type": "smd"
     },
     {
       "componentIndex": 5,
       "netIndex": 5,
       "name": "4",
       "x": 156.59099999999998,
-      "y": 35.49899936
+      "y": 35.49899936,
+      "drillMil": 0,
+      "plated": false,
+      "type": "smd"
     },
     {
       "componentIndex": 5,
       "netIndex": 3,
       "name": "5",
       "x": 156.59099999999998,
-      "y": 36.449
+      "y": 36.449,
+      "drillMil": 0,
+      "plated": false,
+      "type": "smd"
     },
     {
       "componentIndex": 5,
       "netIndex": 2,
       "name": "6",
       "x": 156.59099999999998,
-      "y": 37.39900064
+      "y": 37.39900064,
+      "drillMil": 0,
+      "plated": false,
+      "type": "smd"
     },
     {
       "componentIndex": 6,
       "netIndex": 1,
       "name": "2",
       "x": 150.87500178,
-      "y": 40.27499946
+      "y": 40.27499946,
+      "drillMil": 0,
+      "plated": true,
+      "type": "smd"
     },
     {
       "componentIndex": 6,
       "netIndex": 4,
       "name": "1",
       "x": 153.67500126,
-      "y": 40.27499946
+      "y": 40.27499946,
+      "drillMil": 0,
+      "plated": true,
+      "type": "smd"
     },
     {
       "componentIndex": 7,
       "netIndex": 4,
       "name": "1",
       "x": 150.57499983999998,
-      "y": 37.27500038
+      "y": 37.27500038,
+      "drillMil": 0,
+      "plated": true,
+      "type": "smd"
     },
     {
       "componentIndex": 7,
       "netIndex": 3,
       "name": "2",
       "x": 150.57499983999998,
-      "y": 35.67500104
+      "y": 35.67500104,
+      "drillMil": 0,
+      "plated": true,
+      "type": "smd"
     },
     {
       "componentIndex": 8,
       "netIndex": 2,
       "name": "1",
       "x": 157.87500047999998,
-      "y": 39.69999934
+      "y": 39.69999934,
+      "drillMil": 0,
+      "plated": true,
+      "type": "smd"
     },
     {
       "componentIndex": 8,
       "netIndex": 0,
       "name": "2",
       "x": 156.27500114,
-      "y": 39.69999934
+      "y": 39.69999934,
+      "drillMil": 0,
+      "plated": true,
+      "type": "smd"
     }
   ],
   "nets": [
@@ -599,120 +665,140 @@
       "y2": 37.19999926
     }
   ],
+  "arcs": [],
   "vias": [
     {
       "netIndex": 4,
       "x": 149.8249988,
       "y": 43.87499988,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 4,
       "x": 148.37499916,
       "y": 43.900001100000004,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 4,
       "x": 146.85000094,
       "y": 43.900001100000004,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 4,
       "x": 145.8000005,
       "y": 38.19999979999999,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 4,
       "x": 145.8000005,
       "y": 36.89999986,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 4,
       "x": 144.50000056,
       "y": 38.249999700000004,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 3,
       "x": 154.45000098,
       "y": 33.39999924,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 3,
       "x": 157.89999916,
       "y": 37.19999926,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 0,
       "x": 147.49999964,
       "y": 37.29999906,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 0,
       "x": 148.94999928,
       "y": 37.29999906,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 1,
       "x": 160.87300058,
       "y": 37.54900034,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 0,
       "x": 152.02499948,
       "y": 36.27499984,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 0,
       "x": 152.02499948,
       "y": 36.99999966,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 0,
       "x": 147.84999894,
       "y": 36.70000026,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 0,
       "x": 148.55000008,
       "y": 36.70000026,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 0,
       "x": 152.72500061999997,
       "y": 36.97500098,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 0,
       "x": 155.075001,
       "y": 39.69999934,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 1,
       "x": 152.146,
       "y": 42.545,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     },
     {
       "netIndex": 0,
       "x": 152.72500061999997,
       "y": 36.27499984,
-      "drillMil": 11.811
+      "drillMil": 11.811,
+      "diameterMil": 23.622
     }
   ],
   "rules": [

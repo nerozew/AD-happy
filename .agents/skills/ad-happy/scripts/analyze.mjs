@@ -557,6 +557,7 @@ function buildSummary(state, context) {
   const ruleCounts = Object.assign(Object.create(null), {
     pass: 0,
     found: 0,
+    partial: 0,
     not_evaluated: 0,
     failed: 0,
   })

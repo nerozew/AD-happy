@@ -7,15 +7,18 @@
 #   快照的 -1（无网络）因此正好落到 0。
 # - 单位：快照坐标已是 mm；线宽与钻孔是 mil，只在 ``_mm_from_mil`` 里
 #   乘 0.0254，保证 DFM 的线宽检查拿到的是毫米。
-# - 铺铜：快照不含 zones/regions/arcs，所以 ``zones`` 传空、``arcs`` 传空。
-#   若某个焊盘网络只有铺铜、没有铜走线，检测器会静默漏掉它；此时规则状态
-#   降级为 not_evaluated，不当作 pass（见 ``_pad_nets_without_tracks``）。
-# - 快照不含过孔外径与元件值：过孔 ``size`` 记 0（DFM 会跳过环宽检查），
-#   ``value`` 记空串，不伪造数据。
+# - 铺铜：快照不含 zones/regions，所以 ``zones`` 传空。若某个焊盘网络只有
+#   铺铜、没有铜走线，检测器会静默漏掉它；此时规则状态降级为
+#   not_evaluated，不当作 pass（见 ``_pad_nets_without_tracks``）。
+# - 过孔外径（DIAMETER）与焊盘 PTH 类型/钻孔会进入 DFM 的环宽与最小钻孔
+#   检查；任一输入缺失时规则状态为 partial，并在 coverage.skippedChecks
+#   列出被跳过的子检查。
+# - 快照不含元件值：``value`` 记空串，不伪造数据。
 # - 未归属元件的焊盘（componentIndex = -1）无法构成 "REF.pad" 键，跳过。
 # - layerStack 含系统层与 Multi-Layer，不用于数铜层数（铜层过滤在 Task 3）。
 from __future__ import annotations
 
+import math
 import re
 import sys
 from collections import Counter
@@ -43,6 +46,7 @@ from finding_schema import (  # noqa: E402
 
 PASS = "pass"
 FOUND = "found"
+PARTIAL = "partial"
 NOT_EVALUATED = "not_evaluated"
 FAILED = "failed"
 
@@ -62,17 +66,21 @@ _MAKE_FINDING_KEYS = frozenset({
 
 
 def run_pcb(pcb: dict) -> dict:
-    """运行 4 条 PCB 规则，返回 ``{"findings": [...], "status": {...}}``。
+    """运行 4 条 PCB 规则，返回 ``{"findings": [...], "status": {...}, "coverage": {...}}``。
 
     status 取值：
     - ``found``：规则执行成功且有结果（问题或事实条目）；
     - ``pass``：输入齐全、规则执行成功、确实没有发现问题；
+    - ``partial``：规则执行成功，但部分子检查因输入缺失被跳过，不能当作通过；
     - ``not_evaluated``：缺少规则所需的输入（含「只有铺铜、快照看不到」），
       不能下结论；
     - ``failed``：规则抛出异常（异常信息会写入 findings，不静默吞掉）。
+
+    coverage 记录按规则归类的被跳过子检查，供 summary/report 展示数据缺口。
     """
     findings: list[dict] = []
     status: dict[str, str] = {}
+    coverage: dict = {"skippedChecks": []}
 
     try:
         data = _compile(pcb)
@@ -81,13 +89,16 @@ def run_pcb(pcb: dict) -> dict:
             status[rule] = FAILED
             findings.append(_failure_finding(rule, exc))
         assign_finding_ids(findings, "pcb")
-        return {"findings": findings, "status": status}
+        return {"findings": findings, "status": status, "coverage": coverage}
 
     def run(rule, evaluate, normalize):
         # 单条规则失败不影响其他规则；异常（含 finding 统一化失败）必须
         # 变成可见的 finding，不能静默吞掉。
         try:
-            items, empty_status = evaluate()
+            result = evaluate()
+            items, empty_status, skipped = (
+                result if len(result) == 3 else (*result, [])
+            )
             normalized = [normalize(item, rule) for item in items]
         except Exception as exc:  # noqa: BLE001 规则隔离是本层的职责
             status[rule] = FAILED
@@ -95,6 +106,9 @@ def run_pcb(pcb: dict) -> dict:
             return []
         status[rule] = FOUND if items else empty_status
         findings.extend(normalized)
+        coverage["skippedChecks"].extend(
+            {"rule": rule, **check} for check in skipped
+        )
         return items
 
     run("dfm", lambda: _dfm(data), _normalize_finding)
@@ -108,7 +122,7 @@ def run_pcb(pcb: dict) -> dict:
 
     # 与 kicad-happy 主流程一致：序列化前统一生成稳定 finding_id。
     assign_finding_ids(findings, "pcb")
-    return {"findings": findings, "status": status}
+    return {"findings": findings, "status": status, "coverage": coverage}
 
 
 # ---------------------------------------------------------------------------
@@ -116,16 +130,99 @@ def run_pcb(pcb: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def _dfm(data):
-    # 没有任何铜（走线/过孔）就没有可评估的制造参数，不能报 pass。
-    if not data["tracks"]["segments"] and not data["vias"]["vias"]:
-        return [], NOT_EVALUATED
+    # 没有任何铜（走线/圆弧/过孔）就没有可评估的制造参数，不能报 pass。
+    if (
+        not data["tracks"]["segments"]
+        and not data["tracks"]["arcs"]
+        and not data["vias"]["vias"]
+    ):
+        return [], NOT_EVALUATED, [
+            {"check": "copper", "reason": "快照中没有铜走线、圆弧或过孔"},
+        ]
     # design_rules 不传：快照里的 rules 是 AD 规则清单，形状与 kicad-happy
     # 的 setup.design_rules 不同，硬塞会把文本当成约束值。
     # 快照也没有 net_classes / design_intent，检测器按默认 Class 2 评估。
     result = analyze_dfm(
         data["footprints"], data["tracks"], data["vias"], data["outline"],
     )
-    return list(result.get("violations") or []), PASS
+    skipped = _dfm_skipped_checks(data)
+    # 有违规时 found 优先；没有违规但子检查被跳过时必须报 partial，
+    # 不能把「没检查」当成「通过」。
+    empty_status = PARTIAL if skipped else PASS
+    return list(result.get("violations") or []), empty_status, skipped
+
+
+def _dfm_skipped_checks(data):
+    """列出 DFM 因输入缺失而无法执行的子检查。
+
+    kicad-happy 的 analyze_dfm 对缺失输入是静默跳过的（例如 via.size == 0
+    时不算环宽、焊盘缺 type/drill 时不参与最小钻孔），因此必须在适配层
+    先识别这些缺口，把规则状态降为 partial 并在报告里列出。
+    """
+    skipped = []
+    segments = data["tracks"]["segments"]
+    arcs = data["tracks"]["arcs"]
+    vias = data["vias"]["vias"]
+    footprints = data["footprints"]
+
+    if any(segment.get("width", 0) <= 0 for segment in [*segments, *arcs]):
+        skipped.append({
+            "check": "track_width",
+            "reason": "部分铜走线/圆弧缺少线宽，无法评估最小线宽",
+        })
+    if len(segments) + len(arcs) < 2:
+        skipped.append({
+            "check": "track_spacing",
+            "reason": "铜走线/圆弧少于两条，无法评估走线间距",
+        })
+
+    if vias:
+        if not any(via.get("drill", 0) > 0 for via in vias):
+            skipped.append({
+                "check": "via_drill",
+                "reason": "过孔缺少钻孔直径，无法评估最小钻孔",
+            })
+        if not any(via.get("size", 0) > 0 for via in vias):
+            skipped.append({
+                "check": "via_annular_ring",
+                "reason": "过孔缺少外径（DIAMETER），无法评估环宽",
+            })
+
+    pads = [
+        pad
+        for footprint in footprints
+        for pad in footprint.get("pads") or []
+    ]
+    if not pads:
+        skipped.append({
+            "check": "pth_pad_drill",
+            "reason": "快照不含焊盘，无法评估 PTH 钻孔",
+        })
+    else:
+        untyped = [pad for pad in pads if not pad.get("type")]
+        if untyped:
+            skipped.append({
+                "check": "pth_pad_drill",
+                "reason": "部分焊盘缺少类型/钻孔信息，无法评估 PTH 钻孔",
+            })
+        else:
+            thru_pads = [
+                pad
+                for pad in pads
+                if pad.get("type") in ("thru_hole", "np_thru_hole")
+            ]
+            if any(pad.get("drill", 0) <= 0 for pad in thru_pads):
+                skipped.append({
+                    "check": "pth_pad_drill",
+                    "reason": "PTH 焊盘缺少钻孔直径，无法评估最小钻孔",
+                })
+
+    if not data["outline"].get("bounding_box"):
+        skipped.append({
+            "check": "board_outline",
+            "reason": "缺少板框尺寸，无法评估板卡外形",
+        })
+    return skipped
 
 
 def _pad_distance(data):
@@ -187,7 +284,7 @@ def _compile(pcb):
         "footprints": _footprints(
             pcb.get("components") or [], pcb.get("pads") or [], net_names,
         ),
-        "tracks": _tracks(pcb.get("tracks") or []),
+        "tracks": _tracks(pcb.get("tracks") or [], pcb.get("arcs") or []),
         "vias": _vias(pcb.get("vias") or []),
         "net_names": net_names,
         "outline": _outline(pcb.get("outline") or {}),
@@ -243,16 +340,31 @@ def _footprints(components, pads, net_names):
 
 def _pad(pad, net_names):
     net_number = _net_id(pad.get("netIndex"))
+    drill_mil = pad.get("drillMil")
+    plated = pad.get("plated")
+    pad_type = str(pad.get("type") or "")
+    # 旧快照可能既没有 type 也没有 drillMil/plated；此时 type 留空，
+    # 由 _dfm_skipped_checks 记录为数据缺口，而不是默认为 SMD。
+    if not pad_type and drill_mil is not None:
+        pad_type = (
+            "thru_hole" if _number(drill_mil) > 0 and bool(plated)
+            else "np_thru_hole" if _number(drill_mil) > 0
+            else "smd"
+        )
     return {
         "number": str(pad.get("name") or ""),
         "net_number": net_number,
         "net_name": net_names.get(net_number, ""),
         "abs_x": _number(pad.get("x")),
         "abs_y": _number(pad.get("y")),
+        # DFM 的最小钻孔检查只认 thru_hole / np_thru_hole；SMD 的 drill 为 0。
+        "type": pad_type,
+        "drill": _mm_from_mil(drill_mil) if drill_mil is not None else 0.0,
+        "plated": bool(plated),
     }
 
 
-def _tracks(tracks):
+def _tracks(tracks, arcs=()):
     segments = []
     for track in tracks:
         segments.append({
@@ -264,36 +376,79 @@ def _tracks(tracks):
             "layer": str(track.get("layer") or ""),
             "net": _net_id(track.get("netIndex")),
         })
-    width_distribution = Counter(seg["width"] for seg in segments)
-    layer_distribution = Counter(seg["layer"] for seg in segments)
-    # 快照不含圆弧走线（PcbSnapshot 只有直线 tracks）。
+    arc_entries = [_arc_entry(arc) for arc in arcs]
+    width_distribution = Counter(
+        entry["width"] for entry in [*segments, *arc_entries]
+    )
+    layer_distribution = Counter(
+        entry["layer"] for entry in [*segments, *arc_entries]
+    )
     return {
         "segment_count": len(segments),
-        "arc_count": 0,
-        "total_count": len(segments),
+        "arc_count": len(arc_entries),
+        "total_count": len(segments) + len(arc_entries),
         "width_distribution": dict(width_distribution),
         "layer_distribution": dict(layer_distribution),
         "segments": segments,
-        "arcs": [],
+        "arcs": arc_entries,
     }
+
+
+def _arc_entry(arc):
+    """快照圆弧 -> kicad-happy 的三点圆弧（起点/中点/终点）。"""
+    center_x = _number(arc.get("x"))
+    center_y = _number(arc.get("y"))
+    radius = _mm_from_mil(arc.get("radiusMil"))
+    start = _number(arc.get("startAngle"))
+    end = _number(arc.get("endAngle"))
+    sweep = end - start
+    if sweep <= 0:
+        sweep += 360
+    if sweep <= 0 or sweep > 360:
+        sweep = 360
+    points = [
+        _arc_point(center_x, center_y, radius, start),
+        _arc_point(center_x, center_y, radius, start + sweep / 2),
+        _arc_point(center_x, center_y, radius, start + sweep),
+    ]
+    return {
+        "start": points[0],
+        "mid": points[1],
+        "end": points[2],
+        "width": _mm_from_mil(arc.get("widthMil")),
+        "layer": str(arc.get("layer") or ""),
+        "net": _net_id(arc.get("netIndex")),
+    }
+
+
+def _arc_point(center_x, center_y, radius, angle_degrees):
+    angle = math.radians(angle_degrees)
+    return [
+        center_x + radius * math.cos(angle),
+        center_y + radius * math.sin(angle),
+    ]
 
 
 def _vias(vias):
     entries = []
     for via in vias:
+        size = _mm_from_mil(via.get("diameterMil"))
         entries.append({
             "x": _number(via.get("x")),
             "y": _number(via.get("y")),
-            # 快照不含过孔外径；0 表示未知，DFM 的环宽检查会跳过它。
-            "size": 0.0,
+            # 外径来自 DIAMETER；缺失时为 0，DFM 会跳过环宽并由 partial 标记。
+            "size": size,
             "drill": _mm_from_mil(via.get("drillMil")),
             "net": _net_id(via.get("netIndex")),
             "type": "through",
         })
+    size_distribution = Counter(
+        f"{entry['size']}/{entry['drill']}"
+        for entry in entries
+    )
     return {
         "count": len(entries),
-        # 外径未知，不做尺寸分布统计（避免伪造 "0.0/0.3" 这样的键）。
-        "size_distribution": {},
+        "size_distribution": dict(size_distribution),
         "vias": entries,
     }
 

@@ -47,7 +47,7 @@ def test_each_rule_has_status():
         "decoupling_placement",
     }
     assert all(
-        value in {"pass", "found", "not_evaluated", "failed"}
+        value in {"pass", "found", "partial", "not_evaluated", "failed"}
         for value in r["status"].values()
     )
 
@@ -101,6 +101,10 @@ def test_dfm_sees_millimetres(monkeypatch):
     assert all(seg["width"] == pytest.approx(0.254) for seg in segments)
     assert captured["vias"]["count"] == 19
     assert all(
+        via["size"] == pytest.approx(23.622 * 0.0254)
+        for via in captured["vias"]["vias"]
+    )
+    assert all(
         via["drill"] == pytest.approx(11.811 * 0.0254)
         for via in captured["vias"]["vias"]
     )
@@ -145,12 +149,46 @@ def test_missing_copper_is_not_evaluated():
     pcb = json.loads(json.dumps(PCB))
     pcb["tracks"] = []
     pcb["vias"] = []
+    pcb["arcs"] = []
     r = run_pcb(pcb)
     assert r["status"]["dfm"] == "not_evaluated"
     assert r["status"]["pad_distance"] == "not_evaluated"
     assert r["status"]["current_capacity"] == "not_evaluated"
     # 去耦摆放只依赖元件与焊盘，仍应照常评估。
     assert r["status"]["decoupling_placement"] == "found"
+    assert any(
+        check["rule"] == "dfm" and check["check"] == "copper"
+        for check in r["coverage"]["skippedChecks"]
+    )
+
+
+def test_dfm_annular_ring_check_runs_with_via_diameter():
+    # 外径 23.622 mil、钻孔 11.811 mil -> 环宽 5.9055 mil = 0.15 mm。
+    data = pcb_detectors._compile(PCB)
+    result = pcb_detectors.analyze_dfm(
+        data["footprints"], data["tracks"], data["vias"], data["outline"],
+    )
+    assert abs(result["metrics"]["min_annular_ring_mm"] - 0.15) < 1e-3
+    # 最小钻孔来自过孔（0.3 mm），不是 4 个 PTH 焊盘（1.0999 mm）。
+    assert result["metrics"]["min_drill_mm"] == pytest.approx(11.811 * 0.0254)
+
+
+def test_dfm_partial_when_subchecks_skipped():
+    pcb = json.loads(json.dumps(PCB))
+    for via in pcb["vias"]:
+        via.pop("diameterMil", None)
+    for pad in pcb["pads"]:
+        pad.pop("drillMil", None)
+        pad.pop("plated", None)
+        pad.pop("type", None)
+    r = run_pcb(pcb)
+    assert r["status"]["dfm"] == "partial"
+    checks = {
+        check["check"]
+        for check in r["coverage"]["skippedChecks"]
+        if check["rule"] == "dfm"
+    }
+    assert {"via_annular_ring", "pth_pad_drill"} <= checks
 
 
 def test_rule_failure_is_visible(monkeypatch):

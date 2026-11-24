@@ -149,6 +149,22 @@ test('区分通过、未评估与失败，不把未评估当作通过', () => {
   assert.ok(!notEvaluated.includes('rc_filter'), '通过的规则不应出现在未评估清单')
 })
 
+test('部分完成的规则显示「部分完成」且不计入通过', () => {
+  const html = renderReport({
+    ...data,
+    findings: [],
+    status: { dfm: 'partial', decoupling: 'pass' },
+  })
+
+  assert.match(html, /部分完成/)
+  const partial = html.slice(
+    html.indexOf('id="partial-rules"'),
+    html.indexOf('id="failed-rules"'),
+  )
+  assert.match(partial, /dfm/)
+  assert.ok(!partial.includes('decoupling'), '通过的规则不应出现在部分完成清单')
+})
+
 test('工程名、标题、网络名等用户可控文本会被转义', () => {
   const html = renderReport({
     ...data,

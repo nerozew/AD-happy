@@ -23,10 +23,11 @@ const STACK_SOURCES = ['v8', 'v7', 'legacy']
  * @param {string} path PcbDoc 文件路径
  * @returns {{
  *   components: Array<{ reference: string, footprint: string, x: number, y: number, angle: number, layer: string }>,
- *   pads: Array<{ componentIndex: number, netIndex: number, name: string, x: number, y: number }>,
+ *   pads: Array<{ componentIndex: number, netIndex: number, name: string, x: number, y: number, drillMil: number, plated: boolean, type: 'smd' | 'thru_hole' | 'np_thru_hole' }>,
  *   nets: string[],
  *   tracks: Array<{ netIndex: number, layer: string, widthMil: number, x1: number, y1: number, x2: number, y2: number }>,
- *   vias: Array<{ netIndex: number, x: number, y: number, drillMil: number }>,
+ *   arcs: Array<{ netIndex: number, layer: string, widthMil: number, x: number, y: number, radiusMil: number, startAngle: number, endAngle: number }>,
+ *   vias: Array<{ netIndex: number, x: number, y: number, drillMil: number, diameterMil: number }>,
  *   rules: Array<{ kind: string, name: string }>,
  *   layerStack: Array<{ name: string, copper: boolean }>,
  *   outline: { widthMm: number, heightMm: number }
@@ -44,6 +45,10 @@ export function parsePcb(path) {
     tracks: doc.tracks
       .filter(record => isCopperLayerName(record.getCaseInsensitive('LAYER') ?? '', stackEntries))
       .map(record => toTrack(doc, record)),
+    // 圆弧走线与直线走线一样参与线宽、间距与连通性检查；只保留铜层。
+    arcs: doc.arcs
+      .filter(record => isCopperLayerName(record.getCaseInsensitive('LAYER') ?? '', stackEntries))
+      .map(record => toArc(doc, record)),
     vias: doc.vias
       .filter(record => isCopperLayerName(record.getCaseInsensitive('LAYER') ?? '', stackEntries))
       .map(record => toVia(doc, record)),
@@ -87,13 +92,33 @@ function collectPads(doc, componentCount) {
 }
 
 function toPad(doc, record, componentIndex) {
+  // HOLESIZE 为 0 表示 SMD；PLATED 只对通孔焊盘有意义。两者都按原始字段
+  // 保留，不在解析层猜测。
+  const drillMil = measurementMils(record, 'HOLESIZE')
+  const plated = readBoolean(record, 'PLATED')
   return {
     componentIndex,
     netIndex: getPcbRecordNetIndex(doc, record) ?? NO_INDEX,
     name: record.name ?? record.getCaseInsensitive('NAME') ?? '',
     x: measurementMils(record, 'X') * MIL_TO_MM,
     y: measurementMils(record, 'Y') * MIL_TO_MM,
+    drillMil,
+    plated,
+    // 下游 DFM 用 type 区分 PTH / NPTH / SMD；由钻孔与镀覆字段派生。
+    type: padType(drillMil, plated),
   }
+}
+
+function padType(drillMil, plated) {
+  if (!(drillMil > 0)) return 'smd'
+  return plated ? 'thru_hole' : 'np_thru_hole'
+}
+
+function readBoolean(record, key) {
+  const raw = record.getCaseInsensitive(key)
+  if (raw === undefined) return false
+  if (typeof raw === 'boolean') return raw
+  return ['true', '1', 'yes'].includes(String(raw).trim().toLowerCase())
 }
 
 function toTrack(doc, record) {
@@ -114,6 +139,23 @@ function toVia(doc, record) {
     x: measurementMils(record, 'X') * MIL_TO_MM,
     y: measurementMils(record, 'Y') * MIL_TO_MM,
     drillMil: measurementMils(record, 'HOLESIZE'),
+    // 过孔外径（DIAMETER）是环宽检查的必需输入，缺失时下游记 0 并降级。
+    diameterMil: measurementMils(record, 'DIAMETER'),
+  }
+}
+
+// 圆弧走线：中心点、半径、起止角；下游按三点（起/中/终）还原几何。
+function toArc(doc, record) {
+  const center = record.center ?? { x: 0, y: 0 }
+  return {
+    netIndex: getPcbRecordNetIndex(doc, record) ?? NO_INDEX,
+    layer: record.getCaseInsensitive('LAYER') ?? '',
+    widthMil: record.widthMils ?? measurementMils(record, 'WIDTH'),
+    x: center.x * MIL_TO_MM,
+    y: center.y * MIL_TO_MM,
+    radiusMil: record.radiusMils ?? measurementMils(record, 'RADIUS'),
+    startAngle: record.startAngle ?? record.getNumber('STARTANGLE') ?? 0,
+    endAngle: record.endAngle ?? record.getNumber('ENDANGLE') ?? 360,
   }
 }
 

@@ -28,6 +28,9 @@
     --na-fg: #475467;
     --na-bg: #f2f4f7;
     --na-border: #98a2b3;
+    --partial-fg: #7a5af8;
+    --partial-bg: #f4f3ff;
+    --partial-border: #bdb4fe;
     --fail-fg: #912018;
     --fail-bg: #fee4e2;
     --fail-border: #fda29b;
@@ -105,6 +108,7 @@
   .stat.should_fix .stat-value { color: var(--should-fg); }
   .stat.nice_to_have .stat-value { color: var(--nice-fg); }
   .stat.na .stat-value { color: var(--na-fg); }
+  .stat.partial .stat-value { color: var(--partial-fg); }
   .stat.failed .stat-value { color: var(--fail-fg); }
   .note {
     margin: 0;
@@ -167,6 +171,7 @@
   .badge-pass { color: var(--pass-fg); background: var(--pass-bg); border-color: var(--pass-border); }
   .badge-found { color: var(--must-fg); background: var(--must-bg); border-color: var(--must-border); }
   .badge-not_evaluated, .badge-unknown { color: var(--na-fg); background: var(--na-bg); border-color: var(--na-border); }
+  .badge-partial { color: var(--partial-fg); background: var(--partial-bg); border-color: var(--partial-border); }
   .badge-failed { color: var(--fail-fg); background: var(--fail-bg); border-color: var(--fail-border); }
   .finding-title { margin: 4px 0 8px; font-size: 15px; line-height: 1.5; word-break: break-word; }
   .finding p { margin: 6px 0; }

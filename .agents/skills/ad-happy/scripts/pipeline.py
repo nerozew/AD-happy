@@ -55,7 +55,9 @@ def run(raw: dict, pcb: dict) -> dict:
     ]
     # 三组规则键互不重叠；后合并者覆盖前者只是防御性写法。
     status = {**schematic["status"], **board["status"], **cross["status"]}
-    return {"findings": findings, "status": status, "coverage": cross["coverage"]}
+    # cross_check 的 coverage 是引脚匹配统计；PCB 侧补充被跳过的子检查。
+    coverage = {**cross["coverage"], "pcb": board.get("coverage") or {"skippedChecks": []}}
+    return {"findings": findings, "status": status, "coverage": coverage}
 
 
 def main(argv: list[str] | None = None) -> int:

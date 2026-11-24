@@ -28,6 +28,26 @@ test('走线只保留铜层', () => {
   assert.ok(p.tracks.every(t => ['TOP', 'BOTTOM', 'F.Cu', 'B.Cu'].includes(t.layer) || /^(In\d+|Mid)/.test(t.layer)))
 })
 
+test('过孔保留外径与钻孔，焊盘保留 PTH 类型', () => {
+  const p = parsePcb(board)
+  assert.ok(p.vias.every(via => via.diameterMil > 0))
+  // 夹具实测：外径 23.622 mil、钻孔 11.811 mil。
+  assert.ok(Math.abs(p.vias[0].diameterMil - 23.622) < 1e-6)
+  assert.ok(Math.abs(p.vias[0].drillMil - 11.811) < 1e-6)
+  const types = new Set(p.pads.map(pad => pad.type))
+  assert.deepEqual([...types].sort(), ['smd', 'thru_hole'])
+  assert.ok(p.pads.every(pad => typeof pad.plated === 'boolean'))
+  const thru = p.pads.filter(pad => pad.type === 'thru_hole')
+  assert.equal(thru.length, 4)
+  assert.ok(thru.every(pad => Math.abs(pad.drillMil - 43.3071) < 1e-6))
+})
+
+test('圆弧走线进入快照（样板无圆弧时为空数组）', () => {
+  const p = parsePcb(board)
+  assert.ok(Array.isArray(p.arcs))
+  assert.equal(p.arcs.length, 0)
+})
+
 test('板框尺寸', () => {
   const p = parsePcb(board)
   assert.ok(Math.abs(p.outline.widthMm - 24.54) < 0.1)

@@ -40,6 +40,7 @@ const SEVERITY_ALIASES = {
 const STATUS_LABELS = {
   pass: '通过',
   found: '发现问题',
+  partial: '部分完成',
   not_evaluated: '未评估',
   failed: '失败',
 }
@@ -172,27 +173,29 @@ function renderBody(report) {
 function renderConclusion({ findings, status }) {
   const counts = countFindings(findings)
   const notEvaluated = countStatus(status, 'not_evaluated')
+  const partial = countStatus(status, 'partial')
   const failed = countStatus(status, 'failed')
   const stats = [
     stat('must_fix', counts.must_fix, '必须修复'),
     stat('should_fix', counts.should_fix, '建议修复'),
     stat('nice_to_have', counts.nice_to_have, '可优化'),
+    stat('partial', partial, '部分完成规则'),
     stat('na', notEvaluated, '未评估规则'),
     stat('failed', failed, '失败规则'),
   ].join('')
   return [
     '<section class="panel" id="conclusion">',
     '  <h2>结论</h2>',
-    `  <p class="verdict">${escapeHtml(buildVerdict(counts, notEvaluated, failed))}</p>`,
+    `  <p class="verdict">${escapeHtml(buildVerdict(counts, notEvaluated, partial, failed))}</p>`,
     `  <ul class="stat-grid">${stats}</ul>`,
-    '  <p class="note">「未评估」表示输入数据不足，本次没有得出通过或失败的结论，不等同于「通过」。判断时应同时查看问题清单与规则状态一览。</p>',
+    '  <p class="note">「未评估」表示输入数据不足，本次没有得出通过或失败的结论；「部分完成」表示规则已运行但部分子检查被跳过。两者都不等同于「通过」。</p>',
     '</section>',
   ].join('\n')
 }
 
-function buildVerdict(counts, notEvaluated, failed) {
+function buildVerdict(counts, notEvaluated, partial, failed) {
   const total = counts.must_fix + counts.should_fix + counts.nice_to_have
-  if (failed === 0 && notEvaluated === 0 && total === 0) {
+  if (failed === 0 && notEvaluated === 0 && partial === 0 && total === 0) {
     return '已评估的规则均未发现问题。'
   }
 
@@ -206,6 +209,9 @@ function buildVerdict(counts, notEvaluated, failed) {
     parts.push(`未发现必须修复或建议修复的问题，有 ${counts.nice_to_have} 项可优化`)
   } else if (failed === 0) {
     parts.push('已评估的规则未发现必须修复、建议修复或可优化的问题')
+  }
+  if (partial > 0) {
+    parts.push(`有 ${partial} 条规则只完成部分检查，跳过项不代表通过`)
   }
   if (notEvaluated > 0) {
     parts.push(`有 ${notEvaluated} 条规则未评估，不能据此认为全部通过`)
@@ -317,6 +323,7 @@ function renderFindingItem(finding) {
 function renderCoverage({ coverage, status }) {
   const entries = statusEntries(status)
   const notEvaluated = entries.filter(([, value]) => scalarText(value) === 'not_evaluated')
+  const partial = entries.filter(([, value]) => scalarText(value) === 'partial')
   const failed = entries.filter(([, value]) => scalarText(value) === 'failed')
   const statusRows = entries.map(([key, value]) => {
     const label = ruleLabel(key)
@@ -345,6 +352,10 @@ function renderCoverage({ coverage, status }) {
     '  <h3>未评估的规则</h3>',
     '  <div id="not-evaluated">',
     renderStatusList(notEvaluated, '没有未评估的规则。', '规则所需输入不足，本次没有结论；此状态不等于「通过」。'),
+    '  </div>',
+    '  <h3>部分完成的规则</h3>',
+    '  <div id="partial-rules">',
+    renderStatusList(partial, '没有部分完成的规则。', '规则已运行，但部分子检查因输入缺失被跳过；跳过项不代表通过。'),
     '  </div>',
     '  <h3>执行失败的规则</h3>',
     '  <div id="failed-rules">',
