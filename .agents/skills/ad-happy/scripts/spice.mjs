@@ -405,6 +405,13 @@ export function runSpice(circuits, simulator, outDir, options = {}) {
       + '已检查 NGSPICE_PATH/LTSPICE_PATH/XYCE_PATH 环境变量、PATH，'
       + '以及 Windows 常见安装目录。',
     )
+    const preference = text(env.SPICE_SIMULATOR).trim().toLowerCase()
+    if (SIMULATOR_ORDER.includes(preference)) {
+      coverage.reasons.push(
+        `SPICE_SIMULATOR=${preference} 指定了仿真器，但没有找到；`
+        + '按上游约定不会自动改用其他仿真器。',
+      )
+    }
     coverage.installHints = simulatorInstallHints()
     coverage.findings = 1
     return {
