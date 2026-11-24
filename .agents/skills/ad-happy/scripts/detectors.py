@@ -207,7 +207,7 @@ def _failure_finding(rule, exc):
         severity="error",
         confidence="deterministic",
         evidence_source="topology",
-        summary=f"{rule} detector failed: {message}",
+        summary=f"{rule} 检测器执行失败：{message}",
         description=(
             f"检测器 {rule} 执行时抛出异常，本条规则已标记为 failed；"
             f"其余规则不受影响。异常：{message}"
@@ -230,18 +230,16 @@ def _unconnected_pin_finding(pin):
         severity="warning",
         confidence="deterministic",
         evidence_source="topology",
-        summary=f"Unconnected pin: {label}",
+        summary=f"未连接引脚：{label}",
         description=(
-            f"Pin {label} belongs to no net and has no no-connect marker. "
-            "If the pin is intentionally unused, document it with a "
-            "no-connect marker; otherwise it is a missing connection."
+            f"引脚 {label} 不属于任何网络，也没有 No-ERC 标记。"
+            "若该引脚有意悬空，请放置 No-ERC 标记；否则属于漏连。"
         ),
         components=[ref] if ref != "?" else [],
         nets=[],
         pins=[f"{ref}.{number}"],
         recommendation=(
-            "Connect the pin to its intended net, or place a no-connect "
-            "marker if it is intentionally floating."
+            "把引脚连接到目标网络；若有意悬空，请放置 No-ERC 标记。"
         ),
         source="schematic",
         kind="issue",
@@ -265,18 +263,18 @@ def _multi_driver_finding(entry):
         severity="warning",
         confidence="deterministic",
         evidence_source="topology",
-        summary=f"Multiple drivers on net {net}: {', '.join(labels)}",
+        summary=f"网络 {net} 存在多个驱动：{', '.join(labels)}",
         description=(
-            f"Net {net!r} has {len(drivers)} driver pins "
-            f"({', '.join(labels)}). Contention between outputs can damage "
-            "the parts or corrupt the signal."
+            f"网络 {net!r} 上有 {len(drivers)} 个驱动引脚"
+            f"（{', '.join(labels)}）。多个输出同时驱动可能损坏器件或"
+            "导致信号冲突。"
         ),
         components=components,
         nets=[net],
         pins=labels,
         recommendation=(
-            "Confirm only one driver is active at a time; re-route the "
-            "others to separate nets or add arbitration."
+            "确认同一时刻只有一个驱动器工作；其余驱动改接到独立网络，"
+            "或增加总线仲裁。"
         ),
         source="schematic",
         kind="issue",

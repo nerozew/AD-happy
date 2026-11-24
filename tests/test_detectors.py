@@ -242,6 +242,11 @@ def test_connectivity_raw_lists_become_findings():
     assert set(findings) == {"NT-002", "NT-003"}
     assert findings["NT-002"]["pins"] == ["U1.3"]
     assert findings["NT-003"]["nets"] == ["N1"]
+    # AD-Happy 自产的 finding 文案必须是中文。
+    assert "未连接引脚" in findings["NT-002"]["summary"]
+    assert "多个驱动" in findings["NT-003"]["summary"]
+    assert "Unconnected pin" not in findings["NT-002"]["summary"]
+    assert "Multiple drivers" not in findings["NT-003"]["summary"]
     # 有两条电源轨（含非地网络）时去耦规则可评估。
     assert r["status"]["decoupling"] == "pass"
 

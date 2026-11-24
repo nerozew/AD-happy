@@ -745,7 +745,7 @@ def _failure_finding(rule, exc):
         severity="error",
         confidence="deterministic",
         evidence_source="topology",
-        summary=f"{rule} detector failed: {message}",
+        summary=f"{rule} 检测器执行失败：{message}",
         description=(
             f"检测器 {rule} 执行时抛出异常，本条规则已标记为 failed；"
             f"其余规则不受影响。异常：{message}"

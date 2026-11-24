@@ -77,6 +77,15 @@ def test_facts_are_separated_from_issues():
         assert finding["kind"] in {"fact", "issue"}
         if finding["detector"] in {"pad_distance", "decoupling_placement"}:
             assert finding["kind"] == "fact"
+    # AD-Happy 自产的实测事实文案必须是中文。
+    pad = next(f for f in r["findings"] if f["detector"] == "pad_distance")
+    assert "网络" in pad["summary"]
+    assert "实测走线距离" in pad["summary"]
+    decoupling = next(
+        f for f in r["findings"] if f["detector"] == "decoupling_placement"
+    )
+    assert "去耦电容" in decoupling["summary"]
+    assert "nearby" not in decoupling["description"]
 
 
 def test_pad_distance_keeps_measured_facts():

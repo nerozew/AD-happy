@@ -386,7 +386,7 @@ function renderFindings({ findings }) {
   return [
     '<section class="panel" id="findings">',
     '  <h2>问题清单</h2>',
-    `  <p class="hint">共 ${issues.length} 条问题；按严重度分组，组内按规则 ID 排序。实测事实单独列在下一节，不计入问题数量。</p>`,
+    `  <p class="hint">共 ${issues.length} 条问题；按严重度分组，组内按规则 ID 排序。实测事实单独列在下一节，不计入问题数量。部分条目的描述来自上游 kicad-happy 检测器原文（英文），本工具按原样呈现，不逐条翻译。</p>`,
     groups,
     '</section>',
   ].join('\n')
