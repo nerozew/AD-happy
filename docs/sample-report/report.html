@@ -295,14 +295,14 @@
     <p class="kicker">AD-Happy 设计审查报告</p>
     <h1>DCDC Buck Converter</h1>
     <dl class="meta">
-      <div><dt>生成时间</dt><dd>2026-11-25 01:59:57</dd></div>
+      <div><dt>生成时间</dt><dd>2026-11-25 02:31:16</dd></div>
     </dl>
   </header>
   <main>
 <section class="panel" id="conclusion">
   <h2>结论</h2>
-  <p class="verdict">未发现必须修复的问题，有 1 项建议修复；有 1 条规则未评估，不能据此认为全部通过。</p>
-  <ul class="stat-grid"><li class="stat must_fix"><span class="stat-value">0</span><span class="stat-label">必须修复</span></li><li class="stat should_fix"><span class="stat-value">1</span><span class="stat-label">建议修复</span></li><li class="stat nice_to_have"><span class="stat-value">2</span><span class="stat-label">可优化</span></li><li class="stat facts"><span class="stat-value">8</span><span class="stat-label">实测事实</span></li><li class="stat partial"><span class="stat-value">0</span><span class="stat-label">部分完成规则</span></li><li class="stat na"><span class="stat-value">1</span><span class="stat-label">未评估规则</span></li><li class="stat failed"><span class="stat-value">0</span><span class="stat-label">失败规则</span></li></ul>
+  <p class="verdict">未发现必须修复的问题，有 1 项建议修复；有 2 条规则未评估，不能据此认为全部通过。</p>
+  <ul class="stat-grid"><li class="stat must_fix"><span class="stat-value">0</span><span class="stat-label">必须修复</span></li><li class="stat should_fix"><span class="stat-value">1</span><span class="stat-label">建议修复</span></li><li class="stat nice_to_have"><span class="stat-value">2</span><span class="stat-label">可优化</span></li><li class="stat facts"><span class="stat-value">8</span><span class="stat-label">实测事实</span></li><li class="stat partial"><span class="stat-value">0</span><span class="stat-label">部分完成规则</span></li><li class="stat na"><span class="stat-value">2</span><span class="stat-label">未评估规则</span></li><li class="stat failed"><span class="stat-value">0</span><span class="stat-label">失败规则</span></li></ul>
   <p class="note">「未评估」表示输入数据不足，本次没有得出通过或失败的结论；「部分完成」表示规则已运行但部分子检查被跳过。两者都不等同于「通过」。</p>
 </section>
 <section class="panel" id="overview">
@@ -401,6 +401,41 @@
       <tr><th scope="row">采购清单</th><td><code>d:\Code_all\ad-happy\docs\sample-report\procurement.csv</code></td></tr>
     </tbody>
   </table>
+</section>
+<section class="panel" id="datasheets">
+  <h2>数据手册</h2>
+  <p class="hint">来源：扫描数据手册目录（datasheets/），按 MPN 把 PDF 匹配到元件。本工具只检查 PDF 是否存在、能否匹配以及上游提取计划是否生成，不解析 PDF 引脚表。</p>
+  <p class="note note-warn">本次未评估数据手册检查：工程目录中没有 datasheets 目录，未找到可用的 PDF 数据手册</p>
+  <p class="note note-warn" id="datasheets-pin-verification">引脚级核对：未评估。引脚定义必须由 AI 或人工依据数据手册 PDF 提取后核对；本次运行没有做引脚级验证，不能用数据手册覆盖率代替引脚核对结论。</p>
+  <dl class="coverage-grid">
+    <div><dt>数据手册目录</dt><dd>—</dd></div>
+    <div><dt>PDF 文件数</dt><dd>0</dd></div>
+    <div><dt>元件数</dt><dd>9</dd></div>
+    <div><dt>元件有 MPN</dt><dd>8</dd></div>
+    <div><dt>匹配到 PDF 的元件</dt><dd>未评估</dd></div>
+    <div><dt>缺 PDF 的元件</dt><dd>未评估</dd></div>
+    <div><dt>集成电路（U/IC）</dt><dd>1</dd></div>
+    <div><dt>缺 PDF 的集成电路</dt><dd>未评估</dd></div>
+    <div><dt>未匹配的 PDF</dt><dd>未评估</dd></div>
+    <div><dt>提取计划</dt><dd>未评估</dd></div>
+  </dl>
+  <h3>检查项</h3>
+  <table class="status-table" id="datasheets-checks">
+    <thead><tr><th scope="col">检查项</th><th scope="col">状态</th></tr></thead>
+    <tbody>
+      <tr><th scope="row"><span class="rule-name">集成电路数据手册覆盖</span><code>coverage</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">PDF 与元件 MPN 匹配</span><code>pdf_match</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">提取计划生成</span><code>extraction_plan</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">引脚级核对</span><code>pin_verification</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
+    </tbody>
+  </table>
+  <h3>已匹配的数据手册</h3>
+  <p class="empty">未评估：没有可用的数据手册目录，无法判断 PDF 是否与元件匹配。</p>
+  <p class="empty">未评估：没有数据手册目录或输入不足，无法判断哪些元件缺数据手册。</p>
+  <h3>未评估与限制说明</h3>
+  <ul class="status-list" id="datasheets-reasons">
+    <li><span class="detail">工程目录中没有 datasheets 目录，未找到可用的 PDF 数据手册</span></li>
+  </ul>
 </section>
 <section class="panel" id="manufacturing">
   <h2>制造文件</h2>
@@ -529,6 +564,7 @@
   <h3>未评估的规则</h3>
   <div id="not-evaluated">
       <ul class="status-list">
+      <li><code>datasheets</code><span class="rule-name">数据手册覆盖与提取计划检查</span><span class="badge badge-not_evaluated">未评估</span><span class="detail">规则所需输入不足，本次没有结论；此状态不等于「通过」。</span></li>
       <li><code>decoupling</code><span class="rule-name">去耦电容检查</span><span class="badge badge-not_evaluated">未评估</span><span class="detail">规则所需输入不足，本次没有结论；此状态不等于「通过」。</span></li>
       </ul>
   </div>
@@ -548,6 +584,7 @@
       <tr><th scope="row"><span class="rule-name">物料（BOM）检查</span><code>bom</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
       <tr><th scope="row"><span class="rule-name">连通性检查</span><code>connectivity</code></th><td><span class="badge badge-pass">通过</span></td></tr>
       <tr><th scope="row"><span class="rule-name">载流能力检查</span><code>current_capacity</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">数据手册覆盖与提取计划检查</span><code>datasheets</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
       <tr><th scope="row"><span class="rule-name">去耦电容检查</span><code>decoupling</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
       <tr><th scope="row"><span class="rule-name">去耦布局检查</span><code>decoupling_placement</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
       <tr><th scope="row"><span class="rule-name">DFM 制造规则检查</span><code>dfm</code></th><td><span class="badge badge-pass">通过</span></td></tr>

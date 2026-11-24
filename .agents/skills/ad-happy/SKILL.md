@@ -54,7 +54,7 @@ description: 审查 Altium Designer 工程（.PrjPcb/.SchDoc/.PcbDoc）：用户
 ### 3. 运行分析
 
 ```bash
-node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [--project-file "<PrjPcb 文件名>"] [--board "<PcbDoc 文件名>"] [--gerber "<Gerber 目录>"] [--bom "<BOM CSV>"] [--with-ad]
+node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [--project-file "<PrjPcb 文件名>"] [--board "<PcbDoc 文件名>"] [--gerber "<Gerber 目录>"] [--bom "<BOM CSV>"] [--datasheets "<数据手册目录>"] [--with-ad]
 ```
 
 - `<路径>`：第 2 步确认的工程目录绝对路径（也可直接给 `.PrjPcb` 文件路径）。
@@ -63,6 +63,7 @@ node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [
 - 默认审查文档清单中的最后一块 `PcbDoc`；用户指定板卡时追加 `--board "<PcbDoc 文件名>"`。
 - 用户提供了 Gerber/钻孔输出目录时追加 `--gerber "<目录>"`；省略时 CLI 自动查找工程下的 `Gerber`、`Outputs`、`Project Outputs`、`Manufacturing`。找不到或缺少钻孔文件时，制造文件检查会标记为未评估，汇报时如实说明。
 - 用户提供了 Altium 导出的 BOM CSV 时追加 `--bom "<CSV>"`，CLI 会把它与解析到的元件比对；省略时按解析数据生成 `bom.csv` 与 `procurement.csv`。采购清单不联网，缺 MPN 的元件在报告中单独标出。
+- 用户提供了数据手册 PDF 目录时追加 `--datasheets "<目录>"`；省略时自动查找工程下的 `datasheets/`。CLI 只检查 PDF 覆盖、MPN 匹配并调用上游 `plan_extraction.py` 生成提取计划，**不解析 PDF 引脚表**。没有目录或没有提取计划时按 `not_evaluated` 汇报；引脚级核对必须由 AI/人工依据 PDF 完成，不得声称已经核对。
 - 用户选择深度模式且 AD 已启动时追加 `--with-ad`；否则不要加。
 - 命令失败时按退出码处理（见下），不要改用其他方式自行解析工程。
 
@@ -80,7 +81,7 @@ node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [
 2. **工程概览**：工程名、选中板卡（`project.selectedBoard`）、原理图、文档覆盖（`coverage`）。
 3. **问题清单**：只讲 `kind` 为 `issue` 的条目，按 `must_fix` → `should_fix` → `nice_to_have` 排序；每条给出规则、标题、定位（元件/网络/引脚）、证据。有建议（`recommendation`）时给出；没有就说明未给出，不要自行补充建议。summary 中的证据被截断时，从 `findings.json` 取对应单条补全。
 4. **实测事实**：`kind` 为 `fact` 的条目（焊盘间距、载流、去耦摆放等）单独汇报，明确「不计入问题数量」。
-5. **数据覆盖与未检查项**：列出 `rules` 中为 `partial`、`not_evaluated` 或 `failed` 的规则，并按 `coverage` 说明未覆盖范围与网表匹配率；summary 未给出原因时只说明「数据不足/未评估」，不要猜测。说明 `findingsOmitted` 表示还有多少条结果未出现在 summary 中（完整清单在 `report.html`）。
+5. **数据覆盖与未检查项**：列出 `rules` 中为 `partial`、`not_evaluated` 或 `failed` 的规则，并按 `coverage` 说明未覆盖范围与网表匹配率；summary 未给出原因时只说明「数据不足/未评估」，不要猜测。`datasheets` 只汇报 PDF 覆盖、MPN 匹配与提取计划状态；`datasheets.pinVerification` 始终为 `not_evaluated`，**不得说引脚已核对或通过**。说明 `findingsOmitted` 表示还有多少条结果未出现在 summary 中（完整清单在 `report.html`）。
 6. **报告**：给出 `report` 字段中 `report.html` 的绝对路径。
 
 ## 退出码

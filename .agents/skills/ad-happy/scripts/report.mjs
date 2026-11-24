@@ -60,12 +60,14 @@ const RULE_LABELS = {
   pin_pad: '原理图与 PCB 引脚网络对照',
   gerber: '制造文件（Gerber/钻孔）检查',
   bom: '物料（BOM）检查',
+  datasheets: '数据手册覆盖与提取计划检查',
 }
 
 // 分析来源 → 报告展示名。目前只有 Gerber 复用层需要额外标注来源。
 const SOURCE_LABELS = {
   gerber: 'Gerber 分析',
   bom: 'BOM 检查',
+  datasheets: '数据手册检查',
 }
 
 // 制造文件子检查 → 中文名。
@@ -89,6 +91,39 @@ const BOM_CHECK_LABELS = {
   duplicate_designator: '重复位号',
   schematic_pcb_match: '原理图与 PCB 位号一致',
   imported_diff: '导入 BOM 差异',
+}
+
+// 数据手册检查项 → 中文名。pin_verification 永远显示未评估：
+// 确定性 CLI 不解析 PDF 引脚表。
+const DATASHEET_CHECK_LABELS = {
+  coverage: '集成电路数据手册覆盖',
+  pdf_match: 'PDF 与元件 MPN 匹配',
+  extraction_plan: '提取计划生成',
+  pin_verification: '引脚级核对',
+}
+
+// 上游提取计划状态 → 中文展示与徽标类别。
+const DATASHEET_PLAN_LABELS = {
+  existing: '已存在（PDF 未变）',
+  generated: '已生成',
+  'up-to-date': '已是最新',
+  skipped: '已跳过（scout 判定）',
+  not_evaluated: '未评估（需要 AI scout）',
+  failed: '生成失败',
+}
+
+const DATASHEET_PLAN_BADGES = {
+  existing: 'pass',
+  generated: 'pass',
+  'up-to-date': 'pass',
+  skipped: 'not_evaluated',
+  not_evaluated: 'not_evaluated',
+  failed: 'failed',
+}
+
+const DATASHEET_REASON_LABELS = {
+  no_mpn: '无 MPN',
+  no_pdf: '无匹配 PDF',
 }
 
 // 文档类型 → 中文名；未知类型按「其他」展示。
@@ -151,6 +186,7 @@ function normalizeReport(data) {
     boards: normalizeDocuments(source.boards),
     manufacturing: normalizeManufacturing(source.manufacturing),
     bom: normalizeBom(source.bom),
+    datasheets: normalizeDatasheets(source.datasheets),
     svgs: Array.isArray(source.svgs) ? source.svgs : [],
   }
 }
@@ -289,6 +325,69 @@ function normalizeImportedBom(value) {
   }
 }
 
+function normalizeDatasheets(value) {
+  if (!isPlainObject(value)) return null
+  const checks = isPlainObject(value.checks) ? value.checks : {}
+  const normalizedChecks = {}
+  for (const [key, status] of Object.entries(checks)) {
+    const content = scalarText(status)
+    if (content) normalizedChecks[key] = content
+  }
+  return {
+    status: scalarText(value.status) || 'not_evaluated',
+    directory: scalarText(value.directory),
+    manifestPresent: value.manifestPresent === true,
+    manifestInvalid: value.manifestInvalid === true,
+    pdfCount: countValue(value.pdfCount),
+    components: countValue(value.components),
+    componentsWithMpn: countValue(value.componentsWithMpn),
+    componentsWithPdf: countValue(value.componentsWithPdf),
+    componentsWithoutPdf: countValue(value.componentsWithoutPdf),
+    icComponents: countValue(value.icComponents),
+    icsWithoutPdf: countValue(value.icsWithoutPdf),
+    matched: Array.isArray(value.matched)
+      ? value.matched.filter(isPlainObject).map(entry => ({
+          reference: scalarText(entry.reference),
+          mpn: scalarText(entry.mpn),
+          pdfFileName: scalarText(entry.pdfFileName),
+          planStatus: scalarText(entry.planStatus) || 'not_evaluated',
+          planPath: scalarText(entry.planPath),
+          planError: scalarText(entry.planError),
+        }))
+      : [],
+    unmatchedPdfs: Array.isArray(value.unmatchedPdfs)
+      ? value.unmatchedPdfs.filter(isPlainObject).map(pdf => ({
+          fileName: scalarText(pdf.fileName),
+          inferredMpn: scalarText(pdf.inferredMpn),
+          relativePath: scalarText(pdf.relativePath),
+        }))
+      : [],
+    componentsWithoutPdfList: Array.isArray(value.componentsWithoutPdfList)
+      ? value.componentsWithoutPdfList.filter(isPlainObject).map(entry => ({
+          reference: scalarText(entry.reference),
+          mpn: scalarText(entry.mpn),
+          isIc: entry.isIc === true,
+          reason: scalarText(entry.reason),
+          reasonText: scalarText(entry.reasonText),
+        }))
+      : [],
+    plans: Array.isArray(value.plans)
+      ? value.plans.filter(isPlainObject).map(plan => ({
+          mpn: scalarText(plan.mpn),
+          status: scalarText(plan.status) || 'not_evaluated',
+          ok: plan.ok === true,
+          planPath: scalarText(plan.planPath),
+          error: scalarText(plan.error),
+          taskCount: countValue(plan.taskCount),
+        }))
+      : [],
+    checks: normalizedChecks,
+    reasons: stringList(value.reasons),
+    findings: countValue(value.findings),
+    pinVerification: scalarText(value.pinVerification) || 'not_evaluated',
+  }
+}
+
 function stringList(value) {
   if (!Array.isArray(value)) return []
   return value.map(scalarText).filter(Boolean)
@@ -334,6 +433,7 @@ function renderBody(report) {
     renderOverview(report),
     renderDocuments(report),
     renderBom(report),
+    renderDatasheets(report),
     renderManufacturing(report),
     renderFindings(report),
     renderFacts(report),
@@ -628,6 +728,188 @@ function renderBom({ bom }) {
     `      <tr><th scope="row">采购清单</th><td>${procurementPath}</td></tr>`,
     '    </tbody>',
     '  </table>',
+    '</section>',
+  ].filter(Boolean).join('\n')
+}
+
+// 「数据手册」：PDF 覆盖、MPN 匹配与提取计划状态。
+// 引脚级核对始终显式标注未评估：本工具不解析 PDF 引脚表。
+function renderDatasheets({ datasheets }) {
+  if (!datasheets) return ''
+  const status = datasheets.status
+  const check = key => scalarText(datasheets.checks[key])
+  const countOrState = (key, value) => {
+    const state = check(key)
+    if (state === 'not_evaluated') return '未评估'
+    if (state === 'failed') return '失败'
+    if (state === 'partial') return '部分完成'
+    return String(value)
+  }
+  const planText = () => {
+    const state = check('extraction_plan')
+    if (state === 'not_evaluated') return '未评估'
+    if (state === 'failed') return '失败'
+    const generated = plansGenerated()
+    if (state === 'partial') return `部分完成（${generated}/${datasheets.plans} 已生成）`
+    return `${generated}/${datasheets.plans} 已生成`
+  }
+  const plansGenerated = () => datasheets.plans
+    .filter(plan => ['existing', 'generated', 'up-to-date'].includes(plan.status))
+    .length
+
+  const rows = [
+    ['数据手册目录', datasheets.directory
+      ? `<code>${escapeHtml(datasheets.directory)}</code>`
+      : '—'],
+    ['PDF 文件数', String(datasheets.pdfCount)],
+    ['元件数', String(datasheets.components)],
+    ['元件有 MPN', String(datasheets.componentsWithMpn)],
+    ['匹配到 PDF 的元件', status === 'not_evaluated'
+      ? '未评估'
+      : String(datasheets.componentsWithPdf)],
+    ['缺 PDF 的元件', status === 'not_evaluated'
+      ? '未评估'
+      : String(datasheets.componentsWithoutPdf)],
+    ['集成电路（U/IC）', String(datasheets.icComponents)],
+    ['缺 PDF 的集成电路', countOrState('coverage', datasheets.icsWithoutPdf)],
+    ['未匹配的 PDF', countOrState('pdf_match', datasheets.unmatchedPdfs.length)],
+    ['提取计划', planText()],
+  ]
+  const grid = rows
+    .map(([label, value]) => `    <div><dt>${escapeHtml(label)}</dt><dd>${value}</dd></div>`)
+    .join('\n')
+
+  let statusText
+  if (status === 'not_evaluated') {
+    statusText = `本次未评估数据手册检查${datasheets.reasons.length
+      ? `：${datasheets.reasons.join('；')}`
+      : '：没有可用的数据手册目录。'}`
+  } else if (status === 'failed') {
+    statusText = `数据手册检查执行失败${datasheets.reasons.length
+      ? `：${datasheets.reasons.join('；')}`
+      : '。'}`
+  } else if (status === 'partial') {
+    statusText = '数据手册覆盖与提取计划检查部分完成；引脚级核对尚未进行，不能视为通过。'
+  } else if (status === 'found') {
+    statusText = `发现 ${datasheets.findings} 条数据手册问题，详见问题清单。`
+  } else {
+    statusText = '数据手册覆盖与提取计划检查完成；引脚级核对仍需 AI 或人工提取后完成。'
+  }
+
+  const checks = Object.keys(datasheets.checks).length
+    ? [
+        '  <h3>检查项</h3>',
+        '  <table class="status-table" id="datasheets-checks">',
+        '    <thead><tr><th scope="col">检查项</th><th scope="col">状态</th></tr></thead>',
+        '    <tbody>',
+        ...Object.entries(datasheets.checks).map(([key, value]) => {
+          const label = ownLookup(DATASHEET_CHECK_LABELS, key) || key
+          return `      <tr><th scope="row"><span class="rule-name">${escapeHtml(label)}</span><code>${escapeHtml(key)}</code></th><td>${statusBadgeHtml(value)}</td></tr>`
+        }),
+        '    </tbody>',
+        '  </table>',
+      ].join('\n')
+    : ''
+
+  const matched = datasheets.matched.length
+    ? [
+        '  <h3>已匹配的数据手册</h3>',
+        '  <table class="status-table" id="datasheets-matched">',
+        '    <thead><tr><th scope="col">位号</th><th scope="col">MPN</th><th scope="col">PDF</th><th scope="col">提取计划</th></tr></thead>',
+        '    <tbody>',
+        ...datasheets.matched.slice(0, 50).map(entry => {
+          const badge = ownLookup(DATASHEET_PLAN_BADGES, entry.planStatus) || 'not_evaluated'
+          const label = ownLookup(DATASHEET_PLAN_LABELS, entry.planStatus) || entry.planStatus
+          return `      <tr><th scope="row"><code>${escapeHtml(entry.reference)}</code></th><td><code>${escapeHtml(entry.mpn)}</code></td><td>${escapeHtml(entry.pdfFileName)}</td><td><span class="badge badge-${badge}">${escapeHtml(label)}</span></td></tr>`
+        }),
+        '    </tbody>',
+        '  </table>',
+        datasheets.matched.length > 50
+          ? `  <p class="note">仅展示前 50 个匹配元件，完整列表见 datasheets.json。</p>`
+          : '',
+      ].join('\n')
+    : `  <h3>已匹配的数据手册</h3>\n  <p class="empty">${status === 'not_evaluated'
+        ? '未评估：没有可用的数据手册目录，无法判断 PDF 是否与元件匹配。'
+        : '没有 PDF 与工程元件匹配。'}</p>`
+
+  const missingItems = datasheets.componentsWithoutPdfList
+  let missing
+  if (status === 'not_evaluated') {
+    missing = '  <p class="empty">未评估：没有数据手册目录或输入不足，无法判断哪些元件缺数据手册。</p>'
+  } else if (missingItems.length === 0) {
+    missing = '  <p class="empty">没有缺失数据手册的元件。</p>'
+  } else {
+    missing = [
+      '  <h3>缺少数据手册的元件</h3>',
+      '  <ul class="status-list" id="datasheets-missing">',
+      ...missingItems.slice(0, 50).map(entry => {
+        const badge = entry.isIc ? 'should_fix' : 'not_evaluated'
+        const kind = entry.isIc ? '集成电路' : '非集成电路'
+        const reason = entry.reasonText || ownLookup(DATASHEET_REASON_LABELS, entry.reason) || entry.reason
+        return `    <li><code>${escapeHtml(entry.reference)}</code><span class="rule-name">${escapeHtml(entry.mpn || '无 MPN')}</span><span class="badge badge-${badge}">${kind}</span><span class="detail">${escapeHtml(reason)}</span></li>`
+      }),
+      '  </ul>',
+      missingItems.length > 50
+        ? '  <p class="note">仅展示前 50 个元件，完整列表见 datasheets.json。</p>'
+        : '',
+    ].join('\n')
+  }
+
+  const unmatched = datasheets.unmatchedPdfs.length
+    ? [
+        '  <h3>未匹配到元件的数据手册</h3>',
+        '  <ul class="status-list" id="datasheets-unmatched">',
+        ...datasheets.unmatchedPdfs.slice(0, 50).map(pdf => {
+          const detail = pdf.inferredMpn
+            ? `推断 MPN：${pdf.inferredMpn}`
+            : '无法从文件名推断 MPN'
+          return `    <li><code>${escapeHtml(pdf.fileName)}</code><span class="detail">${escapeHtml(detail)}</span></li>`
+        }),
+        '  </ul>',
+      ].join('\n')
+    : ''
+
+  const planIssues = datasheets.plans.filter(plan => !plan.ok)
+  const plans = planIssues.length
+    ? [
+        '  <h3>提取计划说明</h3>',
+        '  <ul class="status-list" id="datasheets-plans">',
+        ...planIssues.slice(0, 50).map(plan => {
+          const badge = ownLookup(DATASHEET_PLAN_BADGES, plan.status) || 'not_evaluated'
+          const label = ownLookup(DATASHEET_PLAN_LABELS, plan.status) || plan.status
+          return `    <li><code>${escapeHtml(plan.mpn)}</code><span class="badge badge-${badge}">${escapeHtml(label)}</span><span class="detail">${escapeHtml(plan.error || '（无错误信息）')}</span></li>`
+        }),
+        '  </ul>',
+      ].join('\n')
+    : ''
+
+  const reasons = datasheets.reasons.length
+    ? [
+        '  <h3>未评估与限制说明</h3>',
+        '  <ul class="status-list" id="datasheets-reasons">',
+        ...datasheets.reasons.map(reason => `    <li><span class="detail">${escapeHtml(reason)}</span></li>`),
+        '  </ul>',
+      ].join('\n')
+    : ''
+
+  return [
+    '<section class="panel" id="datasheets">',
+    '  <h2>数据手册</h2>',
+    '  <p class="hint">来源：扫描数据手册目录（datasheets/），按 MPN 把 PDF 匹配到元件。'
+      + '本工具只检查 PDF 是否存在、能否匹配以及上游提取计划是否生成，不解析 PDF 引脚表。</p>',
+    `  <p class="note${status === 'not_evaluated' || status === 'failed' ? ' note-warn' : ''}">${escapeHtml(statusText)}</p>`,
+    '  <p class="note note-warn" id="datasheets-pin-verification">引脚级核对：未评估。'
+      + '引脚定义必须由 AI 或人工依据数据手册 PDF 提取后核对；本次运行没有做引脚级验证，'
+      + '不能用数据手册覆盖率代替引脚核对结论。</p>',
+    '  <dl class="coverage-grid">',
+    grid,
+    '  </dl>',
+    checks,
+    matched,
+    missing,
+    unmatched,
+    plans,
+    reasons,
     '</section>',
   ].filter(Boolean).join('\n')
 }

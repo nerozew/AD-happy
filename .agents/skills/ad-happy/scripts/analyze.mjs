@@ -6,15 +6,15 @@
 //   node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>]
 //                    [--project-file <PrjPcb 文件名>]
 //                    [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>]
-//                    [--bom <CSV>] [--svg]
+//                    [--bom <CSV>] [--datasheets <目录>] [--svg]
 //
 // 退出码：0 完成；2 输入无效；3 部分完成（文档解析失败、规则 failed、
 // Python/Gerber 阶段异常或报告生成失败）。
 //
 // 产物（写入 --out 或 %LOCALAPPDATA%\ad-happy\runs\<run-id>）：
 // manifest.json、snapshot.json、raw.json、pcb.json、findings.json、
-// pipeline-summary.json、gerber.json、bom.csv、procurement.csv、summary.json、
-// report.html。
+// pipeline-summary.json、gerber.json、bom.csv、procurement.csv、
+// datasheets.json、summary.json、report.html。
 //
 // 源工程只读：--out 落在源工程目录内会被直接拒绝（退出码 2）。
 import { spawnSync } from 'node:child_process'
@@ -49,6 +49,11 @@ import {
   recomputeBomStatus,
 } from './bom.mjs'
 import {
+  emptyDatasheetsCoverage,
+  evaluateDatasheets,
+  summarizeComponents,
+} from './datasheets.mjs'
+import {
   detectGerberDirectory,
   emptyGerberCoverage,
   runGerberAnalysis,
@@ -58,7 +63,7 @@ import { runSelfCheck } from './selfcheck.mjs'
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const PIPELINE_PY = join(SCRIPT_DIR, 'pipeline.py')
 
-const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>] [--project-file <PrjPcb 文件名>] [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>] [--bom <CSV>] [--svg]
+const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>] [--project-file <PrjPcb 文件名>] [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>] [--bom <CSV>] [--datasheets <目录>] [--svg]
 
   --project        包含 .PrjPcb 的工程目录，或 .PrjPcb 文件路径
   --out            输出目录；默认 %LOCALAPPDATA%\\ad-happy\\runs\\<run-id>
@@ -68,6 +73,8 @@ const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--o
                    Gerber、Outputs、Project Outputs、Manufacturing 目录
   --bom            导入 Altium 导出的 BOM CSV，与解析到的元件比对；
                    省略时按解析数据生成 bom.csv 与 procurement.csv
+  --datasheets     指定数据手册（PDF）目录；省略时自动查找工程下的
+                   datasheets 目录。只检查覆盖与提取计划，不解析引脚表
   --svg            尝试把选中板卡渲染为 SVG 内联到报告；失败只降级，不中止分析`
 
 // 三组规则的完整键；即使某一侧输入缺失，报告也能展示全部规则状态。
@@ -81,8 +88,9 @@ const SCH_RULES = [
 ]
 const PCB_RULES = ['dfm', 'pad_distance', 'current_capacity', 'decoupling_placement']
 // gerber 是制造文件（Gerber/钻孔）检查，独立于原理图/PCB 解析；
-// bom 是物料清单检查，独立于 Python 规则层。
-const ALL_RULES = [...SCH_RULES, ...PCB_RULES, 'pin_pad', 'gerber', 'bom']
+// bom 是物料清单检查，datasheets 是数据手册覆盖与提取计划检查，
+// 二者都独立于 Python 规则层。
+const ALL_RULES = [...SCH_RULES, ...PCB_RULES, 'pin_pad', 'gerber', 'bom', 'datasheets']
 // 这些规则依赖原理图网表（decoupling 还依赖可解析电容值）；引脚未全部
 // 入网时，空结果不能视为通过。
 const NETLIST_DEPENDENT_RULES = [
@@ -105,6 +113,7 @@ const ARTIFACT_FILES = [
   'gerber.json',
   'bom.csv',
   'procurement.csv',
+  'datasheets.json',
   'capability_mode.json',
   'summary.json',
   'report.html',
@@ -170,6 +179,10 @@ async function main() {
     console.error(`--bom 不能为空\n\n${USAGE}`)
     return 2
   }
+  if (options.datasheets !== null && !options.datasheets.trim()) {
+    console.error(`--datasheets 不能为空\n\n${USAGE}`)
+    return 2
+  }
 
   // 输入路径：工程目录，或直接给 .PrjPcb 文件。
   const inputPath = resolve(options.project)
@@ -224,6 +237,24 @@ async function main() {
       return 2
     }
     options.bom = bomPath
+  }
+
+  // 显式 --datasheets 必须是已存在的目录；省略时在阶段内自动查找
+  // 工程下的 datasheets 目录，找不到时标记 not_evaluated，不静默通过。
+  if (options.datasheets !== null) {
+    const datasheetsPath = resolve(options.datasheets)
+    let datasheetsStat
+    try {
+      datasheetsStat = statSync(datasheetsPath)
+    } catch {
+      console.error(`数据手册目录不存在或不可访问: ${datasheetsPath}`)
+      return 2
+    }
+    if (!datasheetsStat.isDirectory()) {
+      console.error(`--datasheets 需要目录: ${datasheetsPath}`)
+      return 2
+    }
+    options.datasheets = datasheetsPath
   }
 
   const outDir = resolve(options.out ?? defaultOutDir(runId))
@@ -567,6 +598,14 @@ async function executeStages(state) {
   //     rules.bom 记为 failed 并产出 BM-ERR，不中止其余结论与报告。
   const bomStage = runBomStage(state, { snapshot: snapshotData, pcbSnapshot })
 
+  // 8.6 数据手册覆盖与提取计划。只做确定性检查（PDF 存在、MPN 匹配、
+  //     上游提取计划生成）；引脚级核对始终为 not_evaluated。
+  //     数据手册缺口不改变整体退出码，只有执行失败（failed）参与聚合。
+  const datasheetStage = runDatasheetStage(state, {
+    bomRows: bomStage.rows,
+    generatedAt,
+  })
+
   // 9. 合并状态：缺失输入对应的规则保持 Python 给出的 not_evaluated；
   //    解析/连通性失败对应的规则强制为 failed，让失败在报告里可见。
   const failedRules = new Set()
@@ -586,6 +625,7 @@ async function executeStages(state) {
   }
   for (const rule of failedRules) ruleStatus[rule] = 'failed'
   ruleStatus.bom = bomStage.coverage.status
+  ruleStatus.datasheets = datasheetStage.coverage.status
   if (netlistIncomplete) {
     for (const rule of NETLIST_DEPENDENT_RULES) {
       if (ruleStatus[rule] === 'pass') ruleStatus[rule] = 'not_evaluated'
@@ -602,13 +642,16 @@ async function executeStages(state) {
     ...pipelineSummary.findings.filter(isPlainObject),
     ...gerberFindings,
     ...bomStage.findings,
+    ...datasheetStage.findings,
   ]
-  // Python 只写规则层 findings；解析/连通性失败的 DET-ERR、Gerber 与 BOM
-  // 结果由 Node 补充，保证 findings.json 是完整交付物（报告与 summary 使用同一份合并结果）。
+  // Python 只写规则层 findings；解析/连通性失败的 DET-ERR、Gerber、BOM 与
+  // 数据手册结果由 Node 补充，保证 findings.json 是完整交付物
+  // （报告与 summary 使用同一份合并结果）。
   if (
     state.syntheticFindings.length > 0
     || gerberFindings.length > 0
     || bomStage.findings.length > 0
+    || datasheetStage.findings.length > 0
   ) {
     writeJson(join(state.outDir, 'findings.json'), findings)
   }
@@ -638,6 +681,7 @@ async function executeStages(state) {
   }
   coverage.gerber = gerberStage.coverage
   coverage.bom = bomStage.coverage
+  coverage.datasheets = datasheetStage.coverage
   const missingInputs = []
   if (!selectedBoard) missingInputs.push('pcb')
   if (!selectedSchematic) missingInputs.push('schematic')
@@ -670,6 +714,7 @@ async function executeStages(state) {
       })),
       manufacturing,
       bom: bomStage.report,
+      datasheets: datasheetStage.report,
       svgs,
     })
     writeFileSync(reportPath, html, 'utf8')
@@ -686,11 +731,11 @@ async function executeStages(state) {
   }
 
   const ruleFailure = Object.values(ruleStatus).includes('failed')
-  // BOM 的 partial/not_evaluated 只表示「物料数据不足」，不是分析失败；
-  // 用户没有要求 BOM 检查时不应因此把整次运行降级为 partial。
-  // BOM 真正的执行失败（failed）仍参与聚合。
+  // BOM 与数据手册的 partial/not_evaluated 只表示「输入数据不足」或
+  // 「需要 AI/人工继续」，不是分析失败；用户没有要求这些检查时不应因此把
+  // 整次运行降级为 partial。二者的执行失败（failed）仍参与聚合。
   const rulePartial = Object.entries(ruleStatus)
-    .some(([rule, value]) => rule !== 'bom' && value === 'partial')
+    .some(([rule, value]) => rule !== 'bom' && rule !== 'datasheets' && value === 'partial')
   const partial = state.errors.length > 0
     || missingInputs.length > 0
     || ruleFailure
@@ -708,6 +753,7 @@ async function executeStages(state) {
     reportPath: reportWritten ? reportPath : null,
     crossCoverage: pipelineSummary.coverage,
     bom: bomStage.summary,
+    datasheets: datasheetStage.summary,
     severityGroup: reportModule.severityGroup,
   })
   try {
@@ -952,6 +998,7 @@ function runBomStage(state, { snapshot, pcbSnapshot }) {
 
   return {
     findings,
+    rows: project.rows,
     coverage,
     report: buildBomReport(coverage, {
       findings,
@@ -1005,6 +1052,7 @@ function bomFailure(state, { requested, importedPath, message }) {
   state.errors.push({ stage: 'bom', message: '物料清单检查失败', details: message })
   return {
     findings: [finding],
+    rows: [],
     coverage,
     report: buildBomReport(coverage, {
       findings: [finding],
@@ -1063,6 +1111,185 @@ function buildBomSummary(coverage, { bomPath, procurementPath }) {
 }
 
 // ---------------------------------------------------------------------------
+// 数据手册 / datasheets
+// ---------------------------------------------------------------------------
+
+function runDatasheetStage(state, { bomRows, generatedAt }) {
+  const requested = state.options.datasheets !== null
+  let directory = state.options.datasheets
+  let autoDetected = false
+  if (!directory) {
+    const candidate = join(state.projectDir, 'datasheets')
+    if (isDirectory(candidate)) {
+      directory = candidate
+      autoDetected = true
+    }
+  }
+
+  if (!directory) {
+    const reason = '工程目录中没有 datasheets 目录，未找到可用的 PDF 数据手册'
+    const stats = summarizeComponents(bomRows)
+    const coverage = emptyDatasheetsCoverage({ reasons: [reason], ...stats })
+    state.manifest.stages.datasheets = 'skipped'
+    state.manifest.datasheets = {
+      requested,
+      autoDetected: true,
+      directory: null,
+      status: coverage.status,
+      pdfs: 0,
+      components: coverage.components,
+      componentsWithMpn: coverage.componentsWithMpn,
+      componentsWithPdf: 0,
+      icsWithoutPdf: 0,
+      plans: 0,
+      findings: 0,
+    }
+    state.warnings.push(`${reason}，数据手册检查标记为 not_evaluated`)
+    return {
+      findings: [],
+      coverage,
+      report: buildDatasheetReport(null, coverage, []),
+      summary: buildDatasheetSummary(coverage),
+    }
+  }
+
+  const result = evaluateDatasheets({
+    directory,
+    bomRows: Array.isArray(bomRows) ? bomRows : [],
+  })
+  const coverage = result.coverage
+
+  // 可复现产物：扫描列表、匹配结果与计划状态完整写入 datasheets.json。
+  try {
+    writeJson(join(state.outDir, 'datasheets.json'), {
+      schemaVersion: 1,
+      generatedAt,
+      directory: result.directory,
+      coverage,
+      pdfs: result.pdfs,
+      matched: result.matched,
+      unmatchedPdfs: result.unmatchedPdfs,
+      componentsWithoutPdf: result.componentsWithoutPdf,
+      plans: result.plans,
+    })
+    state.artifacts.datasheets = 'datasheets.json'
+  } catch (error) {
+    state.warnings.push(`数据手册检查产物写入失败：${error?.message ?? error}`)
+  }
+
+  if (coverage.status === 'failed') {
+    state.manifest.stages.datasheets = 'failed'
+    state.errors.push({
+      stage: 'datasheets',
+      message: '数据手册检查失败',
+      details: coverage.reasons.join('；') || '（无错误输出）',
+    })
+  } else if (coverage.status === 'not_evaluated') {
+    state.manifest.stages.datasheets = 'not_evaluated'
+    state.warnings.push(
+      `数据手册检查未评估：${coverage.reasons.join('；') || '输入不足'}`,
+    )
+  } else if (coverage.status === 'partial') {
+    state.manifest.stages.datasheets = 'partial'
+    state.warnings.push(
+      `数据手册检查部分完成：${coverage.reasons.join('；') || '引脚级核对未进行'}`,
+    )
+  } else {
+    state.manifest.stages.datasheets = coverage.status
+  }
+
+  state.manifest.datasheets = {
+    requested,
+    autoDetected,
+    directory: coverage.directory,
+    status: coverage.status,
+    pdfs: coverage.pdfCount,
+    components: coverage.components,
+    componentsWithMpn: coverage.componentsWithMpn,
+    componentsWithPdf: coverage.componentsWithPdf,
+    componentsWithoutPdf: coverage.componentsWithoutPdf,
+    icsWithoutPdf: coverage.icsWithoutPdf,
+    plans: coverage.plans,
+    planGenerated: coverage.planGenerated,
+    planNotEvaluated: coverage.planNotEvaluated,
+    planFailed: coverage.planFailed,
+    pinVerification: 'not_evaluated',
+    findings: result.findings.length,
+    artifacts: state.artifacts.datasheets ? { index: 'datasheets.json' } : null,
+  }
+
+  return {
+    findings: result.findings,
+    coverage,
+    report: buildDatasheetReport(result, coverage, result.findings),
+    summary: buildDatasheetSummary(coverage),
+  }
+}
+
+function buildDatasheetReport(result, coverage, findings) {
+  return {
+    status: coverage.status,
+    directory: coverage.directory,
+    manifestPresent: coverage.manifestPresent,
+    manifestInvalid: coverage.manifestInvalid,
+    pdfCount: coverage.pdfCount,
+    components: coverage.components,
+    componentsWithMpn: coverage.componentsWithMpn,
+    componentsWithPdf: coverage.componentsWithPdf,
+    componentsWithoutPdf: coverage.componentsWithoutPdf,
+    icComponents: coverage.icComponents,
+    icsWithoutPdf: coverage.icsWithoutPdf,
+    matched: result?.matched ?? [],
+    unmatchedPdfs: result?.unmatchedPdfs ?? [],
+    componentsWithoutPdfList: result?.componentsWithoutPdf ?? [],
+    plans: result?.plans ?? [],
+    checks: coverage.checks,
+    reasons: coverage.reasons,
+    findings: findings.length,
+    pinVerification: 'not_evaluated',
+  }
+}
+
+function buildDatasheetSummary(coverage) {
+  return {
+    status: coverage.status,
+    directory: coverage.directory,
+    pdfCount: coverage.pdfCount,
+    manifestPresent: coverage.manifestPresent,
+    components: coverage.components,
+    componentsWithMpn: coverage.componentsWithMpn,
+    componentsWithPdf: coverage.componentsWithPdf,
+    componentsWithoutPdf: coverage.componentsWithoutPdf,
+    icComponents: coverage.icComponents,
+    icsWithoutPdf: coverage.icsWithoutPdf,
+    plans: coverage.plans,
+    planGenerated: coverage.planGenerated,
+    planNotEvaluated: coverage.planNotEvaluated,
+    planSkipped: coverage.planSkipped,
+    planFailed: coverage.planFailed,
+    // 引脚级核对永远不在确定性 CLI 的能力范围内。
+    pinVerification: 'not_evaluated',
+    reasons: Array.isArray(coverage.reasons) ? coverage.reasons.slice(0, 20) : [],
+  }
+}
+
+// summary.json 有 32KB 硬上限：数据手册覆盖只保留计数与截断后的原因，
+// 逐元件/逐 PDF 明细在 datasheets.json 与 report.html 中。
+const DATASHEETS_SUMMARY_REASON_LIMIT = 20
+
+function compactDatasheetsCoverage(coverage) {
+  if (!isPlainObject(coverage)) return coverage ?? null
+  const reasons = Array.isArray(coverage.reasons)
+    ? coverage.reasons.slice(0, DATASHEETS_SUMMARY_REASON_LIMIT)
+    : []
+  return {
+    ...coverage,
+    reasons: reasons.map(reason => truncateText(reason, 300)),
+    reasonCount: Array.isArray(coverage.reasons) ? coverage.reasons.length : 0,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // summary.json
 // ---------------------------------------------------------------------------
 
@@ -1077,6 +1304,7 @@ function buildSummary(state, context) {
     reportPath,
     crossCoverage,
     bom,
+    datasheets,
     severityGroup,
   } = context
 
@@ -1121,11 +1349,13 @@ function buildSummary(state, context) {
     schematic: overview.schematic,
     pcb: overview.pcb,
     bom: bom ?? null,
+    datasheets: datasheets ?? null,
     coverage: {
       ...coverage,
       // summary.json 有 32KB 硬上限：BOM 明细列表必须截断，只保留计数与样本；
-      // 完整列表在 report.html / findings.json 中。
+      // 完整列表在 report.html / findings.json 中。数据手册覆盖只保留计数与原因。
       bom: compactBomCoverage(coverage.bom),
+      datasheets: compactDatasheetsCoverage(coverage.datasheets),
       crossCheck: summarizeCrossCoverage(crossCoverage),
     },
     counts: {
@@ -1389,6 +1619,7 @@ function createState({ runId, startedAt, outDir, projectDir, options }) {
         python: 'skipped',
         gerber: 'skipped',
         bom: 'skipped',
+        datasheets: 'skipped',
         report: 'skipped',
       },
       documents: [],
@@ -1396,6 +1627,7 @@ function createState({ runId, startedAt, outDir, projectDir, options }) {
       warnings: [],
       gerber: null,
       bom: null,
+      datasheets: null,
       svg: null,
       artifacts: null,
       status: 'running',
@@ -1569,6 +1801,13 @@ function printCompletion(state, summary, reportPath, exitCode) {
       + `缺封装 ${summary.bom.rowsMissingFootprint}；状态 ${summary.bom.status}`,
     )
   }
+  if (summary.datasheets) {
+    console.log(
+      `数据手册：PDF ${summary.datasheets.pdfCount} 份；匹配 ${summary.datasheets.componentsWithPdf}`
+      + `/${summary.datasheets.components} 个元件；缺手册 IC ${summary.datasheets.icsWithoutPdf} 个；`
+      + `状态 ${summary.datasheets.status}（引脚级核对未评估）`,
+    )
+  }
   if (reportPath) console.log(`报告：${reportPath}`)
   console.log(
     `版本：Node ${env.node ?? '?'} / altiumts ${env.altiumts ?? '?'} / Python ${env.python ?? '?'}`,
@@ -1590,6 +1829,7 @@ function parseArgs(argv) {
     board: null,
     gerber: null,
     bom: null,
+    datasheets: null,
     svg: false,
     help: false,
   }
@@ -1633,6 +1873,12 @@ function parseArgs(argv) {
       case '--bom': {
         const taken = takeValue(key, inline, argv, index)
         options.bom = taken.value
+        index = taken.index
+        break
+      }
+      case '--datasheets': {
+        const taken = takeValue(key, inline, argv, index)
+        options.datasheets = taken.value
         index = taken.index
         break
       }
@@ -1687,6 +1933,14 @@ function displayTimestamp(date) {
 
 function projectName(projectPath) {
   return basename(projectPath).replace(/\.prjpcb$/i, '')
+}
+
+function isDirectory(path) {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
+  }
 }
 
 function isInside(parent, child) {

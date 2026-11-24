@@ -35,7 +35,7 @@
       }
     ]
   },
-  "generatedAt": "2026-11-25 01:59:57",
+  "generatedAt": "2026-11-25 02:31:16",
   "status": "complete",
   "schematic": {
     "components": 9,
@@ -66,6 +66,27 @@
     "bomPath": "d:\\Code_all\\ad-happy\\docs\\sample-report\\bom.csv",
     "procurementPath": "d:\\Code_all\\ad-happy\\docs\\sample-report\\procurement.csv",
     "imported": null
+  },
+  "datasheets": {
+    "status": "not_evaluated",
+    "directory": null,
+    "pdfCount": 0,
+    "manifestPresent": false,
+    "components": 9,
+    "componentsWithMpn": 8,
+    "componentsWithPdf": 0,
+    "componentsWithoutPdf": 0,
+    "icComponents": 1,
+    "icsWithoutPdf": 0,
+    "plans": 0,
+    "planGenerated": 0,
+    "planNotEvaluated": 0,
+    "planSkipped": 0,
+    "planFailed": 0,
+    "pinVerification": "not_evaluated",
+    "reasons": [
+      "工程目录中没有 datasheets 目录，未找到可用的 PDF 数据手册"
+    ]
   },
   "coverage": {
     "documents": 9,
@@ -137,6 +158,38 @@
         "pcbOnly": 0
       }
     },
+    "datasheets": {
+      "status": "not_evaluated",
+      "directory": null,
+      "exists": false,
+      "manifestPresent": false,
+      "manifestInvalid": false,
+      "pdfCount": 0,
+      "components": 9,
+      "componentsWithMpn": 8,
+      "componentsWithPdf": 0,
+      "componentsWithoutPdf": 0,
+      "icComponents": 1,
+      "icsWithoutPdf": 0,
+      "matched": 0,
+      "unmatchedPdfs": 0,
+      "plans": 0,
+      "planGenerated": 0,
+      "planNotEvaluated": 0,
+      "planSkipped": 0,
+      "planFailed": 0,
+      "checks": {
+        "coverage": "not_evaluated",
+        "pdf_match": "not_evaluated",
+        "extraction_plan": "not_evaluated",
+        "pin_verification": "not_evaluated"
+      },
+      "reasons": [
+        "工程目录中没有 datasheets 目录，未找到可用的 PDF 数据手册"
+      ],
+      "findings": 0,
+      "reasonCount": 1
+    },
     "crossCheck": {
       "compared": 22,
       "exact": 22,
@@ -155,7 +208,7 @@
       "pass": 6,
       "found": 6,
       "partial": 0,
-      "not_evaluated": 1,
+      "not_evaluated": 2,
       "failed": 0
     }
   },
@@ -172,7 +225,8 @@
     "decoupling_placement": "found",
     "pin_pad": "pass",
     "gerber": "pass",
-    "bom": "found"
+    "bom": "found",
+    "datasheets": "not_evaluated"
   },
   "findings": [
     {
