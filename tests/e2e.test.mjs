@@ -75,6 +75,20 @@ test('summary 满足 32KB 约束并记录覆盖、计数与全部板卡', () => 
   assert.equal(summary.project.selectedBoard, 'PCB4 (Manual routing).PcbDoc')
   assert.equal(summary.project.boards.length, 5)
   assert.equal(summary.project.boards.filter(board => board.selected).length, 1)
+  // 工程概览：原理图与 PCB 的规模，以及网表匹配率。
+  assert.equal(summary.schematic.components, 9)
+  assert.equal(summary.schematic.pins, 22)
+  assert.equal(summary.schematic.nets, 6)
+  assert.equal(summary.schematic.pinsMatched, 22)
+  assert.equal(summary.schematic.pinsTotal, 22)
+  assert.equal(summary.pcb.components, 9)
+  assert.equal(summary.pcb.pads, 22)
+  assert.equal(summary.pcb.nets, 6)
+  // 默认选中的是 PCB4 (Manual routing)，走线/过孔数与 Final Design 不同。
+  assert.equal(summary.pcb.tracks, 73)
+  assert.equal(summary.pcb.vias, 7)
+  assert.equal(summary.pcb.rules, 35)
+  assert.equal(summary.coverage.netlist.complete, true)
   assert.ok(summary.report.endsWith('report.html'))
   assert.ok(existsSync(summary.report))
 
@@ -102,6 +116,8 @@ test('summary 满足 32KB 约束并记录覆盖、计数与全部板卡', () => 
   const html = readFileSync(join(outDir, 'report.html'), 'utf8')
   assert.match(html, /结论/)
   assert.match(html, /未评估/)
+  assert.match(html, /工程概览/)
+  assert.match(html, /AD 规则清单/)
   assert.match(html, /板卡与文档/)
   for (const name of [
     'PCB1 (First design).PcbDoc',

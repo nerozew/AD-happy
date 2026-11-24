@@ -149,6 +149,56 @@ test('区分通过、未评估与失败，不把未评估当作通过', () => {
   assert.ok(!notEvaluated.includes('rc_filter'), '通过的规则不应出现在未评估清单')
 })
 
+test('工程概览与 AD 规则清单', () => {
+  const html = renderReport({
+    ...data,
+    overview: {
+      schematic: { components: 9, pins: 22, nets: 6, pinsMatched: 22, pinsTotal: 22 },
+      pcb: { components: 9, pads: 22, nets: 6, tracks: 40, arcs: 0, vias: 19, rules: 35 },
+    },
+    adRules: [{ kind: 'Clearance', name: 'Clearance' }, { kind: 'Width', name: 'Width' }],
+  })
+  assert.match(html, /id="overview"/)
+  assert.match(html, /工程概览/)
+  assert.match(html, /9\/22|22\/22/)
+  assert.match(html, /AD 规则清单/)
+  assert.match(html, /Clearance/)
+  assert.match(html, /Width/)
+})
+
+test('网表匹配率不足时在结论与覆盖节显著提示', () => {
+  const html = renderReport({
+    ...data,
+    overview: {
+      schematic: { components: 9, pins: 22, nets: 4, pinsMatched: 18, pinsTotal: 22 },
+      pcb: { components: 9, pads: 22, nets: 6, tracks: 40, arcs: 0, vias: 19, rules: 35 },
+    },
+    status: { voltage_divider: 'not_evaluated' },
+  })
+  assert.match(html, /网表匹配率不足/)
+  assert.match(html, /18\/22/)
+  assert.match(html, /已按「未评估」处理/)
+  const coverage = html.slice(html.indexOf('id="coverage"'))
+  assert.match(coverage, /18\/22/)
+})
+
+test('DFM 被跳过的子检查在覆盖节列出', () => {
+  const html = renderReport({
+    ...data,
+    coverage: {
+      ...data.coverage,
+      pcb: {
+        skippedChecks: [
+          { rule: 'dfm', check: 'via_annular_ring', reason: '过孔缺少外径' },
+        ],
+      },
+    },
+  })
+  assert.match(html, /id="skipped-checks"/)
+  assert.match(html, /via_annular_ring/)
+  assert.match(html, /过孔缺少外径/)
+})
+
 test('部分完成的规则显示「部分完成」且不计入通过', () => {
   const html = renderReport({
     ...data,

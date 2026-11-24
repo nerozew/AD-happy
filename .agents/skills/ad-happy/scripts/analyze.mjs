@@ -60,6 +60,13 @@ const SCH_RULES = [
 ]
 const PCB_RULES = ['dfm', 'pad_distance', 'current_capacity', 'decoupling_placement']
 const ALL_RULES = [...SCH_RULES, ...PCB_RULES, 'pin_pad']
+// 这些规则依赖原理图网表；引脚未全部入网时，空结果不能视为通过。
+const NETLIST_DEPENDENT_RULES = [
+  'voltage_divider',
+  'rc_filter',
+  'power_regulator',
+  'shorted_component',
+]
 
 // 每次运行开始时清理的已知产物，避免上一次的 report.html/summary.json
 // 让本次失败看起来像成功。
@@ -357,6 +364,42 @@ async function executeStages(state) {
     status: board.status,
   }))
 
+  // 工程概览：两侧的规模与原理图引脚入网率。引脚未全部入网时，
+  // 依赖网表的原理图规则不能当作「通过」。
+  const netStats = nets.stats ?? { pinsMatched: 0, pinsTotal: 0, nets: 0 }
+  const pinsTotal = netStats.pinsTotal || schematic?.pins?.length || 0
+  const pinsMatched = netStats.pinsMatched || 0
+  const overview = {
+    schematic: {
+      components: schematic?.components?.length ?? 0,
+      pins: schematic?.pins?.length ?? 0,
+      nets: Object.keys(nets.nets ?? {}).length,
+      pinsMatched,
+      pinsTotal,
+      pinsMatchRate: pinsTotal > 0
+        ? Number((pinsMatched / pinsTotal).toFixed(4))
+        : null,
+    },
+    pcb: {
+      components: pcbSnapshot?.components?.length ?? 0,
+      pads: pcbSnapshot?.pads?.length ?? 0,
+      nets: pcbSnapshot?.nets?.length ?? 0,
+      tracks: pcbSnapshot?.tracks?.length ?? 0,
+      arcs: pcbSnapshot?.arcs?.length ?? 0,
+      vias: pcbSnapshot?.vias?.length ?? 0,
+      rules: pcbSnapshot?.rules?.length ?? 0,
+    },
+  }
+  const netlistIncomplete = Boolean(schematic)
+    && pinsTotal > 0
+    && pinsMatched < pinsTotal
+  if (netlistIncomplete) {
+    state.warnings.push(
+      `原理图网表匹配不完整：${pinsMatched}/${pinsTotal} 个引脚入网，`
+      + '依赖网表的原理图规则已降级为 not_evaluated',
+    )
+  }
+
   // 7. 写出可复现的中间数据。即使解析失败，也保留失败前的真实内容。
   const generatedAt = displayTimestamp(new Date())
   const projectMeta = {
@@ -450,6 +493,11 @@ async function executeStages(state) {
     if (typeof value === 'string') ruleStatus[rule] = value
   }
   for (const rule of failedRules) ruleStatus[rule] = 'failed'
+  if (netlistIncomplete) {
+    for (const rule of NETLIST_DEPENDENT_RULES) {
+      if (ruleStatus[rule] === 'pass') ruleStatus[rule] = 'not_evaluated'
+    }
+  }
 
   const findings = [
     ...state.syntheticFindings,
@@ -467,6 +515,23 @@ async function executeStages(state) {
     parsed: parsedDocuments,
     notEvaluated: state.documents.length - parsedDocuments,
   }
+  // PCB 侧被跳过的子检查（如缺少过孔外径导致环宽未评估）与网表匹配率
+  // 一并写入 coverage，供 summary 与报告展示。
+  const pcbCoverage = pipelineSummary.coverage?.pcb
+  coverage.pcb = {
+    skippedChecks: Array.isArray(pcbCoverage?.skippedChecks)
+      ? pcbCoverage.skippedChecks.filter(isPlainObject).map(check => ({
+        rule: scalarText(check.rule),
+        check: scalarText(check.check),
+        reason: scalarText(check.reason),
+      }))
+      : [],
+  }
+  coverage.netlist = {
+    pinsMatched,
+    pinsTotal,
+    complete: !netlistIncomplete,
+  }
   const missingInputs = []
   if (!selectedBoard) missingInputs.push('pcb')
   if (!selectedSchematic) missingInputs.push('schematic')
@@ -482,6 +547,8 @@ async function executeStages(state) {
       project: state.manifest.project.name ?? basename(state.projectDir),
       generatedAt,
       coverage,
+      overview,
+      adRules: pcbSnapshot?.rules ?? [],
       findings,
       status: ruleStatus,
       boards: state.documents.map(document => ({
@@ -513,6 +580,7 @@ async function executeStages(state) {
   // 12. summary.json：只放模型需要读的概览、覆盖、计数与 top findings。
   const summary = buildSummary(state, {
     coverage,
+    overview,
     status: ruleStatus,
     findings,
     generatedAt,
@@ -580,6 +648,7 @@ function readPipelineSummary(outDir) {
 function buildSummary(state, context) {
   const {
     coverage,
+    overview,
     status,
     findings,
     generatedAt,
@@ -619,6 +688,8 @@ function buildSummary(state, context) {
     },
     generatedAt,
     status: overallStatus,
+    schematic: overview.schematic,
+    pcb: overview.pcb,
     coverage: {
       ...coverage,
       crossCheck: summarizeCrossCoverage(crossCoverage),

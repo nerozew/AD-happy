@@ -77,7 +77,8 @@ const UNSAFE_SVG_PATTERN = /<\s*(?:script|foreignObject|iframe|object|embed)\b|(
  * 渲染完整报告 HTML。
  *
  * @param {object} [data] ReportData：
- *   project、generatedAt、coverage {documents, parsed, notEvaluated}、
+ *   project、generatedAt、coverage {documents, parsed, notEvaluated, pcb?, netlist?}、
+ *   overview {schematic, pcb}（工程概览）、adRules [{kind, name}]、
  *   findings [{rule_id, severity, title, evidence, ...}]、status {[rule]: 状态}、
  *   boards [{name, kind, selected}]（可选，列出工程全部文档）、
  *   svgs [{title, svg}]
@@ -112,11 +113,64 @@ function normalizeReport(data) {
     project: scalarText(source.project) || '（未命名工程）',
     generatedAt: scalarText(source.generatedAt) || '—',
     coverage: isPlainObject(source.coverage) ? source.coverage : {},
+    overview: normalizeOverview(source.overview),
+    adRules: normalizeRules(source.adRules),
     findings: findings.map(normalizeFinding),
     status: isPlainObject(source.status) ? source.status : {},
     boards: normalizeDocuments(source.boards),
     svgs: Array.isArray(source.svgs) ? source.svgs : [],
   }
+}
+
+function normalizeOverview(value) {
+  if (!isPlainObject(value)) return null
+  const schematic = isPlainObject(value.schematic) ? value.schematic : {}
+  const pcb = isPlainObject(value.pcb) ? value.pcb : {}
+  return {
+    schematic: {
+      components: countValue(schematic.components),
+      pins: countValue(schematic.pins),
+      nets: countValue(schematic.nets),
+      pinsMatched: countValue(schematic.pinsMatched),
+      pinsTotal: countValue(schematic.pinsTotal),
+    },
+    pcb: {
+      components: countValue(pcb.components),
+      pads: countValue(pcb.pads),
+      nets: countValue(pcb.nets),
+      tracks: countValue(pcb.tracks),
+      arcs: countValue(pcb.arcs),
+      vias: countValue(pcb.vias),
+      rules: countValue(pcb.rules),
+    },
+  }
+}
+
+function normalizeRules(value) {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter(isPlainObject)
+    .map(rule => ({
+      kind: scalarText(rule.kind),
+      name: scalarText(rule.name),
+    }))
+    .filter(rule => rule.kind || rule.name)
+}
+
+function countValue(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function normalizeSkippedChecks(pcbCoverage) {
+  if (!isPlainObject(pcbCoverage) || !Array.isArray(pcbCoverage.skippedChecks)) return []
+  return pcbCoverage.skippedChecks
+    .filter(isPlainObject)
+    .map(check => ({
+      rule: scalarText(check.rule),
+      check: scalarText(check.check),
+      reason: scalarText(check.reason),
+    }))
+    .filter(check => check.check || check.reason)
 }
 
 function normalizeDocuments(value) {
@@ -163,6 +217,7 @@ function groupFor(key) {
 function renderBody(report) {
   return [
     renderConclusion(report),
+    renderOverview(report),
     renderDocuments(report),
     renderFindings(report),
     renderCoverage(report),
@@ -170,7 +225,7 @@ function renderBody(report) {
   ].filter(Boolean).join('\n')
 }
 
-function renderConclusion({ findings, status }) {
+function renderConclusion({ findings, status, overview }) {
   const counts = countFindings(findings)
   const notEvaluated = countStatus(status, 'not_evaluated')
   const partial = countStatus(status, 'partial')
@@ -183,14 +238,25 @@ function renderConclusion({ findings, status }) {
     stat('na', notEvaluated, '未评估规则'),
     stat('failed', failed, '失败规则'),
   ].join('')
+  const netlistWarning = renderNetlistWarning(overview)
   return [
     '<section class="panel" id="conclusion">',
     '  <h2>结论</h2>',
     `  <p class="verdict">${escapeHtml(buildVerdict(counts, notEvaluated, partial, failed))}</p>`,
     `  <ul class="stat-grid">${stats}</ul>`,
+    netlistWarning,
     '  <p class="note">「未评估」表示输入数据不足，本次没有得出通过或失败的结论；「部分完成」表示规则已运行但部分子检查被跳过。两者都不等同于「通过」。</p>',
     '</section>',
-  ].join('\n')
+  ].filter(Boolean).join('\n')
+}
+
+function renderNetlistWarning(overview) {
+  if (!overview) return ''
+  const { pinsMatched, pinsTotal } = overview.schematic
+  if (!(pinsTotal > 0) || pinsMatched >= pinsTotal) return ''
+  return `  <p class="note note-warn">网表匹配率不足：${pinsMatched}/${pinsTotal} 个原理图引脚进入网表。`
+    + '依赖网表的原理图规则（voltage_divider、rc_filter、power_regulator、shorted_component）'
+    + '已按「未评估」处理，本次不能视为通过。</p>'
 }
 
 function buildVerdict(counts, notEvaluated, partial, failed) {
@@ -221,6 +287,49 @@ function buildVerdict(counts, notEvaluated, partial, failed) {
 
 function stat(kind, value, label) {
   return `<li class="stat ${kind}"><span class="stat-value">${value}</span><span class="stat-label">${escapeHtml(label)}</span></li>`
+}
+
+// 「工程概览」：两侧规模、网表匹配率与 AD 规则清单。
+// overview 缺失（旧调用方）时整节不渲染。
+function renderOverview({ overview, adRules }) {
+  if (!overview && adRules.length === 0) return ''
+  const rows = overview
+    ? [
+        ['原理图元件', overview.schematic.components],
+        ['原理图引脚', overview.schematic.pins],
+        ['原理图网络', overview.schematic.nets],
+        ['入网引脚', `${overview.schematic.pinsMatched}/${overview.schematic.pinsTotal}`],
+        ['PCB 元件', overview.pcb.components],
+        ['PCB 焊盘', overview.pcb.pads],
+        ['PCB 网络', overview.pcb.nets],
+        ['铜走线', overview.pcb.tracks],
+        ['铜圆弧', overview.pcb.arcs],
+        ['过孔', overview.pcb.vias],
+        ['AD 规则', overview.pcb.rules],
+      ]
+        .map(([label, value]) => `    <div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(String(value))}</dd></div>`)
+        .join('\n')
+    : ''
+  const matchRate = overview && overview.schematic.pinsTotal > 0
+    ? `${overview.schematic.pinsMatched}/${overview.schematic.pinsTotal}`
+    : '—'
+  const ruleRows = adRules.length
+    ? adRules.map(rule => `      <tr><th scope="row">${escapeHtml(rule.name || '（未命名规则）')}</th><td><code>${escapeHtml(rule.kind || '—')}</code></td></tr>`).join('\n')
+    : '      <tr><td colspan="2">未解析到 AD 规则。</td></tr>'
+  return [
+    '<section class="panel" id="overview">',
+    '  <h2>工程概览</h2>',
+    overview ? `  <dl class="coverage-grid">\n${rows}\n  </dl>` : '',
+    `  <p class="hint">原理图网表匹配率：${escapeHtml(matchRate)}；PCB 规则来自 AD 工程文件，仅展示清单，不判定对象命中关系。</p>`,
+    '  <h3>AD 规则清单</h3>',
+    '  <table class="status-table">',
+    '    <thead><tr><th scope="col">规则名</th><th scope="col">类型</th></tr></thead>',
+    '    <tbody>',
+    ruleRows,
+    '    </tbody>',
+    '  </table>',
+    '</section>',
+  ].filter(Boolean).join('\n')
 }
 
 // 「板卡与文档」：列出工程全部文档并标出本次实际解析的 PCB / 原理图。
@@ -320,11 +429,24 @@ function renderFindingItem(finding) {
   return lines.join('\n')
 }
 
-function renderCoverage({ coverage, status }) {
+function renderCoverage({ coverage, status, overview }) {
   const entries = statusEntries(status)
   const notEvaluated = entries.filter(([, value]) => scalarText(value) === 'not_evaluated')
   const partial = entries.filter(([, value]) => scalarText(value) === 'partial')
   const failed = entries.filter(([, value]) => scalarText(value) === 'failed')
+  const skippedChecks = normalizeSkippedChecks(coverage.pcb)
+  const skippedSection = skippedChecks.length
+    ? [
+        '  <h3>DFM 被跳过的子检查</h3>',
+        '  <ul class="status-list" id="skipped-checks">',
+        ...skippedChecks.map(check => `    <li><code>${escapeHtml(check.rule)}</code><span class="rule-name">${escapeHtml(check.check)}</span><span class="detail">${escapeHtml(check.reason)}</span></li>`),
+        '  </ul>',
+      ].join('\n')
+    : ''
+  const netlistLine = overview && overview.schematic.pinsTotal > 0
+    ? `  <p class="hint">原理图网表匹配：${overview.schematic.pinsMatched}/${overview.schematic.pinsTotal} 个引脚；`
+      + `${overview.schematic.pinsMatched < overview.schematic.pinsTotal ? '匹配不完整，依赖网表的原理图规则已按「未评估」处理。' : '全部引脚已进入网表。'}</p>`
+    : ''
   const statusRows = entries.map(([key, value]) => {
     const label = ruleLabel(key)
     return `      <tr><th scope="row"><span class="rule-name">${label ? escapeHtml(label) : '—'}</span><code>${escapeHtml(key)}</code></th><td><span class="badge badge-${statusBadgeClass(value)}">${escapeHtml(statusLabel(value))}</span></td></tr>`
@@ -348,7 +470,9 @@ function renderCoverage({ coverage, status }) {
     `    <div><dt>已解析</dt><dd>${coverageValue(coverage.parsed)}</dd></div>`,
     `    <div><dt>未评估文档</dt><dd>${coverageValue(coverage.notEvaluated)}</dd></div>`,
     '  </dl>',
+    netlistLine,
     '  <p class="hint">数据覆盖只反映本次解析的文档范围；未覆盖的文档没有参与规则评估。</p>',
+    skippedSection,
     '  <h3>未评估的规则</h3>',
     '  <div id="not-evaluated">',
     renderStatusList(notEvaluated, '没有未评估的规则。', '规则所需输入不足，本次没有结论；此状态不等于「通过」。'),
