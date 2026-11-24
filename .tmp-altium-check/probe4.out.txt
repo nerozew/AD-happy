@@ -1,0 +1,1583 @@
+
+### P4.pins
+[
+  {
+    "comp": "IC1",
+    "pin": "3",
+    "name": "VIN",
+    "loc": {
+      "x": 444.88212,
+      "y": 472.4412
+    },
+    "len": 15.74803,
+    "conglom": 58,
+    "code": 2
+  },
+  {
+    "comp": "IC1",
+    "pin": "5",
+    "name": "EN",
+    "loc": {
+      "x": 444.88212,
+      "y": 444.88213
+    },
+    "len": 15.74803,
+    "conglom": 58,
+    "code": 2
+  },
+  {
+    "comp": "IC1",
+    "pin": "6",
+    "name": "VBST",
+    "loc": {
+      "x": 527.55935,
+      "y": 472.4412
+    },
+    "len": 15.74803,
+    "conglom": 56,
+    "code": 0
+  },
+  {
+    "comp": "IC1",
+    "pin": "2",
+    "name": "SW",
+    "loc": {
+      "x": 527.55935,
+      "y": 444.88213
+    },
+    "len": 15.74803,
+    "conglom": 56,
+    "code": 0
+  },
+  {
+    "comp": "IC1",
+    "pin": "4",
+    "name": "VFB",
+    "loc": {
+      "x": 527.55935,
+      "y": 405.51203
+    },
+    "len": 15.74803,
+    "conglom": 56,
+    "code": 0
+  },
+  {
+    "comp": "IC1",
+    "pin": "1",
+    "name": "GND",
+    "loc": {
+      "x": 527.55935,
+      "y": 385.82698
+    },
+    "len": 15.74803,
+    "conglom": 56,
+    "code": 0
+  },
+  {
+    "comp": "C2",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 330.70884,
+      "y": 442.4412
+    },
+    "len": 10,
+    "conglom": 35,
+    "code": 3
+  },
+  {
+    "comp": "C2",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 330.70884,
+      "y": 462.4412
+    },
+    "len": 10,
+    "conglom": 33,
+    "code": 1
+  },
+  {
+    "comp": "C1",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 572.36253,
+      "y": 472.4412
+    },
+    "len": 10,
+    "conglom": 34,
+    "code": 2
+  },
+  {
+    "comp": "C1",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 592.36253,
+      "y": 472.4412
+    },
+    "len": 10,
+    "conglom": 32,
+    "code": 0
+  },
+  {
+    "comp": "L1",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 695.35469,
+      "y": 472.4412
+    },
+    "len": 10,
+    "conglom": 32,
+    "code": 0
+  },
+  {
+    "comp": "L1",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 675.35469,
+      "y": 472.4412
+    },
+    "len": 10,
+    "conglom": 34,
+    "code": 2
+  },
+  {
+    "comp": "R1",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 740.15788,
+      "y": 462.4412
+    },
+    "len": 10,
+    "conglom": 33,
+    "code": 1
+  },
+  {
+    "comp": "R1",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 740.15788,
+      "y": 442.4412
+    },
+    "len": 10,
+    "conglom": 35,
+    "code": 3
+  },
+  {
+    "comp": "R2",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 740.15788,
+      "y": 391.57502
+    },
+    "len": 10,
+    "conglom": 33,
+    "code": 1
+  },
+  {
+    "comp": "R2",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 740.15788,
+      "y": 371.57502
+    },
+    "len": 10,
+    "conglom": 35,
+    "code": 3
+  },
+  {
+    "comp": "C3",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 814.96107,
+      "y": 439.13409
+    },
+    "len": 10,
+    "conglom": 35,
+    "code": 3
+  },
+  {
+    "comp": "C3",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 814.96107,
+      "y": 459.13409
+    },
+    "len": 10,
+    "conglom": 33,
+    "code": 1
+  },
+  {
+    "comp": "J2",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 900.07921,
+      "y": 472.4412
+    },
+    "len": 30,
+    "conglom": 42,
+    "code": 2
+  },
+  {
+    "comp": "J2",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 900.07921,
+      "y": 462.4412
+    },
+    "len": 30,
+    "conglom": 42,
+    "code": 2
+  },
+  {
+    "comp": "J1",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 218.03156,
+      "y": 472.44097
+    },
+    "len": 30,
+    "conglom": 40,
+    "code": 0
+  },
+  {
+    "comp": "J1",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 218.03156,
+      "y": 462.44097
+    },
+    "len": 30,
+    "conglom": 40,
+    "code": 0
+  }
+]
+
+### P4.wires
+[
+  {
+    "a": {
+      "x": 248.03156,
+      "y": 472.44097
+    },
+    "b": {
+      "x": 389.76399,
+      "y": 472.44097
+    }
+  },
+  {
+    "a": {
+      "x": 562.36253,
+      "y": 472.4412
+    },
+    "b": {
+      "x": 543.30738,
+      "y": 472.4412
+    }
+  },
+  {
+    "a": {
+      "x": 602.36253,
+      "y": 472.4412
+    },
+    "b": {
+      "x": 625.98459,
+      "y": 472.4412
+    }
+  },
+  {
+    "a": {
+      "x": 705.35469,
+      "y": 472.4412
+    },
+    "b": {
+      "x": 814.96107,
+      "y": 472.4412
+    }
+  },
+  {
+    "a": {
+      "x": 814.96107,
+      "y": 469.13409
+    },
+    "b": {
+      "x": 814.96107,
+      "y": 472.4412
+    }
+  },
+  {
+    "a": {
+      "x": 814.96107,
+      "y": 429.13409
+    },
+    "b": {
+      "x": 814.96107,
+      "y": 421.26007
+    }
+  },
+  {
+    "a": {
+      "x": 740.15788,
+      "y": 361.57502
+    },
+    "b": {
+      "x": 740.15788,
+      "y": 354.3309
+    }
+  },
+  {
+    "a": {
+      "x": 870.07921,
+      "y": 462.4412
+    },
+    "b": {
+      "x": 862.20519,
+      "y": 462.4412
+    }
+  },
+  {
+    "a": {
+      "x": 543.30738,
+      "y": 444.88213
+    },
+    "b": {
+      "x": 625.98459,
+      "y": 444.88213
+    }
+  },
+  {
+    "a": {
+      "x": 283.46472,
+      "y": 448.81914
+    },
+    "b": {
+      "x": 283.46472,
+      "y": 462.44097
+    }
+  },
+  {
+    "a": {
+      "x": 330.70884,
+      "y": 432.4412
+    },
+    "b": {
+      "x": 330.70884,
+      "y": 421.26007
+    }
+  },
+  {
+    "a": {
+      "x": 562.99243,
+      "y": 374.01595
+    },
+    "b": {
+      "x": 562.99243,
+      "y": 385.82698
+    }
+  },
+  {
+    "a": {
+      "x": 429.13409,
+      "y": 444.88213
+    },
+    "b": {
+      "x": 389.76399,
+      "y": 444.88213
+    }
+  },
+  {
+    "a": {
+      "x": 740.15788,
+      "y": 432.4412
+    },
+    "b": {
+      "x": 740.15788,
+      "y": 401.57502
+    }
+  },
+  {
+    "a": {
+      "x": 543.30738,
+      "y": 405.51203
+    },
+    "b": {
+      "x": 740.15788,
+      "y": 405.51203
+    }
+  }
+]
+
+### P4.directionMappingEval
+[
+  {
+    "label": "0R1U2L3D",
+    "sign": 1,
+    "total": 106.614,
+    "within01": 17
+  },
+  {
+    "label": "0L1D2R3U",
+    "sign": -1,
+    "total": 106.614,
+    "within01": 17
+  },
+  {
+    "label": "0R1D2L3U",
+    "sign": 1,
+    "total": 266.614,
+    "within01": 9
+  },
+  {
+    "label": "0L1U2R3D",
+    "sign": -1,
+    "total": 266.614,
+    "within01": 9
+  },
+  {
+    "label": "0U1L2D3R",
+    "sign": 1,
+    "total": 457.241,
+    "within01": 0
+  },
+  {
+    "label": "0D1R2U3L",
+    "sign": -1,
+    "total": 457.241,
+    "within01": 0
+  },
+  {
+    "label": "0U1R2D3L",
+    "sign": 1,
+    "total": 458.282,
+    "within01": 0
+  },
+  {
+    "label": "0D1L2U3R",
+    "sign": -1,
+    "total": 458.282,
+    "within01": 0
+  },
+  {
+    "label": "0R1D2L3U",
+    "sign": -1,
+    "total": 526.632,
+    "within01": 8
+  },
+  {
+    "label": "0L1U2R3D",
+    "sign": 1,
+    "total": 526.632,
+    "within01": 8
+  },
+  {
+    "label": "0U1R2D3L",
+    "sign": -1,
+    "total": 530.945,
+    "within01": 0
+  },
+  {
+    "label": "0D1L2U3R",
+    "sign": 1,
+    "total": 530.945,
+    "within01": 0
+  },
+  {
+    "label": "0U1L2D3R",
+    "sign": -1,
+    "total": 531.986,
+    "within01": 0
+  },
+  {
+    "label": "0D1R2U3L",
+    "sign": 1,
+    "total": 531.986,
+    "within01": 0
+  },
+  {
+    "label": "0R1U2L3D",
+    "sign": -1,
+    "total": 686.632,
+    "within01": 0
+  },
+  {
+    "label": "0L1D2R3U",
+    "sign": 1,
+    "total": 686.632,
+    "within01": 0
+  }
+]
+
+### P4.bestTips
+[
+  {
+    "comp": "IC1",
+    "pin": "3",
+    "name": "VIN",
+    "loc": {
+      "x": 444.88212,
+      "y": 472.4412
+    },
+    "tip": {
+      "x": 429.13409,
+      "y": 472.4412
+    },
+    "nearestWireDist": 27.559069999999963
+  },
+  {
+    "comp": "IC1",
+    "pin": "5",
+    "name": "EN",
+    "loc": {
+      "x": 444.88212,
+      "y": 444.88213
+    },
+    "tip": {
+      "x": 429.13409,
+      "y": 444.88213
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "IC1",
+    "pin": "6",
+    "name": "VBST",
+    "loc": {
+      "x": 527.55935,
+      "y": 472.4412
+    },
+    "tip": {
+      "x": 543.30738,
+      "y": 472.4412
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "IC1",
+    "pin": "2",
+    "name": "SW",
+    "loc": {
+      "x": 527.55935,
+      "y": 444.88213
+    },
+    "tip": {
+      "x": 543.30738,
+      "y": 444.88213
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "IC1",
+    "pin": "4",
+    "name": "VFB",
+    "loc": {
+      "x": 527.55935,
+      "y": 405.51203
+    },
+    "tip": {
+      "x": 543.30738,
+      "y": 405.51203
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "IC1",
+    "pin": "1",
+    "name": "GND",
+    "loc": {
+      "x": 527.55935,
+      "y": 385.82698
+    },
+    "tip": {
+      "x": 543.30738,
+      "y": 385.82698
+    },
+    "nearestWireDist": 19.68504999999999
+  },
+  {
+    "comp": "C2",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 330.70884,
+      "y": 442.4412
+    },
+    "tip": {
+      "x": 330.70884,
+      "y": 432.4412
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "C2",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 330.70884,
+      "y": 462.4412
+    },
+    "tip": {
+      "x": 330.70884,
+      "y": 472.4412
+    },
+    "nearestWireDist": 0.00022999999998774
+  },
+  {
+    "comp": "C1",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 572.36253,
+      "y": 472.4412
+    },
+    "tip": {
+      "x": 562.36253,
+      "y": 472.4412
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "C1",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 592.36253,
+      "y": 472.4412
+    },
+    "tip": {
+      "x": 602.36253,
+      "y": 472.4412
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "L1",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 695.35469,
+      "y": 472.4412
+    },
+    "tip": {
+      "x": 705.35469,
+      "y": 472.4412
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "L1",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 675.35469,
+      "y": 472.4412
+    },
+    "tip": {
+      "x": 665.35469,
+      "y": 472.4412
+    },
+    "nearestWireDist": 39.37009999999998
+  },
+  {
+    "comp": "R1",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 740.15788,
+      "y": 462.4412
+    },
+    "tip": {
+      "x": 740.15788,
+      "y": 472.4412
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "R1",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 740.15788,
+      "y": 442.4412
+    },
+    "tip": {
+      "x": 740.15788,
+      "y": 432.4412
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "R2",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 740.15788,
+      "y": 391.57502
+    },
+    "tip": {
+      "x": 740.15788,
+      "y": 401.57502
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "R2",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 740.15788,
+      "y": 371.57502
+    },
+    "tip": {
+      "x": 740.15788,
+      "y": 361.57502
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "C3",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 814.96107,
+      "y": 439.13409
+    },
+    "tip": {
+      "x": 814.96107,
+      "y": 429.13409
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "C3",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 814.96107,
+      "y": 459.13409
+    },
+    "tip": {
+      "x": 814.96107,
+      "y": 469.13409
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "J2",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 900.07921,
+      "y": 472.4412
+    },
+    "tip": {
+      "x": 870.07921,
+      "y": 472.4412
+    },
+    "nearestWireDist": 10
+  },
+  {
+    "comp": "J2",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 900.07921,
+      "y": 462.4412
+    },
+    "tip": {
+      "x": 870.07921,
+      "y": 462.4412
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "J1",
+    "pin": "1",
+    "name": "1",
+    "loc": {
+      "x": 218.03156,
+      "y": 472.44097
+    },
+    "tip": {
+      "x": 248.03156,
+      "y": 472.44097
+    },
+    "nearestWireDist": 0
+  },
+  {
+    "comp": "J1",
+    "pin": "2",
+    "name": "2",
+    "loc": {
+      "x": 218.03156,
+      "y": 462.44097
+    },
+    "tip": {
+      "x": 248.03156,
+      "y": 462.44097
+    },
+    "nearestWireDist": 10
+  }
+]
+
+### P4.netCount
+20
+
+### P4.nets
+[
+  {
+    "names": [],
+    "pins": [
+      {
+        "comp": "L1",
+        "pin": "2",
+        "name": "2"
+      },
+      {
+        "comp": "R1",
+        "pin": "2",
+        "name": "2"
+      },
+      {
+        "comp": "C3",
+        "pin": "2",
+        "name": "2"
+      }
+    ],
+    "wires": 2,
+    "junctions": 2
+  },
+  {
+    "names": [
+      "FB"
+    ],
+    "pins": [
+      {
+        "comp": "IC1",
+        "pin": "4",
+        "name": "VFB"
+      },
+      {
+        "comp": "R1",
+        "pin": "1",
+        "name": "1"
+      },
+      {
+        "comp": "R2",
+        "pin": "2",
+        "name": "2"
+      }
+    ],
+    "wires": 2,
+    "junctions": 1
+  },
+  {
+    "names": [
+      "IN"
+    ],
+    "pins": [
+      {
+        "comp": "C2",
+        "pin": "2",
+        "name": "2"
+      },
+      {
+        "comp": "J1",
+        "pin": "1",
+        "name": "1"
+      }
+    ],
+    "wires": 1,
+    "junctions": 2
+  },
+  {
+    "names": [],
+    "pins": [
+      {
+        "comp": "IC1",
+        "pin": "6",
+        "name": "VBST"
+      },
+      {
+        "comp": "C1",
+        "pin": "1",
+        "name": "1"
+      }
+    ],
+    "wires": 1,
+    "junctions": 0
+  },
+  {
+    "names": [],
+    "pins": [
+      {
+        "comp": "C1",
+        "pin": "2",
+        "name": "2"
+      }
+    ],
+    "wires": 1,
+    "junctions": 1
+  },
+  {
+    "names": [
+      "GND"
+    ],
+    "pins": [
+      {
+        "comp": "C3",
+        "pin": "1",
+        "name": "1"
+      }
+    ],
+    "wires": 1,
+    "junctions": 0
+  },
+  {
+    "names": [
+      "GND"
+    ],
+    "pins": [
+      {
+        "comp": "R2",
+        "pin": "1",
+        "name": "1"
+      }
+    ],
+    "wires": 1,
+    "junctions": 0
+  },
+  {
+    "names": [],
+    "pins": [
+      {
+        "comp": "J2",
+        "pin": "2",
+        "name": "2"
+      }
+    ],
+    "wires": 1,
+    "junctions": 0
+  },
+  {
+    "names": [
+      "SW"
+    ],
+    "pins": [
+      {
+        "comp": "IC1",
+        "pin": "2",
+        "name": "SW"
+      }
+    ],
+    "wires": 1,
+    "junctions": 0
+  },
+  {
+    "names": [
+      "GND"
+    ],
+    "pins": [
+      {
+        "comp": "C2",
+        "pin": "1",
+        "name": "1"
+      }
+    ],
+    "wires": 1,
+    "junctions": 0
+  },
+  {
+    "names": [],
+    "pins": [
+      {
+        "comp": "IC1",
+        "pin": "5",
+        "name": "EN"
+      }
+    ],
+    "wires": 1,
+    "junctions": 0
+  },
+  {
+    "names": [],
+    "pins": [
+      {
+        "comp": "IC1",
+        "pin": "3",
+        "name": "VIN"
+      }
+    ],
+    "wires": 0,
+    "junctions": 0
+  },
+  {
+    "names": [],
+    "pins": [
+      {
+        "comp": "IC1",
+        "pin": "1",
+        "name": "GND"
+      }
+    ],
+    "wires": 0,
+    "junctions": 0
+  },
+  {
+    "names": [],
+    "pins": [
+      {
+        "comp": "L1",
+        "pin": "1",
+        "name": "1"
+      }
+    ],
+    "wires": 0,
+    "junctions": 0
+  },
+  {
+    "names": [],
+    "pins": [
+      {
+        "comp": "J2",
+        "pin": "1",
+        "name": "1"
+      }
+    ],
+    "wires": 0,
+    "junctions": 0
+  },
+  {
+    "names": [],
+    "pins": [
+      {
+        "comp": "J1",
+        "pin": "2",
+        "name": "2"
+      }
+    ],
+    "wires": 0,
+    "junctions": 0
+  },
+  {
+    "names": [
+      "GND"
+    ],
+    "pins": [],
+    "wires": 1,
+    "junctions": 0
+  },
+  {
+    "names": [
+      "GND"
+    ],
+    "pins": [],
+    "wires": 1,
+    "junctions": 0
+  },
+  {
+    "names": [
+      "GND"
+    ],
+    "pins": [],
+    "wires": 0,
+    "junctions": 0
+  },
+  {
+    "names": [
+      "OUT"
+    ],
+    "pins": [],
+    "wires": 0,
+    "junctions": 0
+  }
+]
+
+### P4.stats
+{
+  "pinsInNets": 22,
+  "multiPin": 4,
+  "named": 10,
+  "unconnected": 8
+}
+
+### P4.crossRows
+[
+  {
+    "comp": "C2",
+    "pin": "2",
+    "pinName": "2",
+    "schNets": [
+      "IN"
+    ],
+    "pcbNets": [
+      "IN"
+    ]
+  },
+  {
+    "comp": "J1",
+    "pin": "1",
+    "pinName": "1",
+    "schNets": [
+      "IN"
+    ],
+    "pcbNets": [
+      "IN"
+    ]
+  },
+  {
+    "comp": "IC1",
+    "pin": "6",
+    "pinName": "VBST",
+    "schNets": [],
+    "pcbNets": [
+      "NetC1_1"
+    ]
+  },
+  {
+    "comp": "C1",
+    "pin": "1",
+    "pinName": "1",
+    "schNets": [],
+    "pcbNets": [
+      "NetC1_1"
+    ]
+  },
+  {
+    "comp": "C1",
+    "pin": "2",
+    "pinName": "2",
+    "schNets": [],
+    "pcbNets": [
+      "SW"
+    ]
+  },
+  {
+    "comp": "L1",
+    "pin": "2",
+    "pinName": "2",
+    "schNets": [],
+    "pcbNets": [
+      "OUT"
+    ]
+  },
+  {
+    "comp": "R1",
+    "pin": "2",
+    "pinName": "2",
+    "schNets": [],
+    "pcbNets": [
+      "OUT"
+    ]
+  },
+  {
+    "comp": "C3",
+    "pin": "2",
+    "pinName": "2",
+    "schNets": [],
+    "pcbNets": [
+      "OUT"
+    ]
+  },
+  {
+    "comp": "C3",
+    "pin": "1",
+    "pinName": "1",
+    "schNets": [
+      "GND"
+    ],
+    "pcbNets": [
+      "GND"
+    ]
+  },
+  {
+    "comp": "R2",
+    "pin": "1",
+    "pinName": "1",
+    "schNets": [
+      "GND"
+    ],
+    "pcbNets": [
+      "GND"
+    ]
+  },
+  {
+    "comp": "J2",
+    "pin": "2",
+    "pinName": "2",
+    "schNets": [],
+    "pcbNets": [
+      "GND"
+    ]
+  },
+  {
+    "comp": "IC1",
+    "pin": "2",
+    "pinName": "SW",
+    "schNets": [
+      "SW"
+    ],
+    "pcbNets": [
+      "SW"
+    ]
+  },
+  {
+    "comp": "C2",
+    "pin": "1",
+    "pinName": "1",
+    "schNets": [
+      "GND"
+    ],
+    "pcbNets": [
+      "GND"
+    ]
+  },
+  {
+    "comp": "IC1",
+    "pin": "5",
+    "pinName": "EN",
+    "schNets": [],
+    "pcbNets": [
+      "IN"
+    ]
+  },
+  {
+    "comp": "IC1",
+    "pin": "4",
+    "pinName": "VFB",
+    "schNets": [
+      "FB"
+    ],
+    "pcbNets": [
+      "FB"
+    ]
+  },
+  {
+    "comp": "R1",
+    "pin": "1",
+    "pinName": "1",
+    "schNets": [
+      "FB"
+    ],
+    "pcbNets": [
+      "FB"
+    ]
+  },
+  {
+    "comp": "R2",
+    "pin": "2",
+    "pinName": "2",
+    "schNets": [
+      "FB"
+    ],
+    "pcbNets": [
+      "FB"
+    ]
+  },
+  {
+    "comp": "IC1",
+    "pin": "3",
+    "pinName": "VIN",
+    "schNets": [],
+    "pcbNets": [
+      "IN"
+    ]
+  },
+  {
+    "comp": "IC1",
+    "pin": "1",
+    "pinName": "GND",
+    "schNets": [],
+    "pcbNets": [
+      "GND"
+    ]
+  },
+  {
+    "comp": "L1",
+    "pin": "1",
+    "pinName": "1",
+    "schNets": [],
+    "pcbNets": [
+      "SW"
+    ]
+  },
+  {
+    "comp": "J2",
+    "pin": "1",
+    "pinName": "1",
+    "schNets": [],
+    "pcbNets": [
+      "OUT"
+    ]
+  },
+  {
+    "comp": "J1",
+    "pin": "2",
+    "pinName": "2",
+    "schNets": [],
+    "pcbNets": [
+      "GND"
+    ]
+  }
+]
+
+### P4.crossStats
+{
+  "totalPins": 22,
+  "matchedNamed": 9,
+  "rowsWithoutPcbPad": 0
+}
+
+### P4.powerPortRecords
+[
+  {
+    "text": "GND",
+    "style": "4",
+    "loc": {
+      "x": 740.15788,
+      "y": 354.3309
+    },
+    "fields": [
+      "RECORD=17",
+      "IndexInSheet=34",
+      "OwnerPartId=-1",
+      "Style=4",
+      "ShowNetName=T",
+      "Location.X=740",
+      "Location.X_Frac=15788",
+      "Location.Y=354",
+      "Location.Y_Frac=33090",
+      "Orientation=3",
+      "Color=128",
+      "FontID=1",
+      "Text=GND",
+      "UniqueID=TBIKYZJJ"
+    ]
+  },
+  {
+    "text": "GND",
+    "style": "4",
+    "loc": {
+      "x": 562.99243,
+      "y": 374.01595
+    },
+    "fields": [
+      "RECORD=17",
+      "IndexInSheet=35",
+      "OwnerPartId=-1",
+      "Style=4",
+      "ShowNetName=T",
+      "Location.X=562",
+      "Location.X_Frac=99243",
+      "Location.Y=374",
+      "Location.Y_Frac=1595",
+      "Orientation=3",
+      "Color=128",
+      "FontID=1",
+      "Text=GND",
+      "UniqueID=KUCLGYHQ"
+    ]
+  },
+  {
+    "text": "GND",
+    "style": "4",
+    "loc": {
+      "x": 330.70884,
+      "y": 421.26007
+    },
+    "fields": [
+      "RECORD=17",
+      "IndexInSheet=36",
+      "OwnerPartId=-1",
+      "Style=4",
+      "ShowNetName=T",
+      "Location.X=330",
+      "Location.X_Frac=70884",
+      "Location.Y=421",
+      "Location.Y_Frac=26007",
+      "Orientation=3",
+      "Color=128",
+      "FontID=1",
+      "Text=GND",
+      "UniqueID=XKLZGZWJ"
+    ]
+  },
+  {
+    "text": "GND",
+    "style": "4",
+    "loc": {
+      "x": 814.96107,
+      "y": 421.26007
+    },
+    "fields": [
+      "RECORD=17",
+      "IndexInSheet=37",
+      "OwnerPartId=-1",
+      "Style=4",
+      "ShowNetName=T",
+      "Location.X=814",
+      "Location.X_Frac=96107",
+      "Location.Y=421",
+      "Location.Y_Frac=26007",
+      "Orientation=3",
+      "Color=128",
+      "FontID=1",
+      "Text=GND",
+      "UniqueID=SMYZWDHU"
+    ]
+  },
+  {
+    "text": "GND",
+    "style": "4",
+    "loc": {
+      "x": 862.20519,
+      "y": 448.81914
+    },
+    "fields": [
+      "RECORD=17",
+      "IndexInSheet=38",
+      "OwnerPartId=-1",
+      "Style=4",
+      "ShowNetName=T",
+      "Location.X=862",
+      "Location.X_Frac=20519",
+      "Location.Y=448",
+      "Location.Y_Frac=81914",
+      "Orientation=3",
+      "Color=128",
+      "FontID=1",
+      "Text=GND",
+      "UniqueID=HVEMZMGI"
+    ]
+  },
+  {
+    "text": "GND",
+    "style": "4",
+    "loc": {
+      "x": 283.46472,
+      "y": 448.81914
+    },
+    "fields": [
+      "RECORD=17",
+      "IndexInSheet=39",
+      "OwnerPartId=-1",
+      "Style=4",
+      "ShowNetName=T",
+      "Location.X=283",
+      "Location.X_Frac=46472",
+      "Location.Y=448",
+      "Location.Y_Frac=81914",
+      "Orientation=3",
+      "Color=128",
+      "FontID=1",
+      "Text=GND",
+      "UniqueID=UDCXSBHL"
+    ]
+  }
+]
+
+### P4.netLabelRecords
+[
+  {
+    "text": "IN",
+    "loc": {
+      "x": 263.77967,
+      "y": 472.44097
+    }
+  },
+  {
+    "text": "OUT",
+    "loc": {
+      "x": 846.45715,
+      "y": 472.4412
+    }
+  },
+  {
+    "text": "FB",
+    "loc": {
+      "x": 555.11841,
+      "y": 405.51203
+    }
+  },
+  {
+    "text": "SW",
+    "loc": {
+      "x": 555.11841,
+      "y": 444.88213
+    }
+  }
+]
+
+### P4.pourRecordTypes
+{
+  "region-record": 20
+}
+
+### P4.polygonNameDecoded
+{
+  "raw": "71,78,68,95,76,48,49,95,80,48,49,55",
+  "decoded": "GND_L01_P017"
+}
+
+### P4.polygonRecords
+[
+  {
+    "type": "region-record",
+    "layer": "TOP",
+    "kind": "0",
+    "netIndex": "65535",
+    "holes": 4,
+    "geometryPoints": 4,
+    "geometryHoles": 4
+  },
+  {
+    "type": "region-record",
+    "layer": "TOP",
+    "kind": "0",
+    "netIndex": "65535",
+    "holes": 4,
+    "geometryPoints": 5,
+    "geometryHoles": 4
+  }
+]
+
+### P4.trackNetByLayer
+{
+  "MECHANICAL15": {
+    "total": 56,
+    "withNet": 0
+  },
+  "MECHANICAL13": {
+    "total": 37,
+    "withNet": 0
+  },
+  "TOPOVERLAY": {
+    "total": 71,
+    "withNet": 0
+  },
+  "TOP": {
+    "total": 33,
+    "withNet": 33
+  },
+  "KEEPOUT": {
+    "total": 4,
+    "withNet": 0
+  },
+  "BOTTOM": {
+    "total": 7,
+    "withNet": 7
+  }
+}
