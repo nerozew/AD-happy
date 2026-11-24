@@ -746,13 +746,14 @@ function runGerberStage(state, ruleStatus) {
     state.warnings.push(
       `制造文件检查未评估：${coverage.reasons.join('；') || '输入不足'}`,
     )
+  } else if (coverage.status === 'partial') {
+    // stage 与 rules 状态保持一致，避免外部仅看 stage 时把部分完成读成通过。
+    state.manifest.stages.gerber = 'partial'
+    state.warnings.push(
+      `制造文件检查部分完成：${coverage.reasons.join('；') || '部分检查被跳过'}`,
+    )
   } else {
-    state.manifest.stages.gerber = 'pass'
-    if (coverage.status === 'partial') {
-      state.warnings.push(
-        `制造文件检查部分完成：${coverage.reasons.join('；') || '部分检查被跳过'}`,
-      )
-    }
+    state.manifest.stages.gerber = coverage.status
   }
   state.manifest.gerber = {
     requested,
@@ -938,6 +939,8 @@ function summarizeFinding(finding, group) {
     pins: locatorList(finding.pins, pinText),
   }
   if (source) entry.source = source
+  const sourceRuleId = scalarText(finding.source_rule_id)
+  if (sourceRuleId) entry.source_rule_id = sourceRuleId
   const recommendation = truncateText(
     scalarText(finding.recommendation) || scalarText(finding.advice),
     240,

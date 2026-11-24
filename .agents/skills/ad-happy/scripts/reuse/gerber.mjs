@@ -412,7 +412,13 @@ function buildCoverage(raw, directory, classified, findingCount) {
   let status
   if (values.every(value => value === 'not_evaluated')) {
     status = 'not_evaluated'
-  } else if (values.includes('not_evaluated') || parseErrors.length > 0) {
+  } else if (
+    values.includes('not_evaluated')
+    || parseErrors.length > 0
+    // .xln/.nc 不会被上游解析；只要存在就说明本次覆盖不完整，
+    // 即使同时有可解析的 .drl 也不能给 pass。
+    || classified.unsupportedDrillFiles.length > 0
+  ) {
     status = 'partial'
   } else if (findingCount > 0) {
     status = 'found'
@@ -468,15 +474,18 @@ const RULE_ID_PATTERN = /^[A-Z]{2,4}-\d+$/
 
 /**
  * 把上游 finding 转成 AD-Happy 结构。
- * 上游已有稳定 GR-00x 编号时保留；其余规则 ID 加 GB- 前缀。
+ * 上游 GR-00x 统一映射为 GB-00x（原始 ID 保留在 source_rule_id）；
+ * 其余无法识别的规则 ID 加 GB- 前缀。
  *
  * @param {object} finding
  * @returns {object}
  */
 export function normalizeGerberFinding(finding) {
-  const ruleId = normalizeRuleId(finding.rule_id)
+  const sourceRuleId = scalarText(finding.rule_id).trim()
+  const ruleId = normalizeRuleId(sourceRuleId)
+  // 文案模板按上游原始 ID（GR-00x）匹配；输出 rule_id 使用 GB- 前缀。
   const localized = localizeGerberText(
-    ruleId,
+    sourceRuleId || ruleId,
     scalarText(finding.summary),
     scalarText(finding.description),
     scalarText(finding.recommendation),
@@ -508,13 +517,17 @@ export function normalizeGerberFinding(finding) {
     result.report_context = finding.report_context
   }
   if (scalarText(finding.finding_id)) result.finding_id = scalarText(finding.finding_id)
+  if (sourceRuleId) result.source_rule_id = sourceRuleId
   return result
 }
 
 function normalizeRuleId(value) {
   const id = scalarText(value).trim()
-  if (RULE_ID_PATTERN.test(id)) return id
   if (!id) return 'GB-UNKNOWN'
+  // 上游 GR-001..GR-005 → GB-001..GB-005；原始 ID 由调用方写入 source_rule_id。
+  const gerberMatch = /^GR-(\d+)$/.exec(id)
+  if (gerberMatch) return `GB-${gerberMatch[1]}`
+  if (RULE_ID_PATTERN.test(id)) return id
   const slug = id.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').toUpperCase()
   return slug ? `GB-${slug}` : 'GB-UNKNOWN'
 }

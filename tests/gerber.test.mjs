@@ -93,7 +93,7 @@ test('空目录返回 not_evaluated 并解释原因', () => {
   assert.deepEqual(result.findings, [])
 })
 
-test('缺少钻孔文件时钻孔检查为 not_evaluated，并给出中文 GR-003', () => {
+test('缺少钻孔文件时钻孔检查为 not_evaluated，并给出中文 GB-003', () => {
   const dir = gerbersWithoutDrill()
   const out = freshOut()
   const result = runGerberAnalysis(dir, out)
@@ -103,14 +103,52 @@ test('缺少钻孔文件时钻孔检查为 not_evaluated，并给出中文 GR-00
   assert.equal(result.coverage.drillFiles, 0)
   assert.ok(result.coverage.reasons.some(reason => reason.includes('钻孔')))
 
-  const missingDrill = result.findings.find(finding => finding.rule_id === 'GR-003')
+  const missingDrill = result.findings.find(finding => finding.rule_id === 'GB-003')
   assert.ok(missingDrill, '应报告缺少钻孔文件')
   assert.equal(missingDrill.source, 'gerber')
+  assert.equal(missingDrill.source_rule_id, 'GR-003')
   assert.equal(missingDrill.kind, 'issue')
   assert.match(missingDrill.title, /[一-鿿]/)
   assert.ok(!missingDrill.title.includes('No drill file'))
   assert.match(missingDrill.evidence, /[一-鿿]/)
   assert.equal(missingDrill.source_text.summary, 'No drill file in gerber set')
+})
+
+test('存在无法解析的 .xln 时即使有 .drl 也标 partial', () => {
+  const dir = freshOut('ad-happy-gerber-xln-')
+  cpSync(fixture, dir, { recursive: true })
+  cpSync(join(dir, 'board.TXT'), join(dir, 'board-extra.xln'))
+
+  const out = freshOut()
+  const result = runGerberAnalysis(dir, out)
+
+  assert.equal(result.coverage.status, 'partial')
+  assert.notEqual(result.coverage.status, 'pass')
+  assert.equal(result.coverage.drillFiles, 1, '可解析的 .drl/Excellon 仍应计数')
+  assert.equal(result.coverage.unsupportedDrillFiles, 1)
+  assert.ok(result.coverage.reasons.some(reason => reason.includes('.xln')))
+})
+
+test('上游脚本缺失时返回 failed 与 GB-ERR，而不是空通过', () => {
+  const fakeScripts = freshOut('ad-happy-gerber-fake-')
+  const out = freshOut()
+  const previous = process.env.KICAD_HAPPY_SCRIPTS
+  process.env.KICAD_HAPPY_SCRIPTS = fakeScripts
+  try {
+    const result = runGerberAnalysis(fixture, out)
+    assert.equal(result.coverage.status, 'failed')
+    assert.equal(result.coverage.findings, 1)
+    assert.equal(result.findings.length, 1)
+    const error = result.findings[0]
+    assert.equal(error.rule_id, 'GB-ERR')
+    assert.equal(error.severity, 'error')
+    assert.equal(error.source, 'gerber')
+    assert.match(error.title, /失败/)
+    assert.ok(result.coverage.reasons.some(reason => reason.includes('上游脚本')))
+  } finally {
+    if (previous === undefined) delete process.env.KICAD_HAPPY_SCRIPTS
+    else process.env.KICAD_HAPPY_SCRIPTS = previous
+  }
 })
 
 test('上游 finding 归一化为 AD-Happy 结构并翻译为中文', () => {
@@ -123,6 +161,7 @@ test('上游 finding 归一化为 AD-Happy 结构并翻译为中文', () => {
         description: 'Expected required layer F.Mask not found in gerber set.',
         recommendation: 'Add F.Mask to gerber export.',
       },
+      expectedRuleId: 'GB-001',
       expected: {
         title: '缺少层：F.Mask',
         evidence: 'Gerber 文件中未找到必需层 F.Mask。',
@@ -137,6 +176,7 @@ test('上游 finding 归一化为 AD-Happy 结构并翻译为中文', () => {
         description: 'Layer alignment issue: Width varies by 1.5mm across copper/edge layers',
         recommendation: 'Re-export gerbers to ensure consistent layer alignment.',
       },
+      expectedRuleId: 'GB-002',
       expected: {
         title: '层对齐问题：铜层与边框层的宽度相差 1.5mm',
         evidence: '层对齐问题：铜层与边框层的宽度相差 1.5mm',
@@ -151,6 +191,7 @@ test('上游 finding 归一化为 AD-Happy 结构并翻译为中文', () => {
         description: 'F-side paste layer has significantly fewer flashes (4) than copper layer (10). This may indicate missing solder paste apertures.',
         recommendation: 'Check solder paste aperture generation — missing apertures cause assembly defects.',
       },
+      expectedRuleId: 'GB-004',
       expected: {
         title: 'F 面锡膏层：4 个焊盘开窗，铜层 10 个（40%）',
         evidence: 'F 面锡膏层的焊盘开窗数（4）明显少于铜层（10），可能存在锡膏开窗缺失。',
@@ -165,6 +206,7 @@ test('上游 finding 归一化为 AD-Happy 结构并翻译为中文', () => {
         description: 'Edge.Cuts layer has only 2 draw command(s). A closed rectangular outline needs at least 4. The outline may be incomplete.',
         recommendation: 'Verify board outline forms a closed shape before submitting to fab.',
       },
+      expectedRuleId: 'GB-005',
       expected: {
         title: '板框可能未闭合：仅有 2 条绘制线段',
         evidence: '边框层（Edge.Cuts）只有 2 条绘制命令；闭合矩形板框至少需要 4 条，板框可能不完整。',
@@ -173,12 +215,14 @@ test('上游 finding 归一化为 AD-Happy 结构并翻译为中文', () => {
     },
   ]
 
-  for (const { input, expected } of cases) {
+  for (const { input, expectedRuleId, expected } of cases) {
     const finding = normalizeGerberFinding(input)
     assert.equal(finding.source, 'gerber')
     assert.equal(finding.detector, 'gerber')
     assert.equal(finding.kind, 'issue')
-    assert.equal(finding.rule_id, input.rule_id, '上游稳定规则 ID 必须保留')
+    assert.equal(finding.rule_id, expectedRuleId, '上游规则 ID 必须映射为 GB- 前缀')
+    assert.equal(finding.source_rule_id, input.rule_id, '必须保留上游原始规则 ID')
+    assert.ok(!finding.rule_id.startsWith('GR-'))
     assert.equal(finding.title, expected.title)
     assert.equal(finding.evidence, expected.evidence)
     assert.equal(finding.recommendation, expected.recommendation)
@@ -237,7 +281,7 @@ test('报告渲染「制造文件」章节：层数、钻孔数、缺失层、�
       },
       reasons: ['未找到可解析的钻孔文件'],
       findings: [{
-        rule_id: 'GR-003',
+        rule_id: 'GB-003',
         severity: 'warning',
         title: 'Gerber 文件集中没有钻孔文件',
         evidence: '未找到 Excellon 钻孔文件；PCB 制造需要钻孔数据。',
@@ -267,7 +311,7 @@ test('问题清单为 Gerber finding 标注「Gerber 分析」来源', () => {
     generatedAt: '2026-11-24 12:00',
     coverage: { documents: 1, parsed: 1, notEvaluated: 0 },
     findings: [{
-      rule_id: 'GR-003',
+      rule_id: 'GB-003',
       severity: 'warning',
       title: 'Gerber 文件集中没有钻孔文件',
       evidence: '未找到 Excellon 钻孔文件。',
@@ -280,7 +324,7 @@ test('问题清单为 Gerber finding 标注「Gerber 分析」来源', () => {
     html.indexOf('id="findings"'),
     html.indexOf('id="coverage"'),
   )
-  assert.match(findingSection, /GR-003/)
+  assert.match(findingSection, /GB-003/)
   assert.match(findingSection, /source-tag/)
   assert.match(findingSection, /Gerber 分析/)
 })
@@ -361,6 +405,94 @@ test('工程中没有 Gerber 目录时跳过并写入 manifest.warnings', () => 
   const html = readFileSync(join(out, 'report.html'), 'utf8')
   assert.match(html, /制造文件/)
   assert.match(html, /未评估/)
+  assert.match(html, /未评估，无法判断是否缺失层。/)
+  assert.match(html, /未评估，未生成制造文件问题结论。/)
+})
+
+test('端到端缺钻孔：GB- 前缀进入 summary 与报告，stage=partial', () => {
+  const gerberDir = gerbersWithoutDrill()
+  const out = freshOut()
+  const r = runAnalyze([
+    '--project', projectRoot,
+    '--gerber', gerberDir,
+    '--out', out,
+  ])
+  assert.equal(r.status, 3, r.stderr)
+
+  const summary = readJson(out, 'summary.json')
+  assert.equal(summary.rules.gerber, 'partial')
+  const gerberTop = summary.findings.filter(finding => finding.detector === 'gerber')
+  assert.ok(gerberTop.length > 0, 'summary 应包含 Gerber findings')
+  for (const finding of gerberTop) {
+    assert.match(finding.rule_id, /^GB-\d+$/, `summary 必须显示 GB- 前缀：${finding.rule_id}`)
+  }
+  assert.ok(gerberTop.some(
+    finding => finding.rule_id === 'GB-003' && finding.source_rule_id === 'GR-003',
+  ))
+
+  const findings = readJson(out, 'findings.json')
+  const missingDrill = findings.find(finding => finding.rule_id === 'GB-003')
+  assert.ok(missingDrill)
+  assert.equal(missingDrill.source_rule_id, 'GR-003')
+
+  const manifest = readJson(out, 'manifest.json')
+  assert.equal(manifest.stages.gerber, 'partial')
+
+  const html = readFileSync(join(out, 'report.html'), 'utf8')
+  assert.match(html, /GB-003/)
+  assert.ok(!html.includes('GR-003'), '报告不应再显示上游 GR- 前缀')
+})
+
+test('端到端 .xln 与 .drl 并存时 summary.rules.gerber=partial', () => {
+  const gerberDir = freshOut('ad-happy-gerber-xln-e2e-')
+  cpSync(fixture, gerberDir, { recursive: true })
+  cpSync(join(gerberDir, 'board.TXT'), join(gerberDir, 'board-extra.xln'))
+
+  const out = freshOut()
+  const r = runAnalyze([
+    '--project', projectRoot,
+    '--gerber', gerberDir,
+    '--out', out,
+  ])
+  assert.equal(r.status, 3, r.stderr)
+
+  const summary = readJson(out, 'summary.json')
+  assert.equal(summary.rules.gerber, 'partial')
+  assert.notEqual(summary.rules.gerber, 'pass')
+  assert.ok(summary.coverage.gerber.reasons.some(reason => reason.includes('.xln')))
+
+  const manifest = readJson(out, 'manifest.json')
+  assert.equal(manifest.stages.gerber, 'partial')
+})
+
+test('显式 --gerber 为空目录时退出码 3 且所有制造检查未评估', () => {
+  const emptyDir = freshOut('ad-happy-gerber-empty-e2e-')
+  const out = freshOut()
+  const r = runAnalyze([
+    '--project', projectRoot,
+    '--gerber', emptyDir,
+    '--out', out,
+  ])
+  assert.equal(r.status, 3, r.stderr)
+
+  const summary = readJson(out, 'summary.json')
+  assert.equal(summary.status, 'partial')
+  assert.equal(summary.rules.gerber, 'not_evaluated')
+  assert.equal(summary.coverage.gerber.status, 'not_evaluated')
+
+  const manifest = readJson(out, 'manifest.json')
+  assert.equal(manifest.stages.gerber, 'not_evaluated')
+
+  const html = readFileSync(join(out, 'report.html'), 'utf8')
+  const section = html.slice(
+    html.indexOf('id="manufacturing"'),
+    html.indexOf('id="findings"'),
+  )
+  assert.match(section, /未评估/)
+  assert.match(section, /未评估，无法判断是否缺失层。/)
+  assert.match(section, /未评估，未生成制造文件问题结论。/)
+  assert.ok(!section.includes('没有缺失层。'))
+  assert.ok(!section.includes('未发现制造文件问题。'))
 })
 
 test('显式 --gerber 指向缺失目录时退出码 2', () => {

@@ -476,7 +476,7 @@ function renderManufacturing({ manufacturing }) {
         }),
         '  </ul>',
       ].join('\n')
-    : '  <p class="empty">没有缺失层。</p>'
+    : `  <p class="empty">${escapeHtml(missingLayersEmptyText(status))}</p>`
   const checks = manufacturing.checks.length
     ? [
         '  <h3>制造检查项</h3>',
@@ -509,7 +509,7 @@ function renderManufacturing({ manufacturing }) {
         }),
         '  </ul>',
       ].join('\n')
-    : '  <p class="empty">未发现制造文件问题。</p>'
+    : `  <p class="empty">${escapeHtml(manufacturingFindingsEmptyText(status))}</p>`
 
   return [
     '<section class="panel" id="manufacturing">',
@@ -528,6 +528,19 @@ function renderManufacturing({ manufacturing }) {
 
 function statusBadgeHtml(value) {
   return `<span class="badge badge-${statusBadgeClass(value)}">${escapeHtml(statusLabel(value))}</span>`
+}
+
+// 未评估/失败时不能写「没有缺失层」，否则容易被读成通过。
+function missingLayersEmptyText(status) {
+  if (status === 'not_evaluated') return '未评估，无法判断是否缺失层。'
+  if (status === 'failed') return '分析失败，无法判断是否缺失层。'
+  return '没有缺失层。'
+}
+
+function manufacturingFindingsEmptyText(status) {
+  if (status === 'not_evaluated') return '未评估，未生成制造文件问题结论。'
+  if (status === 'failed') return '分析失败，无法生成制造文件问题结论。'
+  return '未发现制造文件问题。'
 }
 
 function renderFindings({ findings }) {

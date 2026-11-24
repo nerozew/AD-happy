@@ -96,7 +96,7 @@ capability_mode_ref
 | AD-Happy 字段 | 取值 |
 | --- | --- |
 | `detector` | 固定 `gerber`（report/summary 用它作为规则状态键） |
-| `rule_id` | 上游为 `GR-00x` 等稳定编号时原样保留；其余加 `GB-` 前缀 |
+| `rule_id` | 上游 `GR-00x` 映射为 `GB-00x`；原始 ID 保留在 `source_rule_id`。其他稳定编号原样保留，无法识别的加 `GB-` 前缀 |
 | `severity` | 保留上游 `error` / `warning` / `info`；报告层再映射到 must_fix / should_fix / nice_to_have |
 | `title` / `summary` | 中文标题（由 `summary` 翻译） |
 | `evidence` / `description` | 中文证据（由 `description` 翻译） |
@@ -106,8 +106,10 @@ capability_mode_ref
 | `source_text` | 被翻译字段的英文原文，便于与 kicad-happy 对照 |
 | 其他 | `category`、`confidence`、`evidence_source`、`components`、`nets`、`pins`、`report_context`、`finding_id` 按上游保留（字段值不翻译） |
 
-规则 ID 兜底逻辑：匹配 `^[A-Z]{2,4}-\d+$` 视为稳定编号；否则转成
-`GB-<大写 slug>`。上游当前 5 条规则全部保留 `GR-00x`，没有触发兜底。
+规则 ID 映射逻辑：`GR-001..GR-005` 统一转成 `GB-001..GB-005`，
+原始 ID 写入 `source_rule_id`（例如 `source_rule_id: "GR-003"`）；
+其他匹配 `^[A-Z]{2,4}-\d+$` 的稳定编号原样保留；无法识别的转成
+`GB-<大写 slug>`。上游当前 5 条规则全部输出 `GB-00x`。
 
 ### 4.2 中文文案
 
@@ -143,7 +145,8 @@ missingRecommended, boardDimensions, checks, reasons, findings`
 整体状态：
 
 - 全部子检查 not_evaluated → `not_evaluated`；
-- 任一子检查 not_evaluated 或存在文件解析错误 → `partial`；
+- 任一子检查 not_evaluated、存在文件解析错误，或检测到无法解析的
+  `.xln`/`.nc` → `partial`（即使同时存在可解析的 `.drl`，也不给 `pass`）；
 - 全部已评估且有 finding → `found`；
 - 全部已评估且无 finding → `pass`；
 - 上游脚本缺失、Python 启动失败、超时或 JSON 非法 → `failed`，并生成
@@ -157,9 +160,10 @@ missingRecommended, boardDimensions, checks, reasons, findings`
 - `ALL_RULES` 增加 `gerber`，报告规则表与 `summary.rules` 始终有该键；
 - Gerber findings 追加到 `findings.json` 与 `summary.json` 的 top findings；
 - `summary.coverage.gerber` 写入完整 coverage；
-- `manifest.stages.gerber` 取值 `pass` / `failed` / `not_evaluated` /
-  `skipped`，`manifest.gerber` 记录 `requested`、`autoDetected`、
-  `directory`、`status`、`findings`；
+- `manifest.stages.gerber` 直接反映 coverage 状态：`pass` / `found` /
+  `partial` / `not_evaluated` / `failed`，自动跳过时为 `skipped`；
+  `manifest.gerber` 记录 `requested`、`autoDetected`、`directory`、
+  `status`、`findings`；
 - 显式 `--gerber` 指向不存在/非目录 → 退出码 2；
 - 显式 `--gerber` 但拿到 not_evaluated（例如空目录）→ 本次运行 partial、
   退出码 3；
@@ -186,21 +190,26 @@ missingRecommended, boardDimensions, checks, reasons, findings`
 
 ## 6. 测试与结果
 
-新增 `tests/gerber.test.mjs`（13 项）：
+新增 `tests/gerber.test.mjs`（18 项，含评审修复后的新增用例）：
 
 1. 完整夹具返回 pass coverage（2 层、1 个钻孔文件、5 孔、30×20mm、mm）；
 2. 缺失目录返回 not_evaluated，四个子检查全部 not_evaluated；
 3. 空目录返回 not_evaluated 并说明原因；
-4. 有 Gerber 无钻孔 → partial、`drill_data=not_evaluated`、中文 `GR-003`；
-5. `GR-001`/`GR-002`/`GR-004`/`GR-005` 归一化与中文文案逐字段断言；
-6. 非稳定规则 ID 自动加 `GB-` 前缀，未知英文模板标注「（检测器原文）」；
-7. `detectGerberDirectory` 优先选择含内容的候选目录；
-8. 报告「制造文件」章节含层数、钻孔数、缺失层、单位与来源；
-9. 主问题清单为 Gerber finding 标注「Gerber 分析」；
-10. 端到端 `--gerber`：退出码 0、`summary.rules.gerber=pass`、报告含章节；
-11. 端到端自动发现工程下的 `Gerber/` 目录；
-12. 无 Gerber 目录时规则 not_evaluated、manifest 有 warning、报告仍解释原因；
-13. 显式 `--gerber` 指向缺失目录时退出码 2。
+4. 有 Gerber 无钻孔 → partial、`drill_data=not_evaluated`、中文 `GB-003`；
+5. `.xln` 与有效 `.drl` 并存 → partial（不是 pass）；
+6. 上游脚本缺失 → failed、`GB-ERR`（severity error）；
+7. `GR-001`/`GR-002`/`GR-004`/`GR-005` 映射为 `GB-00x` 并逐字段断言中文文案；
+8. 非稳定规则 ID 自动加 `GB-` 前缀，未知英文模板标注「（检测器原文）」；
+9. `detectGerberDirectory` 优先选择含内容的候选目录；
+10. 报告「制造文件」章节含层数、钻孔数、缺失层、单位与来源；
+11. 主问题清单为 Gerber finding 标注「Gerber 分析」；
+12. 端到端 `--gerber`：退出码 0、`summary.rules.gerber=pass`、报告含章节；
+13. 端到端自动发现工程下的 `Gerber/` 目录；
+14. 无 Gerber 目录时规则 not_evaluated、manifest 有 warning、报告仍解释原因；
+15. 端到端缺钻孔：summary/报告中为 `GB-00x`，`manifest.stages.gerber=partial`；
+16. 端到端 `.xln` 并存：`summary.rules.gerber=partial`；
+17. 端到端显式空目录：退出码 3，所有制造检查未评估；
+18. 显式 `--gerber` 指向缺失目录时退出码 2。
 
 新增夹具 `tests/fixtures/gerber-basic/`：9 个文本 Gerber（GTL/GBL/GTS/GBS/
 GTO/GBO/GTP/GBP/GM1）+ 1 个 Excellon `.TXT`，合计约 1.5KB，不包含大型
@@ -210,12 +219,12 @@ GTO/GBO/GTP/GBP/GM1）+ 1 个 Excellon `.TXT`，合计约 1.5KB，不包含大�
 
 ```text
 $ node --test tests/*.test.mjs
-ℹ tests 81
-ℹ pass 81
+ℹ tests 86
+ℹ pass 86
 ℹ fail 0
 
 $ python -B -m pytest -q
-71 passed, 1 warning in 0.86s
+71 passed, 1 warning in 0.64s
 ```
 
 pytest 的 warning 来自第三方 anyio 插件的弃用提示，与本改动无关；所有既有
@@ -263,3 +272,84 @@ node .agents/skills/ad-happy/scripts/analyze.mjs \
 - 未提交 `node_modules`、临时输出或大型二进制导出；
 - 新增夹具为纯文本，总计约 1.5KB；
 - 所有面向用户的文本为简体中文。
+
+## 10. 评审修复（2026-11-25）
+
+### 10.1 Important 1：`GB-` 前缀落实到输出
+
+- `normalizeRuleId()` 现在把上游 `GR-001..GR-005` 映射为
+  `GB-001..GB-005`；上游原始 ID 存入 finding 的
+  `source_rule_id` 字段（例如 `source_rule_id: "GR-003"`），便于追溯。
+- 中文文案模板仍按上游原始 ID（`GR-00x`）匹配，输出规则 ID 使用 `GB-`，
+  两者解耦，翻译不会因 ID 映射而失效。
+- 测试更新：归一化用例全部断言 `GB-00x` + `source_rule_id`；
+  端到端缺钻孔用例断言 `summary.findings`、`findings.json` 与
+  `report.html` 均显示 `GB-003`，报告不再出现 `GR-003`。
+
+### 10.2 Important 2：无法解析的 `.xln`/`.nc` 不再给 pass
+
+- `buildCoverage()` 的状态聚合新增条件：`unsupportedDrillFiles > 0`
+  时整体至少为 `partial`，即使同时存在可解析的 `.drl`/Excellon `.txt`。
+- `coverage.reasons` 继续说明这些文件未被上游解析。
+- 新增测试：
+  - wrapper：完整夹具 + `board-extra.xln` → `coverage.status = partial`，
+    `drillFiles = 1`、`unsupportedDrillFiles = 1`；
+  - 端到端：同一场景 → `summary.rules.gerber = partial`，
+    `manifest.stages.gerber = partial`，退出码 3。
+
+### 10.3 相关 Minor
+
+- 报告「制造文件」在 `not_evaluated` / `failed` 时不再输出
+  「没有缺失层。」「未发现制造文件问题。」，改为：
+  - `未评估，无法判断是否缺失层。`
+  - `未评估，未生成制造文件问题结论。`
+  - 失败时对应改为「分析失败，无法判断是否缺失层。」与
+    「分析失败，无法生成制造文件问题结论。」
+- `manifest.stages.gerber` 直接镜像 coverage 状态：
+  `pass` / `found` / `partial` / `not_evaluated` / `failed`，
+  自动跳过时为 `skipped`；外部只读 stage 也不会把 partial/found
+  误读为完全通过。
+
+### 10.4 新增测试与执行结果
+
+`tests/gerber.test.mjs` 由 13 项增加到 18 项，新增：
+
+- `.xln` 与 `.drl` 并存 → wrapper `partial`；
+- 上游脚本缺失 → `failed` + `GB-ERR`；
+- 端到端缺钻孔 → `GB-` 前缀进入 summary/report，stage `partial`；
+- 端到端 `.xln` 并存 → `summary.rules.gerber=partial`；
+- 端到端显式空目录 → 退出码 3、所有制造检查未评估，报告使用
+  「未评估，无法判断…」文案。
+
+执行结果：
+
+```text
+$ node --test tests/*.test.mjs
+ℹ tests 86
+ℹ pass 86
+ℹ fail 0
+
+$ python -B -m pytest -q
+71 passed, 1 warning in 0.64s
+```
+
+### 10.5 样例报告重新生成
+
+```text
+node .agents/skills/ad-happy/scripts/analyze.mjs \
+  --project tests/fixtures/Student-DCDC-Buck-Converter \
+  --gerber tests/fixtures/gerber-basic \
+  --out docs/sample-report
+```
+
+结果：退出码 0、`summary.rules.gerber=pass`、`manifest.stages.gerber=pass`，
+报告「制造文件」章节正常；样例夹具没有触发 finding，因此样例中不出现
+`GB-` 规则 ID，`GB-` 前缀由上述端到端缺钻孔/`.xln` 用例覆盖。
+
+### 10.6 记入 debt、本轮不修
+
+- `pipeline-summary.json` 目前仍只包含 Python 规则层 findings，与合并后的
+  `findings.json` 条数不再一致；该文件仅作中间产物，本轮不改其契约。
+- 尚未用真实 Altium OutJob 导出目录做验收，当前夹具为手工构造的文本
+  Gerber/Excellon。
+- 上游的 zip 输入（`zip_archives`）未接入 AD-Happy。
