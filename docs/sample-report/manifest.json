@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "run": {
-    "id": "20261125-005938-a7fa",
-    "startedAt": "2026-11-24T16:59:38.491Z",
+    "id": "20261125-013647-a5e2",
+    "startedAt": "2026-11-24T17:36:47.066Z",
     "argv": [
       "--project",
       "tests/fixtures/Student-DCDC-Buck-Converter",
@@ -64,6 +64,7 @@
     "connectivity": "pass",
     "python": "pass",
     "gerber": "pass",
+    "bom": "found",
     "report": "pass"
   },
   "documents": [
@@ -147,6 +148,21 @@
     "status": "pass",
     "findings": 0
   },
+  "bom": {
+    "requested": false,
+    "importedPath": null,
+    "status": "found",
+    "findings": 1,
+    "rows": 9,
+    "missingMpn": 1,
+    "missingFootprint": 0,
+    "duplicates": 0,
+    "mismatches": 0,
+    "artifacts": {
+      "bom": "bom.csv",
+      "procurement": "procurement.csv"
+    }
+  },
   "svg": {
     "requested": false,
     "rendered": false
@@ -158,11 +174,13 @@
     "pcb": "pcb.json",
     "findings": "findings.json",
     "pipelineSummary": "pipeline-summary.json",
+    "bom": "bom.csv",
+    "procurement": "procurement.csv",
     "report": "report.html",
     "summary": "summary.json"
   },
   "status": "complete",
   "exitCode": 0,
-  "finishedAt": "2026-11-24T16:59:38.983Z",
-  "durationMs": 465
+  "finishedAt": "2026-11-24T17:36:47.651Z",
+  "durationMs": 564
 }

@@ -295,14 +295,14 @@
     <p class="kicker">AD-Happy 设计审查报告</p>
     <h1>DCDC Buck Converter</h1>
     <dl class="meta">
-      <div><dt>生成时间</dt><dd>2026-11-25 00:59:38</dd></div>
+      <div><dt>生成时间</dt><dd>2026-11-25 01:36:47</dd></div>
     </dl>
   </header>
   <main>
 <section class="panel" id="conclusion">
   <h2>结论</h2>
-  <p class="verdict">未发现必须修复或建议修复的问题，有 2 项可优化；有 1 条规则未评估，不能据此认为全部通过。</p>
-  <ul class="stat-grid"><li class="stat must_fix"><span class="stat-value">0</span><span class="stat-label">必须修复</span></li><li class="stat should_fix"><span class="stat-value">0</span><span class="stat-label">建议修复</span></li><li class="stat nice_to_have"><span class="stat-value">2</span><span class="stat-label">可优化</span></li><li class="stat facts"><span class="stat-value">8</span><span class="stat-label">实测事实</span></li><li class="stat partial"><span class="stat-value">0</span><span class="stat-label">部分完成规则</span></li><li class="stat na"><span class="stat-value">1</span><span class="stat-label">未评估规则</span></li><li class="stat failed"><span class="stat-value">0</span><span class="stat-label">失败规则</span></li></ul>
+  <p class="verdict">未发现必须修复的问题，有 1 项建议修复；有 1 条规则未评估，不能据此认为全部通过。</p>
+  <ul class="stat-grid"><li class="stat must_fix"><span class="stat-value">0</span><span class="stat-label">必须修复</span></li><li class="stat should_fix"><span class="stat-value">1</span><span class="stat-label">建议修复</span></li><li class="stat nice_to_have"><span class="stat-value">2</span><span class="stat-label">可优化</span></li><li class="stat facts"><span class="stat-value">8</span><span class="stat-label">实测事实</span></li><li class="stat partial"><span class="stat-value">0</span><span class="stat-label">部分完成规则</span></li><li class="stat na"><span class="stat-value">1</span><span class="stat-label">未评估规则</span></li><li class="stat failed"><span class="stat-value">0</span><span class="stat-label">失败规则</span></li></ul>
   <p class="note">「未评估」表示输入数据不足，本次没有得出通过或失败的结论；「部分完成」表示规则已运行但部分子检查被跳过。两者都不等同于「通过」。</p>
 </section>
 <section class="panel" id="overview">
@@ -381,6 +381,27 @@
     </tbody>
   </table>
 </section>
+<section class="panel" id="bom">
+  <h2>物料</h2>
+  <p class="hint">来源：由工程解析数据生成。采购清单为离线生成，不联网查询分销商库存，建议渠道留空。</p>
+  <p class="note">发现 1 条物料问题，详见问题清单。</p>
+  <dl class="coverage-grid">
+    <div><dt>元件数</dt><dd>9</dd></div>
+    <div><dt>缺少 MPN</dt><dd>1</dd></div>
+    <div><dt>缺少封装</dt><dd>0</dd></div>
+    <div><dt>重复位号</dt><dd>0</dd></div>
+    <div><dt>原理图与 PCB 不一致</dt><dd>0</dd></div>
+  </dl>
+  <p class="empty">原理图与 PCB 的位号一致。</p>
+  <h3>产物</h3>
+  <table class="status-table" id="bom-paths">
+    <thead><tr><th scope="col">产物</th><th scope="col">路径</th></tr></thead>
+    <tbody>
+      <tr><th scope="row">BOM 文件</th><td><code>d:\Code_all\ad-happy\docs\sample-report\bom.csv</code></td></tr>
+      <tr><th scope="row">采购清单</th><td><code>d:\Code_all\ad-happy\docs\sample-report\procurement.csv</code></td></tr>
+    </tbody>
+  </table>
+</section>
 <section class="panel" id="manufacturing">
   <h2>制造文件</h2>
   <p class="hint">来源：Gerber 分析（复用 kicad-happy 的 Gerber/钻孔检查）。</p>
@@ -409,16 +430,22 @@
 </section>
 <section class="panel" id="findings">
   <h2>问题清单</h2>
-  <p class="hint">共 2 条问题；按严重度分组，组内按规则 ID 排序。实测事实单独列在下一节，不计入问题数量。上游检测器文案已由本地化层翻译成中文；个别无法安全翻译的原文以「（检测器原文）」标注，完整原文见 findings.json 的 source_text。</p>
+  <p class="hint">共 3 条问题；按严重度分组，组内按规则 ID 排序。实测事实单独列在下一节，不计入问题数量。上游检测器文案已由本地化层翻译成中文；个别无法安全翻译的原文以「（检测器原文）」标注，完整原文见 findings.json 的 source_text。</p>
     <section class="severity-group" id="group-must_fix">
       <div class="group-head"><h3>必须修复</h3><span class="group-count">0 条</span></div>
       <p class="group-desc">不修复会导致功能错误或可靠性风险，建议定版前处理。</p>
       <p class="empty">没有此类问题。</p>
     </section>
     <section class="severity-group" id="group-should_fix">
-      <div class="group-head"><h3>建议修复</h3><span class="group-count">0 条</span></div>
+      <div class="group-head"><h3>建议修复</h3><span class="group-count">1 条</span></div>
       <p class="group-desc">存在设计风险或明显的改进空间。</p>
-      <p class="empty">没有此类问题。</p>
+      <article class="finding">
+        <div class="finding-meta"><code class="rule-id">BM-001</code><span class="badge badge-should_fix">建议修复</span><span class="source-tag">BOM 检查</span></div>
+        <h4 class="finding-title">缺少 MPN：1 个元件</h4>
+        <p class="finding-evidence"><span class="label">证据</span>以下位号在工程数据中没有可用的制造商型号（MPN）：IC1。</p>
+        <ul class="locators"><li><span class="locator-key">元件</span>IC1</li></ul>
+        <p class="finding-advice"><span class="label">建议</span>在 Altium 元件参数中补充型号（Part Number/MPN），或导入已有 BOM 与工程数据比对。</p>
+      </article>
     </section>
     <section class="severity-group" id="group-nice_to_have">
       <div class="group-head"><h3>可优化</h3><span class="group-count">2 条</span></div>
@@ -518,6 +545,7 @@
     <table class="status-table">
       <thead><tr><th scope="col">规则</th><th scope="col">状态</th></tr></thead>
       <tbody>
+      <tr><th scope="row"><span class="rule-name">物料（BOM）检查</span><code>bom</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
       <tr><th scope="row"><span class="rule-name">连通性检查</span><code>connectivity</code></th><td><span class="badge badge-pass">通过</span></td></tr>
       <tr><th scope="row"><span class="rule-name">载流能力检查</span><code>current_capacity</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
       <tr><th scope="row"><span class="rule-name">去耦电容检查</span><code>decoupling</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>

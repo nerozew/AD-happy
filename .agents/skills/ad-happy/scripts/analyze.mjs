@@ -5,14 +5,16 @@
 // 用法：
 //   node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>]
 //                    [--project-file <PrjPcb 文件名>]
-//                    [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>] [--svg]
+//                    [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>]
+//                    [--bom <CSV>] [--svg]
 //
 // 退出码：0 完成；2 输入无效；3 部分完成（文档解析失败、规则 failed、
 // Python/Gerber 阶段异常或报告生成失败）。
 //
 // 产物（写入 --out 或 %LOCALAPPDATA%\ad-happy\runs\<run-id>）：
 // manifest.json、snapshot.json、raw.json、pcb.json、findings.json、
-// pipeline-summary.json、gerber.json、summary.json、report.html。
+// pipeline-summary.json、gerber.json、bom.csv、procurement.csv、summary.json、
+// report.html。
 //
 // 源工程只读：--out 落在源工程目录内会被直接拒绝（退出码 2）。
 import { spawnSync } from 'node:child_process'
@@ -37,6 +39,16 @@ import {
 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  bomErrorFinding,
+  buildBom,
+  dedupeBomFindings,
+  diffBom,
+  exportBom,
+  exportProcurement,
+  importBomCsv,
+  recomputeBomStatus,
+} from './bom.mjs'
+import {
   detectGerberDirectory,
   emptyGerberCoverage,
   runGerberAnalysis,
@@ -46,7 +58,7 @@ import { runSelfCheck } from './selfcheck.mjs'
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const PIPELINE_PY = join(SCRIPT_DIR, 'pipeline.py')
 
-const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>] [--project-file <PrjPcb 文件名>] [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>] [--svg]
+const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>] [--project-file <PrjPcb 文件名>] [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>] [--bom <CSV>] [--svg]
 
   --project        包含 .PrjPcb 的工程目录，或 .PrjPcb 文件路径
   --out            输出目录；默认 %LOCALAPPDATA%\\ad-happy\\runs\\<run-id>
@@ -54,6 +66,8 @@ const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--o
   --board          指定要审查的 PcbDoc 文件名；默认文档清单中最后一块
   --gerber         指定 Gerber/钻孔输出目录；省略时自动查找工程下的
                    Gerber、Outputs、Project Outputs、Manufacturing 目录
+  --bom            导入 Altium 导出的 BOM CSV，与解析到的元件比对；
+                   省略时按解析数据生成 bom.csv 与 procurement.csv
   --svg            尝试把选中板卡渲染为 SVG 内联到报告；失败只降级，不中止分析`
 
 // 三组规则的完整键；即使某一侧输入缺失，报告也能展示全部规则状态。
@@ -66,8 +80,9 @@ const SCH_RULES = [
   'shorted_component',
 ]
 const PCB_RULES = ['dfm', 'pad_distance', 'current_capacity', 'decoupling_placement']
-// gerber 是制造文件（Gerber/钻孔）检查，独立于原理图/PCB 解析。
-const ALL_RULES = [...SCH_RULES, ...PCB_RULES, 'pin_pad', 'gerber']
+// gerber 是制造文件（Gerber/钻孔）检查，独立于原理图/PCB 解析；
+// bom 是物料清单检查，独立于 Python 规则层。
+const ALL_RULES = [...SCH_RULES, ...PCB_RULES, 'pin_pad', 'gerber', 'bom']
 // 这些规则依赖原理图网表（decoupling 还依赖可解析电容值）；引脚未全部
 // 入网时，空结果不能视为通过。
 const NETLIST_DEPENDENT_RULES = [
@@ -88,6 +103,8 @@ const ARTIFACT_FILES = [
   'findings.json',
   'pipeline-summary.json',
   'gerber.json',
+  'bom.csv',
+  'procurement.csv',
   'capability_mode.json',
   'summary.json',
   'report.html',
@@ -149,6 +166,10 @@ async function main() {
     console.error(`--gerber 不能为空\n\n${USAGE}`)
     return 2
   }
+  if (options.bom !== null && !options.bom.trim()) {
+    console.error(`--bom 不能为空\n\n${USAGE}`)
+    return 2
+  }
 
   // 输入路径：工程目录，或直接给 .PrjPcb 文件。
   const inputPath = resolve(options.project)
@@ -188,6 +209,23 @@ async function main() {
     options.gerber = gerberPath
   }
 
+  // 显式 --bom 必须是已存在的文件；格式在 BOM 阶段解析，失败不中止其余结果。
+  if (options.bom !== null) {
+    const bomPath = resolve(options.bom)
+    let bomStat
+    try {
+      bomStat = statSync(bomPath)
+    } catch {
+      console.error(`BOM 文件不存在或不可访问: ${bomPath}`)
+      return 2
+    }
+    if (!bomStat.isFile()) {
+      console.error(`--bom 需要文件: ${bomPath}`)
+      return 2
+    }
+    options.bom = bomPath
+  }
+
   const outDir = resolve(options.out ?? defaultOutDir(runId))
   if (isInside(projectDir, outDir)) {
     // 源工程只读：此处不创建任何目录/文件。
@@ -202,7 +240,11 @@ async function main() {
     return 2
   }
   try {
-    const cleanupFailures = clearArtifacts(outDir)
+    const cleanupFailures = clearArtifacts(
+      outDir,
+      // --bom 可能指向上一次运行生成的 bom.csv：先读后清会失败，因此保留输入文件。
+      new Set(options.bom ? [resolve(options.bom)] : []),
+    )
     state = createState({ runId, startedAt, outDir, projectDir, options })
     for (const name of cleanupFailures) {
       state.warnings.push(`无法清理旧产物 ${name}，输出目录中可能残留上次运行的文件`)
@@ -453,14 +495,15 @@ async function executeStages(state) {
   const snapshotPath = join(state.outDir, 'snapshot.json')
   const rawPath = join(state.outDir, 'raw.json')
   const pcbPath = join(state.outDir, 'pcb.json')
-  writeJson(snapshotPath, {
+  const snapshotData = {
     schemaVersion: 1,
     generatedAt,
     project: projectMeta,
     documents: state.documents,
     schematic,
     pcb: pcbSnapshot,
-  })
+  }
+  writeJson(snapshotPath, snapshotData)
   state.artifacts.snapshot = 'snapshot.json'
   writeJson(rawPath, {
     schematic: schematic ?? emptySchematic(),
@@ -520,6 +563,10 @@ async function executeStages(state) {
   state.artifacts.findings = 'findings.json'
   state.artifacts.pipelineSummary = 'pipeline-summary.json'
 
+  // 8.5 BOM（物料清单）检查。独立于 Python 规则层；导入 BOM 解析失败只把
+  //     rules.bom 记为 failed 并产出 BM-ERR，不中止其余结论与报告。
+  const bomStage = runBomStage(state, { snapshot: snapshotData, pcbSnapshot })
+
   // 9. 合并状态：缺失输入对应的规则保持 Python 给出的 not_evaluated；
   //    解析/连通性失败对应的规则强制为 failed，让失败在报告里可见。
   const failedRules = new Set()
@@ -538,6 +585,7 @@ async function executeStages(state) {
     if (typeof value === 'string') ruleStatus[rule] = value
   }
   for (const rule of failedRules) ruleStatus[rule] = 'failed'
+  ruleStatus.bom = bomStage.coverage.status
   if (netlistIncomplete) {
     for (const rule of NETLIST_DEPENDENT_RULES) {
       if (ruleStatus[rule] === 'pass') ruleStatus[rule] = 'not_evaluated'
@@ -553,10 +601,15 @@ async function executeStages(state) {
     ...state.syntheticFindings,
     ...pipelineSummary.findings.filter(isPlainObject),
     ...gerberFindings,
+    ...bomStage.findings,
   ]
-  // Python 只写规则层 findings；解析/连通性失败的 DET-ERR 与 Gerber 结果
-  // 由 Node 补充，保证 findings.json 是完整交付物（报告与 summary 使用同一份合并结果）。
-  if (state.syntheticFindings.length > 0 || gerberFindings.length > 0) {
+  // Python 只写规则层 findings；解析/连通性失败的 DET-ERR、Gerber 与 BOM
+  // 结果由 Node 补充，保证 findings.json 是完整交付物（报告与 summary 使用同一份合并结果）。
+  if (
+    state.syntheticFindings.length > 0
+    || gerberFindings.length > 0
+    || bomStage.findings.length > 0
+  ) {
     writeJson(join(state.outDir, 'findings.json'), findings)
   }
 
@@ -584,6 +637,7 @@ async function executeStages(state) {
     complete: !netlistIncomplete,
   }
   coverage.gerber = gerberStage.coverage
+  coverage.bom = bomStage.coverage
   const missingInputs = []
   if (!selectedBoard) missingInputs.push('pcb')
   if (!selectedSchematic) missingInputs.push('schematic')
@@ -591,6 +645,10 @@ async function executeStages(state) {
   // 自动发现不到 Gerber 目录只记为 not_evaluated，不改变退出码。
   if (state.options.gerber !== null && ruleStatus.gerber === 'not_evaluated') {
     missingInputs.push('gerber')
+  }
+  // 显式导入了 --bom 却没有可评估的工程元件时，同样属于部分完成。
+  if (state.options.bom !== null && ruleStatus.bom === 'not_evaluated') {
+    missingInputs.push('bom')
   }
   const manufacturing = buildManufacturing(gerberStage.coverage, gerberFindings)
 
@@ -615,6 +673,7 @@ async function executeStages(state) {
         selected: document === selectedBoard || document === selectedSchematic,
       })),
       manufacturing,
+      bom: bomStage.report,
       svgs,
     })
     writeFileSync(reportPath, html, 'utf8')
@@ -648,6 +707,7 @@ async function executeStages(state) {
     overallStatus,
     reportPath: reportWritten ? reportPath : null,
     crossCoverage: pipelineSummary.coverage,
+    bom: bomStage.summary,
     severityGroup: reportModule.severityGroup,
   })
   try {
@@ -774,6 +834,235 @@ function buildManufacturing(coverage, findings) {
 }
 
 // ---------------------------------------------------------------------------
+// BOM / 物料清单
+// ---------------------------------------------------------------------------
+
+function runBomStage(state, { snapshot, pcbSnapshot }) {
+  const requested = state.options.bom !== null
+  const importedPath = requested ? state.options.bom : null
+  let project
+  try {
+    project = buildBom(snapshot, pcbSnapshot)
+  } catch (error) {
+    return bomFailure(state, {
+      requested,
+      importedPath,
+      message: `BOM 构建失败：${error?.message ?? error}`,
+    })
+  }
+
+  let findings = [...project.findings]
+  const coverage = project.coverage
+  let bomPath = null
+  let bomGenerated = false
+  let procurementPath = null
+
+  if (requested) {
+    try {
+      const text = readFileSync(importedPath, 'utf8')
+      const imported = importBomCsv(text)
+      const diff = diffBom(project.rows, imported.rows)
+      findings = dedupeBomFindings([...findings, ...diff.findings])
+      coverage.checks.imported_diff = diff.coverage.status
+      coverage.imported = {
+        path: importedPath,
+        rows: imported.coverage.rows,
+        header: imported.coverage.header,
+        columns: imported.coverage.columns,
+        missingColumns: imported.coverage.missingColumns,
+        duplicateDesignators: imported.coverage.duplicateDesignators,
+        missingFromBom: diff.coverage.missingFromBom,
+        extraInBom: diff.coverage.extraInBom,
+      }
+      if (diff.coverage.status === 'not_evaluated') {
+        coverage.reasons.push('工程没有可核对的元件，导入 BOM 未做差异比对。')
+      }
+      coverage.status = recomputeBomStatus(coverage)
+      bomPath = importedPath
+    } catch (error) {
+      const message = `BOM 导入失败：${truncateText(error?.message ?? error, 400)}`
+      coverage.checks.imported_diff = 'failed'
+      coverage.status = 'failed'
+      coverage.reasons.push(message)
+      findings.push(bomErrorFinding(message))
+      bomPath = importedPath
+    }
+  } else {
+    try {
+      exportBom(project.rows, join(state.outDir, 'bom.csv'))
+      bomPath = join(state.outDir, 'bom.csv')
+      bomGenerated = true
+      state.artifacts.bom = 'bom.csv'
+    } catch (error) {
+      const message = `BOM 文件写入失败：${truncateText(error?.message ?? error, 400)}`
+      coverage.status = 'failed'
+      coverage.reasons.push(message)
+      findings.push(bomErrorFinding(message))
+    }
+  }
+
+  // 采购清单始终基于工程解析结果；导入的 BOM 只用于差异比对，不覆盖工程数据。
+  try {
+    const path = join(state.outDir, 'procurement.csv')
+    exportProcurement(project.rows, path)
+    procurementPath = path
+    state.artifacts.procurement = 'procurement.csv'
+  } catch (error) {
+    const message = `采购清单写入失败：${truncateText(error?.message ?? error, 400)}`
+    coverage.status = 'failed'
+    coverage.reasons.push(message)
+    findings.push(bomErrorFinding(message))
+  }
+
+  coverage.findings = findings.length
+  state.manifest.stages.bom = coverage.status
+  state.manifest.bom = {
+    requested,
+    importedPath,
+    status: coverage.status,
+    findings: findings.length,
+    rows: coverage.rows,
+    missingMpn: coverage.rowsMissingMpn,
+    missingFootprint: coverage.rowsMissingFootprint,
+    duplicates: coverage.duplicateDesignators.length,
+    mismatches: coverage.schematicOnly.length + coverage.pcbOnly.length,
+    artifacts: {
+      bom: bomGenerated ? 'bom.csv' : null,
+      procurement: procurementPath ? 'procurement.csv' : null,
+    },
+  }
+
+  if (coverage.status === 'failed') {
+    if (!state.errors.some(error => error.stage === 'bom')) {
+      state.errors.push({
+        stage: 'bom',
+        message: '物料清单检查失败',
+        details: coverage.reasons.join('；') || '（无错误输出）',
+      })
+    }
+  } else if (coverage.status === 'not_evaluated') {
+    state.warnings.push(
+      `物料检查未评估：${coverage.reasons.join('；') || '没有可检查的元件'}`,
+    )
+  } else if (coverage.status === 'partial') {
+    state.warnings.push(
+      `物料检查部分完成：${coverage.reasons.join('；') || '部分检查被跳过'}`,
+    )
+  }
+
+  return {
+    findings,
+    coverage,
+    report: buildBomReport(coverage, {
+      findings,
+      bomPath,
+      bomGenerated,
+      procurementPath,
+    }),
+    summary: buildBomSummary(coverage, { bomPath, procurementPath }),
+  }
+}
+
+function bomFailure(state, { requested, importedPath, message }) {
+  const finding = bomErrorFinding(message)
+  const coverage = {
+    status: 'failed',
+    rows: 0,
+    components: 0,
+    schematicComponents: 0,
+    pcbComponents: 0,
+    componentsWithoutReference: 0,
+    rowsWithMpn: 0,
+    rowsMissingMpn: 0,
+    rowsWithFootprint: 0,
+    rowsMissingFootprint: 0,
+    duplicateDesignators: [],
+    schematicOnly: [],
+    pcbOnly: [],
+    checks: {
+      missing_mpn: 'failed',
+      missing_footprint: 'failed',
+      duplicate_designator: 'failed',
+      schematic_pcb_match: 'failed',
+    },
+    reasons: [message],
+    findings: 1,
+    imported: null,
+  }
+  state.manifest.stages.bom = 'failed'
+  state.manifest.bom = {
+    requested,
+    importedPath,
+    status: 'failed',
+    findings: 1,
+    rows: 0,
+    missingMpn: 0,
+    missingFootprint: 0,
+    duplicates: 0,
+    mismatches: 0,
+    artifacts: { bom: null, procurement: null },
+  }
+  state.errors.push({ stage: 'bom', message: '物料清单检查失败', details: message })
+  return {
+    findings: [finding],
+    coverage,
+    report: buildBomReport(coverage, {
+      findings: [finding],
+      bomPath: requested ? importedPath : null,
+      bomGenerated: false,
+      procurementPath: null,
+    }),
+    summary: buildBomSummary(coverage, { bomPath: null, procurementPath: null }),
+  }
+}
+
+function buildBomReport(coverage, { findings, bomPath, bomGenerated, procurementPath }) {
+  return {
+    status: coverage.status,
+    components: coverage.rows,
+    schematicComponents: coverage.schematicComponents,
+    pcbComponents: coverage.pcbComponents,
+    rowsWithMpn: coverage.rowsWithMpn,
+    rowsMissingMpn: coverage.rowsMissingMpn,
+    rowsWithFootprint: coverage.rowsWithFootprint,
+    rowsMissingFootprint: coverage.rowsMissingFootprint,
+    duplicateDesignators: coverage.duplicateDesignators,
+    schematicOnly: coverage.schematicOnly,
+    pcbOnly: coverage.pcbOnly,
+    checks: coverage.checks,
+    reasons: coverage.reasons,
+    findings: findings.length,
+    bomPath,
+    bomGenerated,
+    procurementPath,
+    imported: coverage.imported,
+  }
+}
+
+function buildBomSummary(coverage, { bomPath, procurementPath }) {
+  return {
+    status: coverage.status,
+    components: coverage.rows,
+    rowsWithMpn: coverage.rowsWithMpn,
+    rowsMissingMpn: coverage.rowsMissingMpn,
+    rowsMissingFootprint: coverage.rowsMissingFootprint,
+    duplicateDesignators: coverage.duplicateDesignators.length,
+    schematicOnly: coverage.schematicOnly.length,
+    pcbOnly: coverage.pcbOnly.length,
+    bomPath,
+    procurementPath,
+    imported: coverage.imported
+      ? {
+        path: coverage.imported.path,
+        rows: coverage.imported.rows,
+        missingFromBom: coverage.imported.missingFromBom.length,
+        extraInBom: coverage.imported.extraInBom.length,
+      }
+      : null,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // summary.json
 // ---------------------------------------------------------------------------
 
@@ -787,6 +1076,7 @@ function buildSummary(state, context) {
     overallStatus,
     reportPath,
     crossCoverage,
+    bom,
     severityGroup,
   } = context
 
@@ -830,6 +1120,7 @@ function buildSummary(state, context) {
     status: overallStatus,
     schematic: overview.schematic,
     pcb: overview.pcb,
+    bom: bom ?? null,
     coverage: {
       ...coverage,
       crossCheck: summarizeCrossCoverage(crossCoverage),
@@ -1056,12 +1347,14 @@ function createState({ runId, startedAt, outDir, projectDir, options }) {
         connectivity: 'skipped',
         python: 'skipped',
         gerber: 'skipped',
+        bom: 'skipped',
         report: 'skipped',
       },
       documents: [],
       errors: [],
       warnings: [],
       gerber: null,
+      bom: null,
       svg: null,
       artifacts: null,
       status: 'running',
@@ -1229,6 +1522,12 @@ function printCompletion(state, summary, reportPath, exitCode) {
   console.log(
     `问题：必须修复 ${counts.must_fix} / 建议修复 ${counts.should_fix} / 可优化 ${counts.nice_to_have}`,
   )
+  if (summary.bom) {
+    console.log(
+      `物料：${summary.bom.components} 个元件；缺 MPN ${summary.bom.rowsMissingMpn}；`
+      + `缺封装 ${summary.bom.rowsMissingFootprint}；状态 ${summary.bom.status}`,
+    )
+  }
   if (reportPath) console.log(`报告：${reportPath}`)
   console.log(
     `版本：Node ${env.node ?? '?'} / altiumts ${env.altiumts ?? '?'} / Python ${env.python ?? '?'}`,
@@ -1249,6 +1548,7 @@ function parseArgs(argv) {
     projectFile: null,
     board: null,
     gerber: null,
+    bom: null,
     svg: false,
     help: false,
   }
@@ -1286,6 +1586,12 @@ function parseArgs(argv) {
       case '--gerber': {
         const taken = takeValue(key, inline, argv, index)
         options.gerber = taken.value
+        index = taken.index
+        break
+      }
+      case '--bom': {
+        const taken = takeValue(key, inline, argv, index)
+        options.bom = taken.value
         index = taken.index
         break
       }
@@ -1393,11 +1699,13 @@ function isOwnRunMarker(markerPath) {
   }
 }
 
-function clearArtifacts(outDir) {
+function clearArtifacts(outDir, preserve = new Set()) {
   const failures = []
   for (const name of ARTIFACT_FILES) {
+    const path = join(outDir, name)
+    if (preserve.has(resolve(path))) continue
     try {
-      rmSync(join(outDir, name), { force: true })
+      rmSync(path, { force: true })
     } catch {
       // 不静默：清理失败会写入 manifest.warnings，避免旧报告被误认为本次结果。
       failures.push(name)

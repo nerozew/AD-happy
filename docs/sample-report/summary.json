@@ -35,7 +35,7 @@
       }
     ]
   },
-  "generatedAt": "2026-11-25 00:59:38",
+  "generatedAt": "2026-11-25 01:36:47",
   "status": "complete",
   "schematic": {
     "components": 9,
@@ -53,6 +53,19 @@
     "arcs": 0,
     "vias": 7,
     "rules": 35
+  },
+  "bom": {
+    "status": "found",
+    "components": 9,
+    "rowsWithMpn": 8,
+    "rowsMissingMpn": 1,
+    "rowsMissingFootprint": 0,
+    "duplicateDesignators": 0,
+    "schematicOnly": 0,
+    "pcbOnly": 0,
+    "bomPath": "d:\\Code_all\\ad-happy\\docs\\sample-report\\bom.csv",
+    "procurementPath": "d:\\Code_all\\ad-happy\\docs\\sample-report\\procurement.csv",
+    "imported": null
   },
   "coverage": {
     "documents": 9,
@@ -95,6 +108,30 @@
       "reasons": [],
       "findings": 0
     },
+    "bom": {
+      "status": "found",
+      "rows": 9,
+      "components": 9,
+      "schematicComponents": 9,
+      "pcbComponents": 9,
+      "componentsWithoutReference": 0,
+      "rowsWithMpn": 8,
+      "rowsMissingMpn": 1,
+      "rowsWithFootprint": 9,
+      "rowsMissingFootprint": 0,
+      "duplicateDesignators": [],
+      "schematicOnly": [],
+      "pcbOnly": [],
+      "checks": {
+        "missing_mpn": "found",
+        "missing_footprint": "pass",
+        "duplicate_designator": "pass",
+        "schematic_pcb_match": "pass"
+      },
+      "reasons": [],
+      "findings": 1,
+      "imported": null
+    },
     "crossCheck": {
       "compared": 22,
       "exact": 22,
@@ -105,13 +142,13 @@
   },
   "counts": {
     "must_fix": 0,
-    "should_fix": 0,
+    "should_fix": 1,
     "nice_to_have": 2,
-    "total": 2,
+    "total": 3,
     "facts": 8,
     "rules": {
       "pass": 6,
-      "found": 5,
+      "found": 6,
       "partial": 0,
       "not_evaluated": 1,
       "failed": 0
@@ -129,7 +166,8 @@
     "current_capacity": "found",
     "decoupling_placement": "found",
     "pin_pad": "pass",
-    "gerber": "pass"
+    "gerber": "pass",
+    "bom": "found"
   },
   "findings": [
     {
@@ -219,6 +257,22 @@
         "SW"
       ],
       "pins": []
+    },
+    {
+      "rule_id": "BM-001",
+      "detector": "bom",
+      "kind": "issue",
+      "severity": "warning",
+      "group": "should_fix",
+      "title": "缺少 MPN：1 个元件",
+      "evidence": "以下位号在工程数据中没有可用的制造商型号（MPN）：IC1。",
+      "components": [
+        "IC1"
+      ],
+      "nets": [],
+      "pins": [],
+      "source": "bom",
+      "recommendation": "在 Altium 元件参数中补充型号（Part Number/MPN），或导入已有 BOM 与工程数据比对。"
     },
     {
       "rule_id": "PD-DET",

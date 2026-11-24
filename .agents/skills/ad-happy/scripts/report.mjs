@@ -59,11 +59,13 @@ const RULE_LABELS = {
   decoupling_placement: '去耦布局检查',
   pin_pad: '原理图与 PCB 引脚网络对照',
   gerber: '制造文件（Gerber/钻孔）检查',
+  bom: '物料（BOM）检查',
 }
 
 // 分析来源 → 报告展示名。目前只有 Gerber 复用层需要额外标注来源。
 const SOURCE_LABELS = {
   gerber: 'Gerber 分析',
+  bom: 'BOM 检查',
 }
 
 // 制造文件子检查 → 中文名。
@@ -78,6 +80,15 @@ const MANUFACTURING_CHECK_LABELS = {
 const UNIT_LABELS = {
   mm: '毫米（mm）',
   inch: '英寸（inch）',
+}
+
+// 物料检查项 → 中文名。
+const BOM_CHECK_LABELS = {
+  missing_mpn: '缺少 MPN',
+  missing_footprint: '缺少封装',
+  duplicate_designator: '重复位号',
+  schematic_pcb_match: '原理图与 PCB 位号一致',
+  imported_diff: '导入 BOM 差异',
 }
 
 // 文档类型 → 中文名；未知类型按「其他」展示。
@@ -139,6 +150,7 @@ function normalizeReport(data) {
     status: isPlainObject(source.status) ? source.status : {},
     boards: normalizeDocuments(source.boards),
     manufacturing: normalizeManufacturing(source.manufacturing),
+    bom: normalizeBom(source.bom),
     svgs: Array.isArray(source.svgs) ? source.svgs : [],
   }
 }
@@ -236,6 +248,47 @@ function normalizeDimensions(value) {
   return { width, height, area: countValue(value.areaMm2) }
 }
 
+function normalizeBom(value) {
+  if (!isPlainObject(value)) return null
+  const checks = isPlainObject(value.checks) ? value.checks : {}
+  const normalizedChecks = {}
+  for (const [key, status] of Object.entries(checks)) {
+    const text = scalarText(status)
+    if (text) normalizedChecks[key] = text
+  }
+  return {
+    status: scalarText(value.status) || 'not_evaluated',
+    components: countValue(value.components),
+    schematicComponents: countValue(value.schematicComponents),
+    pcbComponents: countValue(value.pcbComponents),
+    rowsWithMpn: countValue(value.rowsWithMpn),
+    rowsMissingMpn: countValue(value.rowsMissingMpn),
+    rowsWithFootprint: countValue(value.rowsWithFootprint),
+    rowsMissingFootprint: countValue(value.rowsMissingFootprint),
+    duplicateDesignators: stringList(value.duplicateDesignators),
+    schematicOnly: stringList(value.schematicOnly),
+    pcbOnly: stringList(value.pcbOnly),
+    checks: normalizedChecks,
+    reasons: stringList(value.reasons),
+    findings: countValue(value.findings),
+    bomPath: scalarText(value.bomPath),
+    bomGenerated: value.bomGenerated === true,
+    procurementPath: scalarText(value.procurementPath),
+    imported: normalizeImportedBom(value.imported),
+  }
+}
+
+function normalizeImportedBom(value) {
+  if (!isPlainObject(value)) return null
+  return {
+    path: scalarText(value.path),
+    rows: countValue(value.rows),
+    missingFromBom: stringList(value.missingFromBom),
+    extraInBom: stringList(value.extraInBom),
+    missingColumns: stringList(value.missingColumns),
+  }
+}
+
 function stringList(value) {
   if (!Array.isArray(value)) return []
   return value.map(scalarText).filter(Boolean)
@@ -280,6 +333,7 @@ function renderBody(report) {
     renderConclusion(report),
     renderOverview(report),
     renderDocuments(report),
+    renderBom(report),
     renderManufacturing(report),
     renderFindings(report),
     renderFacts(report),
@@ -434,6 +488,146 @@ function renderDocuments({ boards }) {
     '    </tbody>',
     '  </table>',
     notes.length ? `  <p class="note">${escapeHtml(notes.join(' '))}</p>` : '',
+    '</section>',
+  ].filter(Boolean).join('\n')
+}
+
+// 「物料」：元件数、缺 MPN/封装、重复位号、原理图↔PCB 不一致与产物路径。
+// 未评估的检查显式写「未评估」，不得显示成 0 或「通过」。
+function renderBom({ bom }) {
+  if (!bom) return ''
+  const check = key => scalarText(bom.checks[key])
+  const countOrState = (key, count) => {
+    const status = check(key)
+    if (status === 'not_evaluated') return '未评估'
+    if (status === 'failed') return '失败'
+    if (status === 'partial') return '部分完成'
+    return String(count)
+  }
+  const mismatchCount = bom.schematicOnly.length + bom.pcbOnly.length
+  const imported = bom.imported
+  const importedDiffCount = imported
+    ? imported.missingFromBom.length + imported.extraInBom.length
+    : 0
+
+  const rows = [
+    ['元件数', String(bom.components)],
+    ['缺少 MPN', countOrState('missing_mpn', bom.rowsMissingMpn)],
+    ['缺少封装', countOrState('missing_footprint', bom.rowsMissingFootprint)],
+    ['重复位号', countOrState('duplicate_designator', bom.duplicateDesignators.length)],
+    ['原理图与 PCB 不一致', countOrState('schematic_pcb_match', mismatchCount)],
+  ]
+  if (imported) {
+    rows.push(['导入 BOM 差异', countOrState('imported_diff', importedDiffCount)])
+  }
+  const grid = rows
+    .map(([label, value]) => `    <div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`)
+    .join('\n')
+
+  let statusText
+  if (bom.status === 'not_evaluated') {
+    statusText = `本次未评估物料检查${bom.reasons.length ? `：${bom.reasons.join('；')}` : '。'}`
+  } else if (bom.status === 'failed') {
+    statusText = `物料检查执行失败${bom.reasons.length ? `：${bom.reasons.join('；')}` : '。'}`
+  } else if (bom.status === 'partial') {
+    statusText = '物料检查部分完成；未评估的项目不代表通过。'
+  } else if (bom.findings > 0) {
+    statusText = `发现 ${bom.findings} 条物料问题，详见问题清单。`
+  } else {
+    statusText = '未发现物料问题。'
+  }
+
+  const reasons = bom.reasons.length
+    ? [
+        '  <h3>未评估与限制说明</h3>',
+        '  <ul class="status-list" id="bom-reasons">',
+        ...bom.reasons.map(reason => `    <li><span class="detail">${escapeHtml(reason)}</span></li>`),
+        '  </ul>',
+      ].join('\n')
+    : ''
+
+  const duplicates = bom.duplicateDesignators.length
+    ? [
+        '  <h3>重复位号</h3>',
+        '  <ul class="layer-list" id="bom-duplicates">',
+        ...bom.duplicateDesignators.map(reference => `    <li><code>${escapeHtml(reference)}</code></li>`),
+        '  </ul>',
+      ].join('\n')
+    : ''
+
+  const mismatchItems = [
+    ...bom.schematicOnly.map(reference => ({ reference, side: '仅原理图' })),
+    ...bom.pcbOnly.map(reference => ({ reference, side: '仅 PCB' })),
+  ]
+  let mismatches = ''
+  if (check('schematic_pcb_match') === 'not_evaluated') {
+    mismatches = '  <p class="empty">未评估：缺少一侧元件清单，无法比对原理图与 PCB 位号。</p>'
+  } else if (check('schematic_pcb_match') === 'failed') {
+    mismatches = '  <p class="empty">检查执行失败，无法判断原理图与 PCB 位号是否一致。</p>'
+  } else if (mismatchItems.length > 0) {
+    mismatches = [
+      '  <h3>原理图与 PCB 不一致</h3>',
+      '  <ul class="status-list" id="bom-mismatches">',
+      ...mismatchItems.map(item => `    <li><code>${escapeHtml(item.reference)}</code><span class="rule-name">${escapeHtml(item.side)}</span></li>`),
+      '  </ul>',
+    ].join('\n')
+  } else {
+    mismatches = '  <p class="empty">原理图与 PCB 的位号一致。</p>'
+  }
+
+  let importedSection = ''
+  if (imported) {
+    const lines = [
+      '  <h3>导入 BOM 比对</h3>',
+      `  <p class="hint">导入文件：<code>${escapeHtml(imported.path)}</code>；解析到 ${imported.rows} 行。</p>`,
+    ]
+    if (imported.missingColumns.length > 0) {
+      lines.push(`  <p class="note">导入文件缺少列：${escapeHtml(imported.missingColumns.join('、'))}；缺失列按空值处理。</p>`)
+    }
+    if (imported.missingFromBom.length > 0) {
+      lines.push('  <h4>工程有、BOM 没有</h4>')
+      lines.push(`  <p class="detail">${escapeHtml(imported.missingFromBom.join('、'))}</p>`)
+    }
+    if (imported.extraInBom.length > 0) {
+      lines.push('  <h4>BOM 有、工程没有</h4>')
+      lines.push(`  <p class="detail">${escapeHtml(imported.extraInBom.join('、'))}</p>`)
+    }
+    if (imported.missingFromBom.length === 0 && imported.extraInBom.length === 0) {
+      lines.push('  <p class="empty">导入 BOM 与工程解析的位号一致。</p>')
+    }
+    importedSection = lines.join('\n')
+  }
+
+  const bomPath = bom.bomPath
+    ? `<code>${escapeHtml(bom.bomPath)}</code>`
+    : '未生成'
+  const procurementPath = bom.procurementPath
+    ? `<code>${escapeHtml(bom.procurementPath)}</code>`
+    : '未生成'
+  const sourceText = bom.bomGenerated
+    ? '由工程解析数据生成'
+    : bom.bomPath ? '导入的 Altium BOM' : '未生成'
+
+  return [
+    '<section class="panel" id="bom">',
+    '  <h2>物料</h2>',
+    `  <p class="hint">来源：${escapeHtml(sourceText)}。采购清单为离线生成，不联网查询分销商库存，建议渠道留空。</p>`,
+    `  <p class="note${bom.status === 'failed' || bom.status === 'not_evaluated' || bom.status === 'partial' ? ' note-warn' : ''}">${escapeHtml(statusText)}</p>`,
+    '  <dl class="coverage-grid">',
+    grid,
+    '  </dl>',
+    reasons,
+    duplicates,
+    mismatches,
+    importedSection,
+    '  <h3>产物</h3>',
+    '  <table class="status-table" id="bom-paths">',
+    '    <thead><tr><th scope="col">产物</th><th scope="col">路径</th></tr></thead>',
+    '    <tbody>',
+    `      <tr><th scope="row">BOM 文件</th><td>${bomPath}</td></tr>`,
+    `      <tr><th scope="row">采购清单</th><td>${procurementPath}</td></tr>`,
+    '    </tbody>',
+    '  </table>',
     '</section>',
   ].filter(Boolean).join('\n')
 }

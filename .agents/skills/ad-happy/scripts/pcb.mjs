@@ -22,7 +22,7 @@ const STACK_SOURCES = ['v8', 'v7', 'legacy']
 /**
  * @param {string} path PcbDoc 文件路径
  * @returns {{
- *   components: Array<{ reference: string, footprint: string, x: number, y: number, angle: number, layer: string }>,
+ *   components: Array<{ reference: string, value: string, footprint: string, mpn: string, description: string, x: number, y: number, angle: number, layer: string }>,
  *   pads: Array<{ componentIndex: number, netIndex: number, name: string, x: number, y: number, drillMil: number, plated: boolean, type: 'smd' | 'thru_hole' | 'np_thru_hole' }>,
  *   nets: string[],
  *   tracks: Array<{ netIndex: number, layer: string, widthMil: number, x1: number, y1: number, x2: number, y2: number }>,
@@ -65,12 +65,38 @@ function toComponent(record) {
   const position = record.position ?? { x: 0, y: 0 }
   return {
     reference: record.designator ?? '',
+    // COMMENT 在部分 PcbDoc 中不存在；此时 value 为空，由 BOM 层回退到原理图值。
+    value: record.comment ?? '',
     footprint: record.footprint ?? '',
+    // MPN 不是 PcbDoc 的标准字段；只有元件记录显式带型号参数时才取值。
+    mpn: readComponentMpn(record),
+    description: record.getCaseInsensitive('SOURCEDESCRIPTION') ?? '',
     x: position.x * MIL_TO_MM,
     y: position.y * MIL_TO_MM,
     angle: record.rotation ?? 0,
     layer: record.getCaseInsensitive('LAYER') ?? (record.side === 'bottom' ? 'BOTTOM' : 'TOP'),
   }
+}
+
+// 型号字段名归一化后匹配；PcbDoc 通常没有 MPN，匹配不到时返回空串，不猜。
+const MPN_COMPONENT_FIELDS = new Set([
+  'mpn',
+  'manufacturerpartnumber',
+  'manufacturerpartno',
+  'mfrpartnumber',
+  'mfrpartno',
+  'partnumber',
+  'partno',
+])
+
+function readComponentMpn(record) {
+  for (const item of record.items ?? []) {
+    const key = String(item?.key ?? '').toLowerCase().replace(/[^a-z0-9]/gu, '')
+    if (!MPN_COMPONENT_FIELDS.has(key)) continue
+    const text = String(item?.value ?? '').trim()
+    if (text) return text
+  }
+  return ''
 }
 
 // 焊盘按元件归属收集；未归属任何元件的焊盘（COMPONENT=65535）也保留，componentIndex 记 -1。

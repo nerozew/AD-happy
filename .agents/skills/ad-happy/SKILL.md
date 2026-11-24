@@ -54,7 +54,7 @@ description: 审查 Altium Designer 工程（.PrjPcb/.SchDoc/.PcbDoc）：用户
 ### 3. 运行分析
 
 ```bash
-node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [--project-file "<PrjPcb 文件名>"] [--board "<PcbDoc 文件名>"] [--gerber "<Gerber 目录>"] [--with-ad]
+node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [--project-file "<PrjPcb 文件名>"] [--board "<PcbDoc 文件名>"] [--gerber "<Gerber 目录>"] [--bom "<BOM CSV>"] [--with-ad]
 ```
 
 - `<路径>`：第 2 步确认的工程目录绝对路径（也可直接给 `.PrjPcb` 文件路径）。
@@ -62,6 +62,7 @@ node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [
 - 同一目录有多个工程时，追加 `--project-file "<PrjPcb 文件名>"`。
 - 默认审查文档清单中的最后一块 `PcbDoc`；用户指定板卡时追加 `--board "<PcbDoc 文件名>"`。
 - 用户提供了 Gerber/钻孔输出目录时追加 `--gerber "<目录>"`；省略时 CLI 自动查找工程下的 `Gerber`、`Outputs`、`Project Outputs`、`Manufacturing`。找不到或缺少钻孔文件时，制造文件检查会标记为未评估，汇报时如实说明。
+- 用户提供了 Altium 导出的 BOM CSV 时追加 `--bom "<CSV>"`，CLI 会把它与解析到的元件比对；省略时按解析数据生成 `bom.csv` 与 `procurement.csv`。采购清单不联网，缺 MPN 的元件在报告中单独标出。
 - 用户选择深度模式且 AD 已启动时追加 `--with-ad`；否则不要加。
 - 命令失败时按退出码处理（见下），不要改用其他方式自行解析工程。
 

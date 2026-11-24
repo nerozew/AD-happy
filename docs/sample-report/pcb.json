@@ -2,7 +2,10 @@
   "components": [
     {
       "reference": "J2",
+      "value": "",
       "footprint": "TE 282834-2",
+      "mpn": "",
+      "description": "TERM BLK 2P SIDE ENT 2.54MM PCB",
       "x": 140.77499912,
       "y": 41.700000419999995,
       "angle": 90,
@@ -10,7 +13,10 @@
     },
     {
       "reference": "R2",
+      "value": "",
       "footprint": "RES 0805_2012",
+      "mpn": "",
+      "description": "RES SMD 10K OHM 1% 1/8W 0805",
       "x": 159.70000063999998,
       "y": 33.87499956,
       "angle": 180,
@@ -18,7 +24,10 @@
     },
     {
       "reference": "R1",
+      "value": "",
       "footprint": "RES 0805_2012",
+      "mpn": "",
+      "description": "RES SMD 56.2K OHM 0.1% 1/4W 0805",
       "x": 159.72499932,
       "y": 36.02500034,
       "angle": 0,
@@ -26,7 +35,10 @@
     },
     {
       "reference": "L1",
+      "value": "",
       "footprint": "TDK SPM3012-LR",
+      "mpn": "",
+      "description": "FIXED IND 4.7UH 1.8A 199.1 MOHM",
       "x": 148.209,
       "y": 39.497,
       "angle": 90,
@@ -34,7 +46,10 @@
     },
     {
       "reference": "J1",
+      "value": "",
       "footprint": "TE 282834-2",
+      "mpn": "",
+      "description": "TERM BLK 2P SIDE ENT 2.54MM PCB",
       "x": 140.75000044,
       "y": 35.320000480000004,
       "angle": 90,
@@ -42,7 +57,10 @@
     },
     {
       "reference": "IC1",
+      "value": "",
       "footprint": "SOT95P280X110-6N",
+      "mpn": "",
+      "description": "Buck Switching Regulator IC Positive Adjustable 0.76V 1 Output 1A SOT-23-6 Thin, TSOT-23-6",
       "x": 155.34099996,
       "y": 36.449,
       "angle": 0,
@@ -50,7 +68,10 @@
     },
     {
       "reference": "C3",
+      "value": "",
       "footprint": "CAP 1210_3225 - 2.8MM",
+      "mpn": "",
+      "description": "CAP CER 47UF 16V X6S 1210",
       "x": 152.27500152,
       "y": 40.27499946,
       "angle": 180,
@@ -58,7 +79,10 @@
     },
     {
       "reference": "C2",
+      "value": "",
       "footprint": "CAP 0805_2012",
+      "mpn": "",
+      "description": "CAP CER 22UF 16V X5R 0805",
       "x": 150.57499983999998,
       "y": 36.47499944,
       "angle": 270,
@@ -66,7 +90,10 @@
     },
     {
       "reference": "C1",
+      "value": "",
       "footprint": "CAP 0805_2012",
+      "mpn": "",
+      "description": "CAP CER 0.1UF 50V X7R 0805",
       "x": 157.15000066,
       "y": 39.69999934,
       "angle": 180,

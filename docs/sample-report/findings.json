@@ -24,12 +24,12 @@
     "r_top": {
       "ref": "R1",
       "value": "56.2 kOhms",
-      "ohms": 56200.0
+      "ohms": 56200
     },
     "r_bottom": {
       "ref": "R2",
       "value": "10 kOhms",
-      "ohms": 10000.0
+      "ohms": 10000
     },
     "top_net": "OUT",
     "mid_net": "FB",
@@ -100,17 +100,17 @@
     "feedback_divider": {
       "r_top": {
         "ref": "R1",
-        "ohms": 56200.0,
+        "ohms": 56200,
         "value": "56.2 kOhms"
       },
       "r_bottom": {
         "ref": "R2",
-        "ohms": 10000.0,
+        "ohms": 10000,
         "value": "10 kOhms"
       },
       "ratio": 0.151057
     },
-    "switching_frequency_hz": 500000.0,
+    "switching_frequency_hz": 500000,
     "freq_source": "topology_default",
     "provenance": {
       "evidence": "reg_sw_pin_only",
@@ -125,7 +125,7 @@
       {
         "ref": "C2",
         "value": "22µF",
-        "farads": 2.2e-05,
+        "farads": 0.000022,
         "package": "0805"
       }
     ],
@@ -602,5 +602,24 @@
       "C3"
     ],
     "finding_id": "pcb:decoupling-IC1"
+  },
+  {
+    "detector": "bom",
+    "rule_id": "BM-001",
+    "category": "bom",
+    "kind": "issue",
+    "severity": "warning",
+    "confidence": "deterministic",
+    "evidence_source": "file",
+    "source": "bom",
+    "title": "缺少 MPN：1 个元件",
+    "summary": "缺少 MPN：1 个元件",
+    "evidence": "以下位号在工程数据中没有可用的制造商型号（MPN）：IC1。",
+    "recommendation": "在 Altium 元件参数中补充型号（Part Number/MPN），或导入已有 BOM 与工程数据比对。",
+    "components": [
+      "IC1"
+    ],
+    "nets": [],
+    "pins": []
   }
 ]

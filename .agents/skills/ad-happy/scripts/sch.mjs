@@ -40,7 +40,7 @@ const ELECTRICAL_BY_NAME = {
  * recordIndex 是元件在 doc.records 中的下标；pins[].componentIndex 是 components 数组下标。
  * @param {string} path SchDoc 文件路径
  * @returns {{
- *   components: Array<{ recordIndex: number, reference: string, comment: string, footprint: string, x: number, y: number, pins: string[] }>,
+ *   components: Array<{ recordIndex: number, reference: string, comment: string, footprint: string, parameters: Record<string, string>, x: number, y: number, pins: string[] }>,
  *   pins: Array<{ componentIndex: number, number: string, name: string, electrical: string, x: number, y: number, xHotspot: number, yHotspot: number, orientation: 0|1|2|3, lengthMil: number }>,
  *   wires: Array<{ x1: number, y1: number, x2: number, y2: number, points: Array<{ x: number, y: number }> }>,
  *   labels: Array<{ text: string, x: number, y: number, kind: 'net' | 'power' }>,
@@ -65,6 +65,9 @@ export function parseSch(path) {
       reference: designators.get(componentRecordIndex) ?? '',
       comment: readComment(component, ownedBy.get(componentRecordIndex) ?? []),
       footprint: readFootprint(ownedBy, recordIndex, componentRecordIndex),
+      // 元件自带参数（RECORD=41）原样保留：BOM 检查从中读取 Part Number/MPN、
+      // 制造商与供应商料号等字段，解析层不判断哪些参数是型号。
+      parameters: readParameters(ownedBy.get(componentRecordIndex) ?? []),
       x: component.position?.x ?? 0,
       y: component.position?.y ?? 0,
       pins: componentPins,
@@ -182,6 +185,20 @@ function readComment(component, ownedRecords) {
   const parameterName = comment.slice(1).trim()
   const parameter = parameters.find(record => normalizeKey(record.name) === normalizeKey(parameterName))
   return parameter?.text ?? comment
+}
+
+// 元件自带参数（RECORD=41）按参数名收集；同名参数只保留第一条。
+// 文档级参数（ownerIndex 为空）不属于元件，不会出现在这里。
+function readParameters(ownedRecords) {
+  const parameters = Object.create(null)
+  for (const record of ownedRecords) {
+    if (record.recordKind !== '41') continue
+    const name = String(record.name ?? '').trim()
+    const text = String(record.text ?? '').trim()
+    if (!name || !text || parameters[name] !== undefined) continue
+    parameters[name] = text
+  }
+  return parameters
 }
 
 // 封装名在 RECORD=44（实现清单）→ RECORD=45（模型）的 owner 链上。
