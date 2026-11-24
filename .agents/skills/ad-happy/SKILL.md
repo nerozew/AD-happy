@@ -38,7 +38,7 @@ node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [
 ```
 
 - `<路径>`：第 2 步确认的工程目录绝对路径（也可直接给 `.PrjPcb` 文件路径）。
-- `<输出目录>`：源工程**之外**的绝对路径。用户没有指定时，使用 CLI 默认输出目录（省略 `--out`，产物位于 `%LOCALAPPDATA%\ad-happy\runs\<run-id>`），不要自行拼接 `%TEMP%` 等字面量。输出到源工程内会被拒绝。
+- `<输出目录>`：源工程**之外**的绝对路径。用户没有指定时，使用 CLI 默认输出目录（省略 `--out`，产物位于 `%LOCALAPPDATA%\ad-happy\runs\<run-id>`）；需要自行指定临时目录时，使用当前 shell 解析得到的临时目录绝对路径，不要自行拼接 `%TEMP%` 等字面量。输出到源工程内会被拒绝。
 - 同一目录有多个工程时，追加 `--project-file "<PrjPcb 文件名>"`。
 - 默认审查文档清单中的最后一块 `PcbDoc`；用户指定板卡时追加 `--board "<PcbDoc 文件名>"`。
 - 命令失败时按退出码处理（见下），不要改用其他方式自行解析工程。
@@ -55,9 +55,10 @@ node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [
 
 1. **结论**：`status`（完成/部分完成）、必须修复/建议修复/可优化数量，以及一句话判断。
 2. **工程概览**：工程名、选中板卡（`project.selectedBoard`）、原理图、文档覆盖（`coverage`）。
-3. **问题清单**：按 `must_fix` → `should_fix` → `nice_to_have` 排序；每条给出规则、标题、定位（元件/网络/引脚）、证据与建议。summary 中的证据被截断时，从 `findings.json` 取对应单条补全。
-4. **数据覆盖与未检查项**：列出 `rules` 中为 `not_evaluated` 或 `failed` 的规则，并按 `coverage` 说明未覆盖范围；summary 未给出原因时只说明「数据不足/未评估」，不要猜测。说明 `findingsOmitted` 表示还有多少条问题未出现在 summary 中（完整清单在 `report.html`）。
-5. **报告**：给出 `report` 字段中 `report.html` 的绝对路径。
+3. **问题清单**：只讲 `kind` 为 `issue` 的条目，按 `must_fix` → `should_fix` → `nice_to_have` 排序；每条给出规则、标题、定位（元件/网络/引脚）、证据。有建议（`recommendation`）时给出；没有就说明未给出，不要自行补充建议。summary 中的证据被截断时，从 `findings.json` 取对应单条补全。
+4. **实测事实**：`kind` 为 `fact` 的条目（焊盘间距、载流、去耦摆放等）单独汇报，明确「不计入问题数量」。
+5. **数据覆盖与未检查项**：列出 `rules` 中为 `partial`、`not_evaluated` 或 `failed` 的规则，并按 `coverage` 说明未覆盖范围与网表匹配率；summary 未给出原因时只说明「数据不足/未评估」，不要猜测。说明 `findingsOmitted` 表示还有多少条结果未出现在 summary 中（完整清单在 `report.html`）。
+6. **报告**：给出 `report` 字段中 `report.html` 的绝对路径。
 
 ## 退出码
 
