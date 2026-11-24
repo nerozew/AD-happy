@@ -5,6 +5,7 @@ import assert from 'node:assert'
 import { execFileSync, spawnSync } from 'node:child_process'
 import {
   copyFileSync,
+  cpSync,
   existsSync,
   mkdtempSync,
   readFileSync,
@@ -147,6 +148,55 @@ test('没有 .PrjPcb 的目录退出码 2 且 manifest 说明原因', () => {
   const manifest = readJson(outDir, 'manifest.json')
   assert.equal(manifest.status, 'invalid_input')
   assert.ok(manifest.errors.some(error => /PrjPcb|工程/i.test(error.message)))
+})
+
+test('同目录多个 PrjPcb 未指定时退出码 2 并列出候选', () => {
+  const projectDir = freshOut('ad-happy-multi-project-')
+  cpSync(root, projectDir, { recursive: true })
+  copyFileSync(
+    join(projectDir, 'DCDC Buck Converter.PrjPcb'),
+    join(projectDir, 'Alternative.PrjPcb'),
+  )
+
+  const outDir = freshOut()
+  const r = runAnalyze(['--project', projectDir, '--out', outDir])
+  assert.equal(r.status, 2)
+  assert.match(r.stderr, /\.PrjPcb/)
+  assert.match(r.stderr, /DCDC Buck Converter\.PrjPcb/)
+  assert.match(r.stderr, /Alternative\.PrjPcb/)
+  assert.equal(existsSync(join(outDir, 'summary.json')), false)
+})
+
+test('--project-file 指定多个 PrjPcb 中的一个后正常分析', () => {
+  const projectDir = freshOut('ad-happy-multi-select-')
+  cpSync(root, projectDir, { recursive: true })
+  copyFileSync(
+    join(projectDir, 'DCDC Buck Converter.PrjPcb'),
+    join(projectDir, 'Alternative.PrjPcb'),
+  )
+
+  const outDir = freshOut()
+  const r = runAnalyze([
+    '--project', projectDir,
+    '--project-file', 'Alternative.PrjPcb',
+    '--out', outDir,
+  ])
+  assert.equal(r.status, 0, r.stderr)
+
+  const summary = readJson(outDir, 'summary.json')
+  assert.ok(summary.project.projectPath.endsWith('Alternative.PrjPcb'))
+  assert.equal(summary.coverage.documents, 9)
+})
+
+test('--project 直接给 .PrjPcb 文件路径也可运行', () => {
+  const outDir = freshOut('ad-happy-project-file-')
+  const r = runAnalyze([
+    '--project', join(root, 'DCDC Buck Converter.PrjPcb'),
+    '--out', outDir,
+  ])
+  assert.equal(r.status, 0, r.stderr)
+  const summary = readJson(outDir, 'summary.json')
+  assert.ok(summary.project.projectPath.endsWith('DCDC Buck Converter.PrjPcb'))
 })
 
 test('拒绝把输出写进源工程目录', () => {

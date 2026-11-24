@@ -3,7 +3,8 @@
 // 与报告渲染串成一条命令。
 //
 // 用法：
-//   node analyze.mjs --project <工程目录> [--out <输出目录>]
+//   node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>]
+//                    [--project-file <PrjPcb 文件名>]
 //                    [--board <PcbDoc 文件名>] [--svg]
 //
 // 退出码：0 完成；2 输入无效；3 部分完成（文档解析失败、规则 failed、
@@ -40,12 +41,13 @@ import { runSelfCheck } from './selfcheck.mjs'
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const PIPELINE_PY = join(SCRIPT_DIR, 'pipeline.py')
 
-const USAGE = `用法: node analyze.mjs --project <工程目录> [--out <输出目录>] [--board <PcbDoc 文件名>] [--svg]
+const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>] [--project-file <PrjPcb 文件名>] [--board <PcbDoc 文件名>] [--svg]
 
-  --project  包含 .PrjPcb 的工程目录
-  --out     输出目录；默认 %LOCALAPPDATA%\\ad-happy\\runs\\<run-id>
-  --board   指定要审查的 PcbDoc 文件名；默认文档清单中最后一块
-  --svg     尝试把选中板卡渲染为 SVG 内联到报告；失败只降级，不中止分析`
+  --project        包含 .PrjPcb 的工程目录，或 .PrjPcb 文件路径
+  --out            输出目录；默认 %LOCALAPPDATA%\\ad-happy\\runs\\<run-id>
+  --project-file   目录中有多个 .PrjPcb 时指定要审查的工程文件名（或路径）
+  --board          指定要审查的 PcbDoc 文件名；默认文档清单中最后一块
+  --svg            尝试把选中板卡渲染为 SVG 内联到报告；失败只降级，不中止分析`
 
 // 三组规则的完整键；即使某一侧输入缺失，报告也能展示全部规则状态。
 const SCH_RULES = [
@@ -117,8 +119,12 @@ async function main() {
     console.error(`--out 不能为空\n\n${USAGE}`)
     return 2
   }
+  if (options.projectFile !== null && !options.projectFile.trim()) {
+    console.error(`--project-file 不能为空\n\n${USAGE}`)
+    return 2
+  }
 
-  // 输入路径：工程目录。CLI 契约是文件夹；.PrjPcb 的选择由 discover 负责。
+  // 输入路径：工程目录，或直接给 .PrjPcb 文件。
   const inputPath = resolve(options.project)
   let inputStat
   try {
@@ -127,11 +133,17 @@ async function main() {
     console.error(`工程路径不存在或不可访问: ${inputPath}`)
     return 2
   }
-  if (!inputStat.isDirectory()) {
-    console.error(`--project 需要工程目录（包含 .PrjPcb）: ${inputPath}`)
+  let projectDir
+  if (inputStat.isDirectory()) {
+    projectDir = inputPath
+  } else if (inputStat.isFile() && inputPath.toLowerCase().endsWith('.prjpcb')) {
+    projectDir = dirname(inputPath)
+    // 直接给工程文件等价于 --project-file；显式参数优先。
+    if (options.projectFile === null) options.projectFile = inputPath
+  } else {
+    console.error(`--project 需要工程目录或 .PrjPcb 文件: ${inputPath}`)
     return 2
   }
-  const projectDir = inputPath
 
   const outDir = resolve(options.out ?? defaultOutDir(runId))
   if (isInside(projectDir, outDir)) {
@@ -203,13 +215,30 @@ async function executeStages(state) {
   // 3. 工程发现。ENOENT 与 NO_PROJECT 都属于输入无效（退出码 2）。
   let discovery
   try {
-    discovery = discoverProject(state.projectDir)
+    discovery = discoverProject(state.projectDir, {
+      projectFile: state.options.projectFile ?? undefined,
+    })
   } catch (error) {
     state.manifest.stages.discover = 'failed'
     const message = error?.message === 'NO_PROJECT'
       ? `目录中没有 .PrjPcb：${state.projectDir}`
       : `工程发现失败：${error?.message ?? error}`
     state.errors.push({ stage: 'discover', message })
+    printErrors(state)
+    return finalize(state, 'invalid_input', 2)
+  }
+  if (!discovery.projectPath) {
+    // 多工程且未指定：必须让用户选择，不能静默取字典序第一个。
+    state.manifest.stages.discover = 'failed'
+    const candidates = discovery.projectPaths.map(path => basename(path))
+    const requested = state.options.projectFile
+    state.errors.push({
+      stage: 'discover',
+      message: requested
+        ? `未找到指定的工程文件 "${requested}"`
+        : `目录中有 ${candidates.length} 个 .PrjPcb，请用 --project-file 指定`,
+      details: `候选：${candidates.join('、')}`,
+    })
     printErrors(state)
     return finalize(state, 'invalid_input', 2)
   }
@@ -927,6 +956,7 @@ function parseArgs(argv) {
   const options = {
     project: null,
     out: null,
+    projectFile: null,
     board: null,
     svg: false,
     help: false,
@@ -947,6 +977,12 @@ function parseArgs(argv) {
       case '--out': {
         const taken = takeValue(key, inline, argv, index)
         options.out = taken.value
+        index = taken.index
+        break
+      }
+      case '--project-file': {
+        const taken = takeValue(key, inline, argv, index)
+        options.projectFile = taken.value
         index = taken.index
         break
       }
