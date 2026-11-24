@@ -24,6 +24,27 @@ def empty_ctx(rails):
     )
 
 
+def _component(reference, value, component_type, pins=2):
+    return {
+        "reference": reference,
+        "value": value,
+        "type": component_type,
+        "lib_id": f"AD:{value}",
+        "footprint": "",
+        "properties": {},
+        "pins": [
+            {
+                "number": str(number),
+                "name": str(number),
+                "type": "passive",
+                "x": 0,
+                "y": 0,
+            }
+            for number in range(1, pins + 1)
+        ],
+    }
+
+
 def test_divider_detected():
     r = run_schematic(ctx())
     assert any(d for d in r["findings"] if d["detector"] == "voltage_divider")
@@ -84,13 +105,26 @@ def test_findings_align_with_finding_schema():
 
 
 def test_decoupling_evaluated_with_two_rails_including_non_ground():
-    r = run_schematic(empty_ctx({"GND", "+5V"}))
+    context = AnalysisContext(
+        components=[_component("U1", "IC", "TESTIC", pins=2)],
+        nets={},
+        lib_symbols={},
+        pin_net={},
+        known_power_rails={"GND", "+5V"},
+    )
+    r = run_schematic(context)
     assert r["status"]["decoupling"] == "pass"
-    assert r["findings"] == []
+    assert not any(f["detector"] == "decoupling" for f in r["findings"])
 
 
 def test_decoupling_not_evaluated_with_ground_rails_only():
     r = run_schematic(empty_ctx({"GND", "AGND"}))
+    assert r["status"]["decoupling"] == "not_evaluated"
+
+
+def test_decoupling_not_evaluated_without_components():
+    # 电源端口存在但没有元件时，无法判断去耦电容是否缺失。
+    r = run_schematic(empty_ctx({"GND", "+5V"}))
     assert r["status"]["decoupling"] == "not_evaluated"
 
 
@@ -116,6 +150,60 @@ def test_rc_filter_not_evaluated_without_capacitors():
     r = run_schematic(context)
     assert r["status"]["rc_filter"] == "not_evaluated"
     assert context.parsed_values["R1"] == 10000.0
+
+
+def test_no_nets_does_not_report_pass():
+    # 有元件、有可解析值，但原理图没有导线（nets 为空）：拓扑规则不能下结论。
+    context = AnalysisContext(
+        components=[
+            _component("R1", "10k", "resistor"),
+            _component("C1", "100n", "capacitor"),
+        ],
+        nets={},
+        lib_symbols={},
+        pin_net={},
+        known_power_rails={"GND", "+5V"},
+    )
+    r = run_schematic(context)
+    assert r["status"]["voltage_divider"] == "not_evaluated"
+    assert r["status"]["rc_filter"] == "not_evaluated"
+    assert r["status"]["power_regulator"] == "not_evaluated"
+    assert r["status"]["shorted_component"] == "not_evaluated"
+    assert "pass" not in {
+        r["status"]["voltage_divider"],
+        r["status"]["rc_filter"],
+        r["status"]["power_regulator"],
+        r["status"]["shorted_component"],
+    }
+
+
+def test_unparsable_values_do_not_report_pass():
+    # 有网表但 Comment 全部不可解析：依赖元件值的规则必须标记 not_evaluated。
+    components = [
+        _component("R1", "???", "resistor"),
+        _component("C1", "???", "capacitor"),
+    ]
+    net_n1 = {"pins": [
+        {"component": "R1", "pin_number": "1", "pin_name": "1",
+         "pin_type": "passive", "x": 0, "y": 0},
+        {"component": "C1", "pin_number": "1", "pin_name": "1",
+         "pin_type": "passive", "x": 0, "y": 0},
+    ]}
+    context = AnalysisContext(
+        components=components,
+        nets={"N1": net_n1},
+        lib_symbols={},
+        pin_net={
+            ("R1", "1"): ("N1", net_n1),
+            ("C1", "1"): ("N1", net_n1),
+        },
+        known_power_rails={"GND", "+5V"},
+    )
+    assert context.parsed_values == {}
+    r = run_schematic(context)
+    assert r["status"]["voltage_divider"] == "not_evaluated"
+    assert r["status"]["rc_filter"] == "not_evaluated"
+    assert r["status"]["power_regulator"] == "not_evaluated"
 
 
 def _connectivity_ctx():

@@ -92,7 +92,8 @@ def run_schematic(ctx: AnalysisContext) -> dict:
 # ---------------------------------------------------------------------------
 
 def _voltage_divider(ctx):
-    if not ctx.components:
+    # 分压识别依赖网表拓扑与可解析的电阻值；缺任一项都无法下结论。
+    if not ctx.components or not ctx.nets or not _has_parsed(ctx, "resistor"):
         return [], NOT_EVALUATED
     # feedback_networks 与 voltage_dividers 是同一批 dict 的双份引用，
     # 只取后者，避免同一条分压被计两次。
@@ -102,13 +103,16 @@ def _voltage_divider(ctx):
 
 def _rc_filter(ctx, dividers):
     # brief 约定：必须同时存在可解析的电阻与电容，否则无法评估。
-    if not _has_parsed(ctx, "resistor") or not _has_parsed(ctx, "capacitor"):
+    if not ctx.nets or not _has_parsed(ctx, "resistor") or not _has_parsed(ctx, "capacitor"):
         return [], NOT_EVALUATED
     return detect_rc_filters(ctx, dividers), PASS
 
 
 def _decoupling(ctx):
     # R3：仅当已知电源轨 >= 2 且至少一条不是地网络时才可评估。
+    # 没有元件时即使电源端口存在，也无从判断去耦电容是否缺失。
+    if not ctx.components:
+        return [], NOT_EVALUATED
     rails = set(getattr(ctx, "known_power_rails", ()) or ())
     non_ground_rails = [rail for rail in rails if not ctx.is_ground(rail)]
     if len(rails) < 2 or not non_ground_rails:
@@ -117,7 +121,8 @@ def _decoupling(ctx):
 
 
 def _power_regulator(ctx, dividers):
-    if not ctx.components:
+    # 稳压器识别依赖网表与元件参数；只有元件列表不足以判断。
+    if not ctx.components or not ctx.nets or not ctx.parsed_values:
         return [], NOT_EVALUATED
     return detect_power_regulators(ctx, dividers), PASS
 
@@ -137,7 +142,8 @@ def _connectivity(ctx):
 
 
 def _shorted_component(ctx):
-    if not ctx.components:
+    # 短路判断需要 pin_net 拓扑；只有元件列表时无法知道两个引脚是否同网。
+    if not ctx.components or not ctx.pin_net:
         return [], NOT_EVALUATED
     return detect_shorted_two_pin_components(ctx), PASS
 
