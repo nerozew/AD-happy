@@ -35,6 +35,7 @@ import {
   sep,
 } from 'node:path'
 
+
 // 与 selfcheck/datasheets 保持一致的默认上游路径；可用
 // KICAD_HAPPY_SPICE_SCRIPTS 或 KICAD_HAPPY_SCRIPTS 覆盖。
 const DEFAULT_KICAD_HAPPY_SPICE_SCRIPTS = 'D:/Tools/kicad-happy/skills/spice/scripts'
@@ -142,6 +143,47 @@ const SPICE_TYPE_LABELS = {
   bms_balance: 'BMS 均衡',
   rf_chain: 'RF 链路',
   snubber_circuit: '缓冲电路',
+}
+
+// 上游 detector 名 → simulation_results[].subcircuit_type（单数）。
+// 用于把提交的候选与上游返回结果对账，发现「生成器返回 None 被静默丢弃」。
+const RESULT_TYPE_BY_DETECTOR = {
+  detect_rc_filters: 'rc_filter',
+  detect_lc_filters: 'lc_filter',
+  detect_voltage_dividers: 'voltage_divider',
+  detect_opamp_circuits: 'opamp_circuit',
+  detect_crystal_circuits: 'crystal_circuit',
+  detect_feedback_networks: 'feedback_network',
+  detect_transistor_circuits: 'transistor_circuit',
+  detect_current_sense: 'current_sense',
+  detect_protection_devices: 'protection_device',
+  detect_decoupling: 'decoupling',
+  detect_power_regulators: 'regulator_feedback',
+  detect_rf_matching: 'rf_matching',
+  detect_bridge_circuits: 'bridge_circuit',
+  detect_bms_systems: 'bms_balance',
+  detect_rf_chains: 'rf_chain',
+  detect_snubber_circuits: 'snubber_circuit',
+}
+
+// 兼容直接传入上游注册表键（复数）的调用方，避免把类型对账成复数名。
+const RESULT_TYPE_BY_REGISTRY_KEY = {
+  rc_filters: 'rc_filter',
+  lc_filters: 'lc_filter',
+  voltage_dividers: 'voltage_divider',
+  opamp_circuits: 'opamp_circuit',
+  crystal_circuits: 'crystal_circuit',
+  feedback_networks: 'feedback_network',
+  transistor_circuits: 'transistor_circuit',
+  current_sense: 'current_sense',
+  protection_devices: 'protection_device',
+  decoupling_analysis: 'decoupling',
+  power_regulators: 'regulator_feedback',
+  rf_matching: 'rf_matching',
+  bridge_circuits: 'bridge_circuit',
+  bms_systems: 'bms_balance',
+  rf_chains: 'rf_chain',
+  snubber_circuits: 'snubber_circuit',
 }
 
 // ---------------------------------------------------------------------------
@@ -394,7 +436,10 @@ export function runSpice(circuits, simulator, outDir, options = {}) {
   })
   coverage.detectedDetectors = mapped.detected
   coverage.unsupportedDetectors = mapped.unsupported
-  coverage.availableCircuits = mapped.circuits.length
+  // availableCircuits 是识别到的全部候选；submittedCircuits 是真正交给
+  // 上游的候选。两者之差必须在对账阶段解释清楚，不能假装通过。
+  coverage.availableCircuits = mapped.circuits.length + mapped.excluded.length
+  coverage.excludedCircuits = mapped.excluded
 
   // 没有仿真器：明确未评估，给出缺失项与安装方式；不生成任何结果。
   if (!isPlainObject(selectedSimulator)
@@ -454,8 +499,24 @@ export function runSpice(circuits, simulator, outDir, options = {}) {
   }
   coverage.checks.simulator_detection = 'pass'
 
-  // 没有可仿真的子电路：不调用上游，也不伪造一条「通过」。
+  // 没有可提交的子电路：不调用上游，也不伪造一条「通过」。
   if (mapped.circuits.length === 0) {
+    if (mapped.excluded.length > 0) {
+      coverage.status = 'not_evaluated'
+      coverage.missingCircuits = mapped.excluded.length
+      coverage.checks.testbench_generation = 'not_evaluated'
+      coverage.checks.simulation = 'not_evaluated'
+      coverage.reasons.push(
+        `识别到 ${mapped.excluded.length} 个可仿真候选，但都因缺少上游模板必需字段`
+        + '而无法生成测试台；未生成结果不代表通过（清单见下）。',
+      )
+      const findings = mapped.excluded.map(candidate => spiceCandidateMissingFinding(
+        candidate,
+        coverage.simulator,
+      ))
+      coverage.findings = findings.length
+      return { findings, coverage }
+    }
     coverage.reasons.push(
       '原理图分析没有识别到可仿真的子电路'
       + `（支持：${[...SUPPORTED_UPSTREAM_TYPES].join(', ')}）。`,
@@ -483,6 +544,10 @@ export function runSpice(circuits, simulator, outDir, options = {}) {
     coverage.findings = 1
     return { findings: [finding], coverage }
   }
+
+  // 到这里才真正把候选交给上游；此前任何分支（无仿真器、缺脚本、
+  // 全部候选被预过滤）都不应把 submittedCircuits 记成已提交。
+  coverage.submittedCircuits = mapped.circuits.length
 
   const versionInfo = probeSimulatorVersion(selectedSimulator.name, simulatorPath, {
     env,
@@ -606,11 +671,21 @@ export function runSpice(circuits, simulator, outDir, options = {}) {
       simulator: coverage.simulator,
     }))
   const counts = countResults(results)
+  const reconciliation = reconcileCandidates(mapped.circuits, results)
   coverage.circuits = results
   coverage.counts = counts
+  coverage.unaccountedCircuits = reconciliation.unaccounted
+  coverage.missingCircuits = mapped.excluded.length + reconciliation.unaccounted.length
   coverage.upstreamSummary = isPlainObject(raw.summary) ? raw.summary : null
 
   const findings = []
+  // 先列出「没有产出结果」的候选：预过滤的 + 上游静默丢弃的。
+  for (const candidate of mapped.excluded) {
+    findings.push(spiceCandidateMissingFinding(candidate, coverage.simulator))
+  }
+  for (const candidate of reconciliation.unaccounted) {
+    findings.push(spiceCandidateMissingFinding(candidate, coverage.simulator))
+  }
   for (const result of results) {
     if (result.status === 'fail' || result.status === 'warn') {
       findings.push(spiceMismatchFinding(result, coverage.simulator))
@@ -619,13 +694,32 @@ export function runSpice(circuits, simulator, outDir, options = {}) {
     }
   }
 
+  const missingCount = coverage.missingCircuits
   if (counts.total === 0) {
     coverage.status = 'not_evaluated'
     coverage.checks.testbench_generation = 'not_evaluated'
     coverage.checks.simulation = 'not_evaluated'
     coverage.reasons.push(
-      '上游没有返回任何仿真结果；可仿真的子电路可能在生成测试台时被跳过。',
+      missingCount > 0
+        ? `上游没有返回任何仿真结果；${missingCount} 个候选未生成测试台，`
+          + '未生成结果不代表通过（清单见下）。'
+        : '上游没有返回任何仿真结果；可仿真的子电路可能在生成测试台时被跳过。',
     )
+  } else if (missingCount > 0) {
+    // 有候选没有产出结果时，即使其余子电路通过，也只能算部分完成。
+    coverage.status = 'partial'
+    coverage.checks.testbench_generation = 'partial'
+    coverage.checks.simulation = 'partial'
+    coverage.reasons.push(
+      `${missingCount} 个候选子电路没有产出仿真结果；`
+      + '其余结果不能代表全部候选都已验证（未生成结果的候选见下）。',
+    )
+    if (counts.fail > 0) {
+      coverage.reasons.push(`${counts.fail} 个子电路的仿真结果与解析值不一致。`)
+    }
+    if (counts.skip > 0) {
+      coverage.reasons.push(`${counts.skip} 个子电路未完成仿真。`)
+    }
   } else if (counts.fail > 0 || counts.warn > 0) {
     coverage.status = 'found'
     coverage.checks.testbench_generation = 'pass'
@@ -677,6 +771,7 @@ function spiceStageFailure(coverage, { reason, simulator }) {
 
 function mapCircuits(findings) {
   const circuits = []
+  const excluded = []
   const detected = new Set()
   const unsupported = new Set()
   for (const finding of findings) {
@@ -692,18 +787,203 @@ function mapCircuits(findings) {
       continue
     }
     detected.add(detector)
-    circuits.push({
+    const mapped = {
       ...finding,
       // 上游按 detector 名选择模板；AD-Happy 的单数名在这里改名。
       detector: upstream,
       ad_happy_detector: detector,
-    })
+    }
+    // 上游生成器对缺少必需字段的候选会返回 None，且不写任何
+    // simulation_results 记录。这里先做保守预过滤并记录原因；
+    // 未被预过滤但上游仍静默丢弃的，由 reconcileCandidates() 兜底。
+    const reason = exclusionReason(mapped)
+    if (reason) {
+      excluded.push({
+        ...describeCandidate(mapped),
+        reason,
+      })
+      continue
+    }
+    circuits.push(mapped)
   }
   return {
     circuits,
+    excluded,
     detected: [...detected].sort(compareText),
     unsupported: [...unsupported].sort(compareText),
   }
+}
+
+function describeCandidate(finding) {
+  const type = resultTypeForDetector(finding.detector)
+  const components = Array.isArray(finding.components)
+    ? finding.components.map(value => text(value)).filter(Boolean)
+    : []
+  return {
+    type,
+    typeLabel: SPICE_TYPE_LABELS[type] ?? null,
+    detector: text(finding.ad_happy_detector) || text(finding.detector),
+    reference: components.join('/'),
+    components,
+  }
+}
+
+function resultTypeForDetector(detector) {
+  return RESULT_TYPE_BY_DETECTOR[detector]
+    ?? RESULT_TYPE_BY_REGISTRY_KEY[detector]
+    ?? text(detector)
+}
+
+// 只在「上游一定返回 None」的条件下预过滤；其余缺失字段交给上游生成
+// 异常（会以 skip 记录可见）或对账逻辑处理，避免误排除可仿真候选。
+function exclusionReason(finding) {
+  switch (resultTypeForDetector(finding.detector)) {
+    case 'regulator_feedback':
+      return regulatorExclusionReason(finding)
+    case 'voltage_divider':
+      return voltageDividerExclusionReason(finding)
+    case 'rc_filter':
+      return rcFilterExclusionReason(finding)
+    case 'decoupling':
+      return decouplingExclusionReason(finding)
+    default:
+      return null
+  }
+}
+
+function regulatorExclusionReason(finding) {
+  const divider = finding.feedback_divider
+  if (
+    !isPlainObject(divider)
+    || !isPlainObject(divider.r_top)
+    || !isPlainObject(divider.r_bottom)
+  ) {
+    return '缺少反馈分压器（feedback_divider.r_top/r_bottom），上游生成器会返回空测试台。'
+  }
+  if (!(positiveNumber(divider.r_top.ohms) && positiveNumber(divider.r_bottom.ohms))) {
+    return '反馈分压器电阻值缺失或非正，上游生成器会返回空测试台。'
+  }
+  return null
+}
+
+function voltageDividerExclusionReason(finding) {
+  const top = finding.r_top
+  const bottom = finding.r_bottom
+  if (!isPlainObject(top) || !isPlainObject(bottom)) {
+    return '缺少 r_top/r_bottom 分压电阻，上游生成器会返回空测试台。'
+  }
+  if (!text(top.ref) || !text(bottom.ref)) {
+    return '分压电阻缺少位号，上游生成器会返回空测试台。'
+  }
+  if (!(positiveNumber(top.ohms) && positiveNumber(bottom.ohms))) {
+    return '分压电阻值缺失或非正，上游生成器会返回空测试台。'
+  }
+  const topNet = sanitizeNetForCheck(finding.top_net)
+  const midNet = sanitizeNetForCheck(finding.mid_net)
+  if (topNet === midNet || midNet === '0' || topNet === '0') {
+    return '分压器输入/输出网络重叠或接地，上游生成器会返回空测试台。'
+  }
+  return null
+}
+
+function rcFilterExclusionReason(finding) {
+  const resistor = finding.resistor
+  const capacitor = finding.capacitor
+  if (!isPlainObject(resistor) || !isPlainObject(capacitor)) {
+    return '缺少 resistor/capacitor 参数，上游生成器会返回空测试台。'
+  }
+  if (!(
+    positiveNumber(resistor.ohms)
+    && positiveNumber(capacitor.farads)
+    && positiveNumber(finding.cutoff_hz)
+  )) {
+    return 'RC 滤波参数缺失或非正，上游生成器会返回空测试台。'
+  }
+  const inputNet = sanitizeNetForCheck(finding.input_net)
+  const outputNet = sanitizeNetForCheck(finding.output_net)
+  if (outputNet === '0' || inputNet === '0' || inputNet === outputNet) {
+    return 'RC 滤波器输入/输出网络不完整，上游生成器会返回空测试台。'
+  }
+  return null
+}
+
+function decouplingExclusionReason(finding) {
+  const capacitors = Array.isArray(finding.capacitors) ? finding.capacitors : []
+  const valid = capacitors.some(capacitor => (
+    isPlainObject(capacitor) && positiveNumber(capacitor.farads)
+  ))
+  if (!valid) {
+    return '没有带容值的去耦电容，上游生成器会返回空测试台。'
+  }
+  return null
+}
+
+// 与上游 spice_models._sanitize_net 保持一致，用于判断网络是否重叠/接地。
+function sanitizeNetForCheck(name) {
+  if (name === null || name === undefined) return '0'
+  const raw = String(name)
+  const lower = raw.toLowerCase()
+  if (lower === 'gnd' || lower === 'earth' || lower === 'vss' || lower === '0') {
+    return '0'
+  }
+  let result = raw
+  for (const character of " (){}[]!@#$%^&*=+|\\;:'\",<>?/") {
+    result = result.split(character).join('_')
+  }
+  if (result && /^[0-9]/u.test(result)) result = `n${result}`
+  return result
+}
+
+function positiveNumber(value) {
+  const number = typeof value === 'number' ? value : Number(text(value))
+  return Number.isFinite(number) && number > 0
+}
+
+// 把上游 simulation_results 与提交的候选对账：上游生成器返回 None 时
+// 不会留下记录，只能通过数量与类型/元件匹配找出未产出结果的候选。
+function reconcileCandidates(candidates, results) {
+  const used = new Set()
+  const unaccounted = []
+  for (const candidate of candidates) {
+    const expectedType = resultTypeForDetector(candidate.detector)
+    let matchIndex = results.findIndex((result, index) => (
+      !used.has(index)
+      && result.type === expectedType
+      && candidateMatchesResult(candidate, result)
+    ))
+    if (matchIndex === -1) {
+      // 元件字段可能被上游重排（例如稳压器候选只有 IC，结果给出分压电阻），
+      // 类型唯一时按类型兜底，避免把实际已仿真的候选误报为缺失。
+      matchIndex = results.findIndex((result, index) => (
+        !used.has(index) && result.type === expectedType
+      ))
+    }
+    if (matchIndex === -1) {
+      matchIndex = results.findIndex((result, index) => (
+        !used.has(index) && candidateMatchesResult(candidate, result)
+      ))
+    }
+    if (matchIndex >= 0) {
+      used.add(matchIndex)
+    } else {
+      unaccounted.push({
+        ...describeCandidate(candidate),
+        reason: '上游没有返回该候选的仿真结果；测试台生成器可能因输入不足返回空。',
+      })
+    }
+  }
+  return { unaccounted, matched: used.size }
+}
+
+function candidateMatchesResult(candidate, result) {
+  const resultComponents = Array.isArray(result.components) ? result.components : []
+  if (resultComponents.length === 0) return true
+  const candidateComponents = new Set(candidate.components)
+  const regulator = text(result.regulator)
+  if (regulator && (candidateComponents.has(regulator) || text(candidate.ref) === regulator)) {
+    return true
+  }
+  return resultComponents.some(reference => candidateComponents.has(reference))
 }
 
 function upstreamDetectorFor(detector) {
@@ -746,6 +1026,7 @@ function normalizeSimulationResult(item, index, { outDir, simulator }) {
     typeLabel: SPICE_TYPE_LABELS[type] ?? null,
     reference,
     components,
+    regulator: text(item.regulator) || null,
     status,
     note: note || null,
     // noteText 是报告与 finding 使用的中文文案；note 保留上游原文供排查。
@@ -793,7 +1074,8 @@ function spiceNotRunFinding(coverage) {
     detector: 'spice',
     rule_id: 'SP-001',
     category: 'simulation',
-    kind: 'issue',
+    // 「没装仿真器」是环境事实，不是设计问题；kind=fact 不计入问题数。
+    kind: 'fact',
     severity: 'info',
     confidence: 'deterministic',
     evidence_source: 'file',
@@ -818,6 +1100,44 @@ function spiceNotRunFinding(coverage) {
  */
 export function spiceErrorFinding(message) {
   return spiceFailureFinding(text(message) || '未知错误', null)
+}
+
+// 候选已识别但未产出仿真结果（预过滤或上游静默丢弃）。SP-002 警告，
+// 并在 evidence 中写明原因，避免报告把「部分候选没跑」读成全部通过。
+function spiceCandidateMissingFinding(candidate, simulator) {
+  const typeText = candidate.typeLabel
+    ? `${candidate.typeLabel}（${candidate.type}）`
+    : candidate.type
+  const label = candidate.reference || candidate.components.join('/') || candidate.detector
+  const reason = candidate.reason || '该候选没有产出仿真结果。'
+  return {
+    detector: 'spice',
+    rule_id: 'SP-002',
+    category: 'simulation',
+    kind: 'issue',
+    severity: 'warning',
+    confidence: 'deterministic',
+    evidence_source: 'file',
+    source: 'spice',
+    title: `SPICE 仿真未执行：${typeText} ${label}`,
+    summary: `SPICE 仿真未执行：${typeText} ${label}`,
+    evidence: reason,
+    description: `${typeText} ${label} 没有产出仿真结果：${reason}`,
+    recommendation: '补齐上游模板必需的元件参数/拓扑字段后重试；未执行的候选不代表通过。',
+    components: candidate.components,
+    nets: [],
+    pins: [],
+    simulator: simulator
+      ? {
+        name: simulator.name ?? null,
+        version: simulator.version ?? null,
+        path: simulator.path ?? null,
+      }
+      : null,
+    candidate_type: candidate.type,
+    candidate_detector: candidate.detector,
+    omitted_reason: reason,
+  }
 }
 
 function spiceFailureFinding(message, simulator) {
@@ -918,7 +1238,7 @@ function spiceMismatchFinding(result, simulator) {
 // 上游 spice_results.py 的备注是英文；报告与 finding 的可见文本必须是
 // 中文。已知模板逐条翻译，未知英文备注按项目既有约定标注「（仿真器原文）」，
 // 原文仍保留在 evidence 中，便于排查。
-function localizeSimulationNote(rawNote) {
+export function localizeSimulationNote(rawNote) {
   const note = text(rawNote).trim()
   if (!note) return ''
   const exact = {
@@ -939,6 +1259,8 @@ function localizeSimulationNote(rawNote) {
     [/^([\d.+\-]+)% error\s*[—-]\s*significant deviation$/iu, (_, pct) => `误差 ${pct}%：显著偏差`],
     [/^([\d.+\-]+)% error\s*[—-]\s*regulator output voltage may be wrong$/iu, (_, pct) => `误差 ${pct}%：稳压器输出电压可能不正确`],
     [/^([\d.+\-]+)% error in feedback voltage$/iu, (_, pct) => `反馈电压误差 ${pct}%`],
+    [/^([\d.+\-]+)% error in feedback divider$/iu, (_, pct) => `反馈分压误差 ${pct}%`],
+    [/^([\d.+\-]+)% error\s*[—-]\s*regulator output voltage will be wrong$/iu, (_, pct) => `误差 ${pct}%：稳压器输出电压将不正确`],
     [/^z=([\d.]+)Ω at 1mhz$/iu, (_, value) => `1MHz 时阻抗 ${value}Ω`],
     [/^z=([\d.]+)Ω at 1mhz\s*[—-]\s*single bulk cap or high-value rail$/iu, (_, value) => `1MHz 时阻抗 ${value}Ω：可能是单个大电容或高阻值电源轨`],
   ]
@@ -1018,7 +1340,11 @@ export function emptySpiceCoverage(options = {}) {
     requested: options.requested === true,
     simulator: null,
     availableCircuits: 0,
+    submittedCircuits: 0,
+    missingCircuits: 0,
     circuits: [],
+    excludedCircuits: [],
+    unaccountedCircuits: [],
     counts: { total: 0, pass: 0, warn: 0, fail: 0, skip: 0 },
     detectedDetectors: Array.isArray(options.detectedDetectors)
       ? [...options.detectedDetectors]

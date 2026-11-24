@@ -19,6 +19,7 @@ import { delimiter, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   detectSimulators,
+  localizeSimulationNote,
   probeSimulatorVersion,
   runSpice,
   simulatorInstallHints,
@@ -332,6 +333,106 @@ test('runSpice 没有仿真器时 SP-001 未评估，不创建 spice/ 产物', (
   assert.match(finding.evidence, /NGSPICE_PATH/)
 })
 
+test('候选与上游结果对账：生成器返回 None 时不得报 pass', () => {
+  const dir = freshDir('ad-happy-spice-reconcile-')
+  const stub = writeStubSimulator(dir)
+  const out = freshDir('ad-happy-spice-out-')
+  // comparator/open-loop 运放会被上游 generate_opamp_circuit 直接返回 None，
+  // 既不报错也不写 simulation_results；AD-Happy 必须通过对账发现它。
+  const opamp = {
+    detector: 'opamp_circuit',
+    rule_id: 'OA-DET',
+    components: ['U1'],
+    reference: 'U1',
+    configuration: 'comparator_or_open_loop',
+  }
+
+  const result = runSpice([voltageDividerCircuit(), opamp], {
+    name: 'ngspice',
+    path: stub,
+  }, out, { env: stubEnv(stub) })
+
+  assert.equal(result.coverage.availableCircuits, 2)
+  assert.equal(result.coverage.submittedCircuits, 2)
+  assert.equal(result.coverage.counts.total, 1, '上游只返回分压器的结果')
+  assert.equal(result.coverage.unaccountedCircuits.length, 1)
+  assert.equal(result.coverage.unaccountedCircuits[0].type, 'opamp_circuit')
+  assert.equal(result.coverage.missingCircuits, 1)
+  assert.equal(result.coverage.status, 'partial')
+  assert.notEqual(result.coverage.status, 'pass', '有候选被静默丢弃时不能报通过')
+
+  const missing = result.findings.find(finding => (
+    finding.rule_id === 'SP-002' && finding.candidate_type === 'opamp_circuit'
+  ))
+  assert.ok(missing)
+  assert.match(missing.evidence, /没有返回该候选的仿真结果/)
+  assert.equal(missing.severity, 'warning')
+
+  const upstream = readJson(join(out, 'spice/simulation-report.json'))
+  assert.equal(upstream.simulation_results.length, 1)
+})
+
+test('缺少反馈分压器的稳压器候选被预过滤并产生 SP-002', () => {
+  const dir = freshDir('ad-happy-spice-pre-filter-')
+  const stub = writeStubSimulator(dir)
+  const out = freshDir('ad-happy-spice-out-')
+  const ldo = {
+    detector: 'power_regulator',
+    rule_id: 'PR-DET',
+    components: ['IC2'],
+    ref: 'IC2',
+    // 没有 feedback_divider：上游 generate_regulator_feedback 会返回 None。
+  }
+
+  const result = runSpice([voltageDividerCircuit(), ldo], {
+    name: 'ngspice',
+    path: stub,
+  }, out, { env: stubEnv(stub) })
+
+  assert.equal(result.coverage.availableCircuits, 2)
+  assert.equal(result.coverage.submittedCircuits, 1)
+  assert.equal(result.coverage.excludedCircuits.length, 1)
+  assert.equal(result.coverage.unaccountedCircuits.length, 0)
+  assert.match(result.coverage.excludedCircuits[0].reason, /feedback_divider/)
+  assert.equal(result.coverage.counts.total, 1)
+  assert.equal(result.coverage.status, 'partial')
+  const missing = result.findings.find(finding => (
+    finding.rule_id === 'SP-002' && finding.components.includes('IC2')
+  ))
+  assert.ok(missing)
+  assert.match(missing.title, /稳压器反馈/)
+  assert.match(missing.evidence, /feedback_divider/)
+
+  // 全部候选都被预过滤时不调用上游，也不得报 pass。
+  const onlyLdoOut = freshDir('ad-happy-spice-out-')
+  const onlyLdo = runSpice([ldo], {
+    name: 'ngspice',
+    path: stub,
+  }, onlyLdoOut, { env: stubEnv(stub) })
+  assert.equal(onlyLdo.coverage.status, 'not_evaluated')
+  assert.equal(onlyLdo.coverage.availableCircuits, 1)
+  assert.equal(onlyLdo.coverage.submittedCircuits, 0)
+  assert.equal(onlyLdo.coverage.missingCircuits, 1)
+  assert.equal(onlyLdo.coverage.findings, 1)
+  assert.equal(onlyLdo.findings[0].rule_id, 'SP-002')
+  assert.equal(existsSync(join(onlyLdoOut, 'spice')), false, '未提交候选时不创建仿真目录')
+})
+
+test('上游备注翻译覆盖 feedback divider 与 will be wrong 变体', () => {
+  assert.equal(
+    localizeSimulationNote('2.00% error in feedback divider'),
+    '反馈分压误差 2.00%',
+  )
+  assert.equal(
+    localizeSimulationNote('5.0% error — regulator output voltage will be wrong'),
+    '误差 5.0%：稳压器输出电压将不正确',
+  )
+  assert.equal(
+    localizeSimulationNote('Simulation failed'),
+    '仿真未成功完成',
+  )
+})
+
 test('runSpice 没有可仿真子电路时 not_evaluated，不调用上游', () => {
   const dir = freshDir('ad-happy-spice-none-')
   const stub = writeStubSimulator(dir)
@@ -413,6 +514,61 @@ test('报告渲染「仿真」章节：仿真器、测试台、未评估与安�
   assert.match(html, /全部 1 个子电路仿真通过/)
 })
 
+test('报告渲染未生成结果的候选：partial 不得写成全部通过', () => {
+  const html = renderReport({
+    project: '演示工程',
+    generatedAt: '2026-11-25 10:00',
+    coverage: { documents: 2, parsed: 2, notEvaluated: 0 },
+    findings: [],
+    status: { spice: 'partial' },
+    spice: {
+      requested: true,
+      status: 'partial',
+      simulator: {
+        name: 'ngspice',
+        path: 'C:/tools/ngspice.exe',
+        version: '42',
+      },
+      availableCircuits: 2,
+      submittedCircuits: 1,
+      missingCircuits: 1,
+      circuits: [{
+        type: 'voltage_divider',
+        typeLabel: '分压器',
+        reference: 'R1/R2',
+        components: ['R1', 'R2'],
+        status: 'pass',
+        testbench: 'spice/work/voltage-divider_R1_R2.cir',
+        testbenchExists: true,
+      }],
+      excludedCircuits: [{
+        type: 'regulator_feedback',
+        typeLabel: '稳压器反馈',
+        detector: 'power_regulator',
+        reference: 'IC2',
+        components: ['IC2'],
+        reason: '缺少反馈分压器（feedback_divider.r_top/r_bottom），上游生成器会返回空测试台。',
+      }],
+      unaccountedCircuits: [],
+      counts: { total: 1, pass: 1, warn: 0, fail: 0, skip: 0 },
+      checks: {
+        simulator_detection: 'pass',
+        testbench_generation: 'partial',
+        simulation: 'partial',
+      },
+      artifacts: { index: 'spice.json', workdir: 'spice/work' },
+      findings: 1,
+      reasons: ['1 个候选子电路没有产出仿真结果；其余结果不能代表全部候选都已验证。'],
+    },
+  })
+  const section = html.slice(html.indexOf('id="spice"'), html.indexOf('id="findings"'))
+  assert.match(section, /部分完成：1 个候选未生成结果/)
+  assert.match(section, /id="spice-missing-candidates"/)
+  assert.match(section, /稳压器反馈/)
+  assert.match(section, /feedback_divider/)
+  assert.ok(!section.includes('全部 1 个子电路仿真通过'), 'partial 不得写成全部通过')
+})
+
 // ---------------------------------------------------------------------------
 // CLI 端到端
 // ---------------------------------------------------------------------------
@@ -466,6 +622,8 @@ test('CLI --spice 无仿真器：未评估、退出码 0、原因与安装提示
   assert.equal(summary.rules.spice, 'not_evaluated')
   assert.equal(summary.spice.requested, true)
   assert.equal(summary.spice.simulator, null)
+  assert.equal(summary.spice.submittedCircuits, 0, '没有仿真器时不得记为已提交')
+  assert.equal(summary.spice.availableCircuits, 2, '仍应展示识别到的候选数')
   assert.ok(summary.spice.reasons.some(reason => reason.includes('SPICE 仿真器')))
   assert.ok(summary.spice.reasons.some(reason => reason.includes('ngspice')))
 
@@ -474,6 +632,14 @@ test('CLI --spice 无仿真器：未评估、退出码 0、原因与安装提示
   assert.ok(sp001)
   assert.equal(sp001.source, 'spice')
   assert.equal(sp001.severity, 'info')
+  // 「没装仿真器」是环境事实，不计入问题数。
+  assert.equal(sp001.kind, 'fact')
+  const issueCount = findings.filter(finding => finding.kind !== 'fact').length
+  assert.equal(summary.counts.total, issueCount, 'SP-001 不得计入问题总数')
+  assert.equal(
+    summary.counts.facts,
+    findings.filter(finding => finding.kind === 'fact').length,
+  )
   assert.ok(!findings.some(finding => ['SP-002', 'SP-003'].includes(finding.rule_id)))
 
   assert.ok(existsSync(join(out, 'spice.json')))
@@ -513,6 +679,11 @@ test('CLI --spice + 仿真器替身：产出结果并记录测试台路径', () 
   assert.match(summary.spice.simulator.version, /99-stub/)
   assert.equal(summary.spice.counts.total, 2)
   assert.equal(summary.spice.counts.pass, 2)
+  assert.equal(summary.spice.availableCircuits, 2)
+  assert.equal(summary.spice.submittedCircuits, 2)
+  assert.equal(summary.spice.missingCircuits, 0)
+  assert.equal(summary.spice.excludedCircuits, 0)
+  assert.equal(summary.spice.unaccountedCircuits, 0)
   assert.equal(summary.spice.findings, 0)
 
   const findings = readJson(join(out, 'findings.json'))
@@ -608,4 +779,13 @@ test('CLI --spice 上游脚本缺失：rules.spice=failed 且退出码 3', () =>
   const manifest = readJson(join(out, 'manifest.json'))
   assert.equal(manifest.stages.spice, 'failed')
   assert.ok(manifest.errors.some(error => error.stage === 'spice'))
+
+  // failed 且 simulator=null 时，报告状态文案必须是「仿真执行失败」，
+  // 不能因为拿不到 simulator 就写成「未评估」。
+  const html = readFileSync(join(out, 'report.html'), 'utf8')
+  const start = html.indexOf('id="spice-status"')
+  const end = html.indexOf('</p>', start)
+  const statusText = html.slice(html.indexOf('>', start) + 1, end)
+  assert.match(statusText, /仿真执行失败/)
+  assert.ok(!statusText.includes('未评估'), `failed 文案不应是未评估：${statusText}`)
 })

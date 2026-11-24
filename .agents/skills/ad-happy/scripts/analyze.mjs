@@ -1452,6 +1452,8 @@ function buildSpiceManifest({ requested, detection, coverage }) {
     simulator: coverage.simulator,
     detection: detection ?? null,
     availableCircuits: coverage.availableCircuits,
+    submittedCircuits: coverage.submittedCircuits,
+    missingCircuits: coverage.missingCircuits,
     counts: coverage.counts,
     findings: coverage.findings,
     artifacts: coverage.artifacts ?? null,
@@ -1465,7 +1467,11 @@ function buildSpiceReport(coverage, findings) {
     status: coverage.status,
     simulator: coverage.simulator,
     availableCircuits: coverage.availableCircuits,
+    submittedCircuits: coverage.submittedCircuits,
+    missingCircuits: coverage.missingCircuits,
     circuits: coverage.circuits,
+    excludedCircuits: coverage.excludedCircuits,
+    unaccountedCircuits: coverage.unaccountedCircuits,
     counts: coverage.counts,
     checks: coverage.checks,
     artifacts: coverage.artifacts ?? null,
@@ -1490,6 +1496,15 @@ function buildSpiceSummary(coverage) {
       }
       : null,
     circuits: coverage.counts.total,
+    availableCircuits: coverage.availableCircuits,
+    submittedCircuits: coverage.submittedCircuits,
+    excludedCircuits: Array.isArray(coverage.excludedCircuits)
+      ? coverage.excludedCircuits.length
+      : 0,
+    unaccountedCircuits: Array.isArray(coverage.unaccountedCircuits)
+      ? coverage.unaccountedCircuits.length
+      : 0,
+    missingCircuits: coverage.missingCircuits,
     counts: coverage.counts,
     findings: coverage.findings,
     artifact: coverage.artifacts?.index ?? null,
@@ -1502,7 +1517,22 @@ function buildSpiceSummary(coverage) {
 
 // summary.json 只保留前 50 个子电路的概览；完整测试台与结果在 spice.json。
 const SPICE_SUMMARY_CIRCUIT_LIMIT = 50
+const SPICE_SUMMARY_CANDIDATE_LIMIT = 20
 const SPICE_SUMMARY_REASON_LIMIT = 10
+
+function compactSpiceCandidates(value) {
+  if (!Array.isArray(value)) return []
+  return value.slice(0, SPICE_SUMMARY_CANDIDATE_LIMIT).map(candidate => ({
+    type: scalarText(candidate.type),
+    typeLabel: scalarText(candidate.typeLabel),
+    detector: scalarText(candidate.detector),
+    reference: scalarText(candidate.reference),
+    components: Array.isArray(candidate.components)
+      ? candidate.components.slice(0, 10).map(scalarText)
+      : [],
+    reason: truncateText(scalarText(candidate.reason), 200),
+  }))
+}
 
 function compactSpiceCoverage(coverage) {
   if (!isPlainObject(coverage)) return coverage ?? null
@@ -1519,6 +1549,8 @@ function compactSpiceCoverage(coverage) {
       }
       : null,
     availableCircuits: numberOrZero(coverage.availableCircuits),
+    submittedCircuits: numberOrZero(coverage.submittedCircuits),
+    missingCircuits: numberOrZero(coverage.missingCircuits),
     counts: isPlainObject(coverage.counts) ? coverage.counts : null,
     checks: isPlainObject(coverage.checks) ? coverage.checks : null,
     circuitCount: circuits.length,
@@ -1531,6 +1563,14 @@ function compactSpiceCoverage(coverage) {
       testbench: scalarText(circuit.testbench),
       testbenchExists: circuit.testbenchExists === true,
     })),
+    excludedCircuitCount: Array.isArray(coverage.excludedCircuits)
+      ? coverage.excludedCircuits.length
+      : 0,
+    unaccountedCircuitCount: Array.isArray(coverage.unaccountedCircuits)
+      ? coverage.unaccountedCircuits.length
+      : 0,
+    excludedCircuits: compactSpiceCandidates(coverage.excludedCircuits),
+    unaccountedCircuits: compactSpiceCandidates(coverage.unaccountedCircuits),
     reasons: (Array.isArray(coverage.reasons) ? coverage.reasons : [])
       .slice(0, SPICE_SUMMARY_REASON_LIMIT)
       .map(reason => truncateText(reason, 300)),

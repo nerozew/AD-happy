@@ -422,6 +422,8 @@ function normalizeSpice(value) {
     status: scalarText(value.status) || 'not_evaluated',
     simulator: normalizeSpiceSimulator(value.simulator),
     availableCircuits: countValue(value.availableCircuits),
+    submittedCircuits: countValue(value.submittedCircuits),
+    missingCircuits: countValue(value.missingCircuits),
     circuits: Array.isArray(value.circuits)
       ? value.circuits.filter(isPlainObject).map(circuit => ({
           type: scalarText(circuit.type) || 'simulation',
@@ -440,6 +442,8 @@ function normalizeSpice(value) {
           delta: isPlainObject(circuit.delta) ? circuit.delta : null,
         }))
       : [],
+    excludedCircuits: normalizeSpiceCandidates(value.excludedCircuits),
+    unaccountedCircuits: normalizeSpiceCandidates(value.unaccountedCircuits),
     counts: {
       total: countValue(counts.total),
       pass: countValue(counts.pass),
@@ -460,6 +464,18 @@ function normalizeSpice(value) {
     reasons: stringList(value.reasons),
     findings: countValue(value.findings),
   }
+}
+
+function normalizeSpiceCandidates(value) {
+  if (!Array.isArray(value)) return []
+  return value.filter(isPlainObject).map(candidate => ({
+    type: scalarText(candidate.type) || 'simulation',
+    typeLabel: scalarText(candidate.typeLabel),
+    detector: scalarText(candidate.detector),
+    reference: scalarText(candidate.reference),
+    components: stringList(candidate.components),
+    reason: scalarText(candidate.reason),
+  }))
 }
 
 function normalizeSpiceSimulator(value) {
@@ -1139,6 +1155,10 @@ function renderSpice({ spice }) {
       ? `<code>${escapeHtml(simulator.path)}</code>`
       : '—'],
     ['可仿真子电路', String(spice.availableCircuits)],
+    ['已提交仿真', String(spice.submittedCircuits)],
+    ['未生成结果', spice.missingCircuits > 0
+      ? `${spice.missingCircuits} 个候选`
+      : '0'],
     ['结果计数', spice.counts.total > 0
       ? `通过 ${spice.counts.pass} / 警告 ${spice.counts.warn} / 失败 ${spice.counts.fail} / 跳过 ${spice.counts.skip}`
       : '—'],
@@ -1199,6 +1219,30 @@ function renderSpice({ spice }) {
       ].join('\n')
     : `  <h3>子电路结果</h3>\n  <p class="empty">${escapeHtml(spiceCircuitsEmptyText(spice))}</p>`
 
+  const missingCandidates = [
+    ...spice.excludedCircuits.map(candidate => ({ ...candidate, kind: '预过滤' })),
+    ...spice.unaccountedCircuits.map(candidate => ({ ...candidate, kind: '上游未返回' })),
+  ]
+  const missing = missingCandidates.length
+    ? [
+        '  <h3>未生成结果的候选</h3>',
+        '  <p class="note note-warn">以下候选已识别，但没有产出测试台或仿真结果；'
+          + '不能把它们当作通过。</p>',
+        '  <ul class="status-list" id="spice-missing-candidates">',
+        ...missingCandidates.slice(0, 50).map(candidate => {
+          const typeText = candidate.typeLabel
+            ? `${candidate.typeLabel}（${candidate.type}）`
+            : candidate.type
+          const label = candidate.reference || candidate.components.join('、') || candidate.detector
+          return `    <li><code>${escapeHtml(typeText)}</code><span class="rule-name">${escapeHtml(label)}</span><span class="badge badge-not_evaluated">${escapeHtml(candidate.kind)}</span><span class="detail">${escapeHtml(candidate.reason || '未产出仿真结果。')}</span></li>`
+        }),
+        '  </ul>',
+        missingCandidates.length > 50
+          ? '  <p class="note">仅展示前 50 个候选，完整列表见 spice.json。</p>'
+          : '',
+      ].join('\n')
+    : ''
+
   const installHints = !simulator && spice.installHints.length
     ? [
         '  <h3>安装与配置</h3>',
@@ -1242,6 +1286,7 @@ function renderSpice({ spice }) {
     '  </dl>',
     checks,
     circuits,
+    missing,
     installHints,
     artifacts,
     reasons,
@@ -1259,29 +1304,37 @@ function spiceStatusText(spice) {
   if (!spice.requested) {
     return '本次未运行仿真：--spice 为可选开关，默认关闭；未运行不代表通过。'
   }
-  if (!spice.simulator) {
-    return `未评估：${spice.reasons.join('；') || '未找到可用的 SPICE 仿真器。'}`
-  }
+  // failed 优先于「没有仿真器」：执行失败时 simulator 可能为 null，
+  // 不能把失败文案写成未评估（徽标与退出码都是失败）。
   if (spice.status === 'failed') {
     return `仿真执行失败：${spice.reasons.join('；') || '上游仿真没有正常完成。'}`
+  }
+  if (!spice.simulator) {
+    return `未评估：${spice.reasons.join('；') || '未找到可用的 SPICE 仿真器。'}`
   }
   if (spice.status === 'not_evaluated') {
     return `未评估：${spice.reasons.join('；') || '没有子电路产出可用测量结果。'}`
   }
   if (spice.status === 'partial') {
-    return `部分完成：${spice.counts.skip}/${spice.counts.total} 个子电路未完成仿真；跳过项不代表通过。`
+    const missing = spice.missingCircuits > 0
+      ? `${spice.missingCircuits} 个候选未生成结果`
+      : `${spice.counts.skip}/${spice.counts.total} 个子电路未完成仿真`
+    return `部分完成：${missing}；未生成结果或跳过的项不代表通过。`
   }
   if (spice.status === 'found') {
     return `发现 ${spice.findings} 条仿真问题，详见问题清单。`
   }
+  const missingNote = spice.missingCircuits > 0
+    ? `；另有 ${spice.missingCircuits} 个候选未生成结果，不能视为通过`
+    : ''
   return `全部 ${spice.counts.total} 个子电路仿真通过（结果来自 ${spice.simulator.name}`
-    + `${spice.simulator.version ? ` ${spice.simulator.version}` : ''}）。`
+    + `${spice.simulator.version ? ` ${spice.simulator.version}` : ''}）${missingNote}。`
 }
 
 function spiceCircuitsEmptyText(spice) {
   if (!spice.requested) return '本次未运行仿真，因此没有子电路结果。'
-  if (!spice.simulator) return '未找到可用仿真器，没有生成任何子电路结果。'
   if (spice.status === 'failed') return '仿真执行失败，没有可用的子电路结果。'
+  if (!spice.simulator) return '未找到可用仿真器，没有生成任何子电路结果。'
   return '没有可仿真的子电路。'
 }
 

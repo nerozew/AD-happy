@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "run": {
-    "id": "20261125-032317-ce6a",
-    "startedAt": "2026-11-24T19:23:17.225Z",
+    "id": "20261125-034726-b6a0",
+    "startedAt": "2026-11-24T19:47:26.798Z",
     "argv": [
       "--project",
       "tests/fixtures/Student-DCDC-Buck-Converter",
@@ -187,6 +187,8 @@
     "simulator": null,
     "detection": null,
     "availableCircuits": 0,
+    "submittedCircuits": 0,
+    "missingCircuits": 0,
     "counts": {
       "total": 0,
       "pass": 0,
@@ -218,6 +220,6 @@
   },
   "status": "complete",
   "exitCode": 0,
-  "finishedAt": "2026-11-24T19:23:17.797Z",
+  "finishedAt": "2026-11-24T19:47:27.367Z",
   "durationMs": 547
 }

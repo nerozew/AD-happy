@@ -82,7 +82,7 @@ node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [
 2. **工程概览**：工程名、选中板卡（`project.selectedBoard`）、原理图、文档覆盖（`coverage`）。
 3. **问题清单**：只讲 `kind` 为 `issue` 的条目，按 `must_fix` → `should_fix` → `nice_to_have` 排序；每条给出规则、标题、定位（元件/网络/引脚）、证据。有建议（`recommendation`）时给出；没有就说明未给出，不要自行补充建议。summary 中的证据被截断时，从 `findings.json` 取对应单条补全。
 4. **实测事实**：`kind` 为 `fact` 的条目（焊盘间距、载流、去耦摆放等）单独汇报，明确「不计入问题数量」。
-5. **数据覆盖与未检查项**：列出 `rules` 中为 `partial`、`not_evaluated` 或 `failed` 的规则，并按 `coverage` 说明未覆盖范围与网表匹配率；summary 未给出原因时只说明「数据不足/未评估」，不要猜测。`datasheets` 只汇报 PDF 覆盖、MPN 匹配与提取计划状态；`datasheets.pinVerification` 始终为 `not_evaluated`，**不得说引脚已核对或通过**。`spice` 只汇报实际使用的仿真器/版本、逐子电路结果与测试台路径；未运行或未找到仿真器时明确说明，不得把 `not_evaluated` 说成通过。说明 `findingsOmitted` 表示还有多少条结果未出现在 summary 中（完整清单在 `report.html`）。
+5. **数据覆盖与未检查项**：列出 `rules` 中为 `partial`、`not_evaluated` 或 `failed` 的规则，并按 `coverage` 说明未覆盖范围与网表匹配率；summary 未给出原因时只说明「数据不足/未评估」，不要猜测。`datasheets` 只汇报 PDF 覆盖、MPN 匹配与提取计划状态；`datasheets.pinVerification` 始终为 `not_evaluated`，**不得说引脚已核对或通过**。`spice` 只汇报实际使用的仿真器/版本、逐子电路结果与测试台路径；未运行或未找到仿真器时明确说明，不得把 `not_evaluated` 说成通过。若 `summary.spice.missingCircuits > 0`（`excludedCircuits`/`unaccountedCircuits`），必须说明有候选未生成结果，不得说全部候选都已验证。说明 `findingsOmitted` 表示还有多少条结果未出现在 summary 中（完整清单在 `report.html`）。
 6. **报告**：给出 `report` 字段中 `report.html` 的绝对路径。
 
 ## 退出码

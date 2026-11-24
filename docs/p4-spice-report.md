@@ -109,12 +109,25 @@ python simulate_subcircuits.py <analysis.json> \
     **测试台相对/绝对路径、日志路径、仿真器名称与版本**；
   - 生成 SP finding（中文）并计算 coverage。
 - 规则 ID：
-  - `SP-001`：显式 `--spice` 但未找到仿真器（`kind: issue`、`info`，不伪造结果）；
-  - `SP-002`：仿真执行失败 / 上游脚本缺失 / 单个子电路未完成（`error` 或 `warning`）；
+  - `SP-001`：显式 `--spice` 但未找到仿真器（`kind: fact`、`info`，不伪造结果，
+    也不计入问题数）；
+  - `SP-002`：仿真执行失败 / 上游脚本缺失 / 单个子电路未完成 / 候选未产出结果
+    （`error` 或 `warning`）；
   - `SP-003`：仿真值与解析计算不一致（上游 fail → `error`，warn → `warning`）。
+- **候选对账**：上游 `simulate_subcircuits.py` 在生成器返回 `None` 时会静默
+  `continue`，不写任何 `simulation_results` 记录（例如稳压器缺少
+  `feedback_divider`、运放是 comparator/open-loop）。本实现：
+  - 映射阶段对当前 AD-Happy 规则做保守预过滤（稳压器缺反馈分压、分压器网络
+    重叠/接地、RC 参数非正、去耦无容值），记录在 `excludedCircuits`；
+  - 上游返回后把提交的候选与 `simulation_results` 按类型/元件对账，未匹配的
+    记录在 `unaccountedCircuits`；
+  - 只要存在 `excludedCircuits` 或 `unaccountedCircuits`，规则状态至少为
+    `partial`（无任何结果时为 `not_evaluated`），每个候选生成一条 `SP-002`；
+  - coverage 明确区分 `availableCircuits`（识别到的候选）、`submittedCircuits`
+    （实际提交给上游）与 `missingCircuits`（未产出结果）。
 - **通过的仿真不生成 finding**：与上游 `build_report()` 的约定一致，pass 结果只写入
   `simulation_results`、coverage、`spice.json` 与报告「仿真」章节；只有 fail/warn/skip
-  才生成 SP-002/SP-003，避免把每次成功仿真变成问题噪音。
+  以及未产出结果的候选才生成 SP-002/SP-003，避免把每次成功仿真变成问题噪音。
 - 检测器映射覆盖上游全部 findings 驱动类型。AD-Happy 当前实际产出的是
   `voltage_divider`、`rc_filter`、`decoupling`、`power_regulator`；映射表为后续
   LC/运放/晶振等检测器预留，未识别的类型会记录在 `unsupportedDetectors`。
@@ -133,13 +146,14 @@ python simulate_subcircuits.py <analysis.json> \
   - 报告仍渲染「仿真」章节，明确写「本次未运行仿真」。
 - **带 `--spice`、无仿真器**：
   - `rules.spice = not_evaluated`，原因列出缺少的仿真器、已检查的位置和安装方式；
-  - 产生一条 `SP-001`（info），列出 `NGSPICE_PATH`/`LTSPICE_PATH`/`XYCE_PATH` 与
-    ngspice/LTspice/Xyce 的安装方式；
+  - 产生一条 `SP-001`（`kind: fact`、info，不计入问题数），列出
+    `NGSPICE_PATH`/`LTSPICE_PATH`/`XYCE_PATH` 与 ngspice/LTspice/Xyce 的安装方式；
   - **退出码不变**（只有 `failed` 参与聚合）；
   - 写出 `spice.json`，记录检测结果与原因。
 - **带 `--spice`、有仿真器**：
   - 调用上游并合并 SP finding；
-  - 状态：全部 pass → `pass`；有 warn/fail → `found`；部分 skip → `partial`；
+  - 状态：全部 pass → `pass`；有候选未产出结果（预过滤或上游静默丢弃）→ `partial`
+    （无任何结果时 `not_evaluated`）；有 warn/fail → `found`；部分 skip → `partial`；
     全部 skip/无结果 → `not_evaluated`；执行异常/上游脚本缺失 → `failed`；
   - `found`/`partial`/`not_evaluated` 不改变退出码；`failed` 退出码 3；
   - 其余阶段、规则与报告结构不变。
@@ -151,9 +165,11 @@ python simulate_subcircuits.py <analysis.json> \
 
 新增「仿真」章节（`id="spice"`）：
 
-- 仿真器名称、路径、版本（或「版本未知」）、可仿真子电路数、结果计数；
+- 仿真器名称、路径、版本（或「版本未知」）、可仿真子电路数、已提交数、
+  未生成结果数、结果计数；
 - 逐子电路表格：类型、元件、通过/警告/失败/跳过、测试台路径（文件不存在时明确标注）、
   解析值/仿真值/偏差；
+- 「未生成结果的候选」列表：区分「预过滤」与「上游未返回」，逐条给出原因；
 - 未运行时的显式说明；无仿真器时的原因与安装提示；
 - `spice.json`、`spice/analysis-input.json`、`spice/simulation-report.json`、
   `spice/work` 路径；
@@ -167,6 +183,7 @@ python simulate_subcircuits.py <analysis.json> \
 | `--spice`、无仿真器 | `not_evaluated` | `spice.json`（仅检测记录） | 不变 | SP-001 + 安装提示 |
 | `--spice`、有仿真器、无可仿真子电路 | `not_evaluated` | `spice.json` | 不变 | 说明支持的类型与本次检测到的规则 |
 | `--spice`、部分子电路 skip | `partial` | `spice.json` + 测试台/日志 | 不变 | SP-002 警告；跳过项不代表通过 |
+| `--spice`、候选被预过滤/上游静默丢弃 | `partial`（无结果时 `not_evaluated`） | 同上 | 不变 | 每个候选一条 SP-002；报告列出未生成结果的候选 |
 | `--spice`、全部子电路 skip | `not_evaluated` | 同上 | 不变 | SP-002 警告 + 原因 |
 | `--spice`、结果与解析值不一致 | `found` | 同上 | 不变 | SP-003（fail=error / warn=warning） |
 | `--spice`、上游脚本缺失或执行异常 | `failed` | `manifest` 错误 + SP-002 | 3 | 明确脚本路径/异常信息 |
@@ -176,11 +193,11 @@ python simulate_subcircuits.py <analysis.json> \
 ### 5.1 测试命令与结果
 
 ```text
-node --test tests/*.test.mjs   → 142 passed, 0 failed, 0 skipped
+node --test tests/*.test.mjs   → 146 passed, 0 failed, 0 skipped
 python -B -m pytest -q         → 71 passed, 1 warning（任何现有第三方库弃用警告）
 ```
 
-新增 `tests/spice.test.mjs`（14 个测试）：
+新增 `tests/spice.test.mjs`（18 个测试）：
 
 1. PATH 中 ngspice/LTspice 替身的检测与优先级；`SPICE_SIMULATOR` 指定。
 2. `NGSPICE_PATH` 覆盖；空 PATH 的「无仿真器」分支。
@@ -196,7 +213,14 @@ python -B -m pytest -q         → 71 passed, 1 warning（任何现有第三方�
 12. CLI `--spice` + 替身：`pass`、2 个子电路、版本与测试台路径可追溯，
     `spice/analysis-input.json` 与上游 `simulation-report.json` 一致。
 13. CLI `--spice` + 替身偏差：SP-003 计入问题、`found`、退出码仍为 0。
-14. CLI `--spice` + 上游脚本缺失：`failed`、SP-002、退出码 3。
+14. CLI `--spice` + 上游脚本缺失：`failed`、SP-002、退出码 3，报告状态文案为
+    「仿真执行失败」而不是「未评估」。
+15. 候选对账：comparator/open-loop 运放被上游生成器返回 None → `unaccountedCircuits`
+    1 个、状态 `partial`、SP-002，**不得报 pass**。
+16. 预过滤：缺 `feedback_divider` 的稳压器 → `excludedCircuits` 1 个、
+    `submittedCircuits=1`、状态 `partial`；只有该候选时 `not_evaluated` 且不调用上游。
+17. 备注翻译覆盖 `feedback divider` / `will be wrong` 两个上游变体。
+18. 报告渲染未生成结果的候选：`partial` 文案与缺失清单，不得写「全部通过」。
 
 替身实现：
 - Windows 写 `ngspice.cmd`（调用 Node 脚本），POSIX 写可执行的 `ngspice` sh 脚本；
@@ -218,7 +242,12 @@ python -B -m pytest -q         → 71 passed, 1 warning（任何现有第三方�
   上游 `simulation-report.json` 与 `spice.json` 的 counts/电路数一致。
 - `--spice` + 替身 5% 偏差：2 条 SP-003 error，`found`，退出码 0。
 - `--spice` + 替身失败：2 条 SP-002 warning，`not_evaluated`，退出码 0。
-- `--spice` + 上游脚本缺失：`failed`，SP-002 error，退出码 3。
+- `--spice` + 上游脚本缺失：`failed`，SP-002 error，退出码 3；报告状态文案为
+  「仿真执行失败」。
+- 候选对账（替身）：有效分压器 + comparator 运放 → 上游只返回 1 条结果，
+  `available=2`、`submitted=2`、`missing=1`、`partial`，SP-002 列出运放候选；
+  缺 `feedback_divider` 的稳压器在提交前被预过滤，`submitted=1`、`missing=1`，
+  同样不报 pass。
 
 ## 6. 重新生成的样例
 
@@ -241,7 +270,9 @@ node .agents/skills/ad-happy/scripts/analyze.mjs \
 - `report.html` 新增「仿真」章节，显示「本次未运行仿真：--spice 为可选开关，
   默认关闭；未运行不代表通过。」，并列出仿真器/版本/测试台等字段为「—」；
 - 未生成 `spice.json` 与 `spice/` 目录；
-- `summary.json` 约 14.8KB，继续满足 <32KB 约束；
+- `summary.spice.availableCircuits=0`、`submittedCircuits=0`、`missingCircuits=0`
+  （未启用时不做候选映射）；
+- `summary.json` 约 15.0KB，继续满足 <32KB 约束；
 - 整体状态 `complete`、退出码 0。
 
 样例路径：`docs/sample-report/report.html`、`docs/sample-report/summary.json`。
@@ -273,3 +304,70 @@ node .agents/skills/ad-happy/scripts/analyze.mjs \
 - 新增 `tests/spice.test.mjs`
 - 修改 `README.md`、`.agents/skills/ad-happy/SKILL.md`（使用说明）
 - 重新生成 `docs/sample-report/`
+
+## 9. 评审修复（Important + 相关 Minor）
+
+### 9.1 Important：上游静默丢弃候选时不再报 pass
+
+问题：上游 `simulate_subcircuits.py` 在生成器返回 `None` 时直接 `continue`，
+不写 `simulation_results`；原实现只用上游返回的结果决定状态，导致
+`availableCircuits=2`、`counts.total=1` 时仍可能报 `pass`，用户会误以为所有候选
+都已验证。
+
+修复：
+
+- **预过滤**（`exclusionReason`）：对当前 AD-Happy 规则复制上游生成器的
+  None 条件——稳压器缺 `feedback_divider.r_top/r_bottom`、分压器网络重叠/接地、
+  分压电阻非正、RC 参数非正、去耦无容值。被排除的候选写入
+  `excludedCircuits`，不提交上游。
+- **结果对账**（`reconcileCandidates`）：上游返回后，按预期 `subcircuit_type`
+  与元件/`regulator` 字段把提交的候选与 `simulation_results` 匹配；未匹配的写入
+  `unaccountedCircuits`。
+- **状态**：存在 `missingCircuits = excluded + unaccounted` 时，有结果则
+  `partial`，无结果则 `not_evaluated`；每个未产出结果的候选生成一条 `SP-002`
+  （warning），并在报告中列出「预过滤」/「上游未返回」及原因。`pass` 只在
+  `missingCircuits=0` 且全部结果通过时出现。
+- **coverage** 新增 `availableCircuits`（识别到的候选）、`submittedCircuits`
+  （实际提交）、`missingCircuits`、`excludedCircuits`、`unaccountedCircuits`；
+  报告新增这两类候选的清单与计数。
+
+新增测试：
+- comparator/open-loop 运放（上游生成器返回 None）+ 有效分压器 → 上游只返回
+  1 条结果，`available=2/submitted=2/missing=1`，状态 `partial`，SP-002；
+  明确断言 `notEqual(status, 'pass')`。
+- 缺 `feedback_divider` 的稳压器 + 有效分压器 → `excluded=1/submitted=1/missing=1`，
+  状态 `partial`；只有该稳压器时 `not_evaluated`，且不创建 `spice/` 目录。
+
+### 9.2 Minor 1：SP-001 不再计入问题数
+
+`spiceNotRunFinding()` 的 `kind` 从 `issue` 改为 `fact`。`summary.counts.total`
+/ `must_fix` / `should_fix` / `nice_to_have` 不再因「没装仿真器」增加；SP-001 仍保留在
+`findings.json` 与报告的「实测事实」中。CLI 测试新增断言：
+`summary.counts.total === findings.filter(kind !== 'fact').length`。
+
+### 9.3 Minor 2：补全稳压器/反馈网络备注翻译
+
+翻译表新增上游实际文案：
+
+- `{x}% error in feedback divider` → 「反馈分压误差 {x}%」；
+- `{x}% error — regulator output voltage will be wrong` → 「误差 {x}%：稳压器输出电压将不正确」。
+
+原有 `feedback voltage` / `may be wrong` 变体继续保留（分别来自
+`evaluate_regulator_feedback` 与反馈网络评估器）。新增 3 条翻译断言。
+
+### 9.4 Minor 3：failed 状态文案优先级
+
+`report.mjs` 的 `spiceStatusText()` / `spiceCircuitsEmptyText()` 改为先判断
+`status === 'failed'`，再判断 `simulator` 是否为空。这样「仿真器路径不存在」等
+`simulator=null` 的失败场景显示「仿真执行失败」，与失败徽标和退出码 3 一致，
+不再误写成「未评估」。CLI 上游脚本缺失测试新增报告文案断言。
+
+### 9.5 回归
+
+```text
+node --test tests/*.test.mjs   → 146 passed, 0 failed, 0 skipped
+python -B -m pytest -q         → 71 passed, 1 warning
+```
+
+样例已重新生成（不带 `--spice`，`summary.json` 约 15.0KB）。本轮按评审要求
+将 opt-in 噪音、summary 余量、报告措辞等其余 Minor 记为 debt，未修改。
