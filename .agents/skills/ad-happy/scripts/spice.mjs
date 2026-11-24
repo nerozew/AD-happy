@@ -440,6 +440,8 @@ export function runSpice(circuits, simulator, outDir, options = {}) {
   // 上游的候选。两者之差必须在对账阶段解释清楚，不能假装通过。
   coverage.availableCircuits = mapped.circuits.length + mapped.excluded.length
   coverage.excludedCircuits = mapped.excluded
+  // 预过滤候选在任何分支都不会产出结果；后续成功提交时再累加对账差额。
+  coverage.missingCircuits = mapped.excluded.length
 
   // 没有仿真器：明确未评估，给出缺失项与安装方式；不生成任何结果。
   if (!isPlainObject(selectedSimulator)
