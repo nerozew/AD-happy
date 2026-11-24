@@ -753,19 +753,31 @@ function detectDelimiter(content) {
   const lines = content.split(/\r?\n/u).slice(0, 30)
   for (const line of lines) {
     if (!line.trim()) continue
-    let best = ','
+    let best = ''
     let bestScore = 0
+    let bestHasDesignator = false
     // 不靠字面量 "designator" / "位号" 判断表头：Ref/Reference 等别名也要覆盖。
-    // 对每个候选分隔符实际拆一次，能映射出最多已知列的胜出。
+    // 对每个候选分隔符实际拆一次，且要求分隔符真的出现在该行，避免把
+    // 单格标题行（如 "Description"）当成逗号表头。只有映射出至少 2 列，
+    // 或命中 Designator 列时才认定该行是表头。
     for (const candidate of [',', ';', '\t']) {
+      if (!line.includes(candidate)) continue
       const cells = parseCsv(line, candidate)[0] ?? []
-      const score = cells.filter(cell => mapColumn(cell) !== '').length
-      if (score > bestScore) {
+      if (cells.length < 2) continue
+      const mapped = cells.map(mapColumn).filter(Boolean)
+      const score = mapped.length
+      if (score === 0) continue
+      const hasDesignator = mapped.includes('designator')
+      if (
+        score > bestScore
+        || (score === bestScore && hasDesignator && !bestHasDesignator)
+      ) {
         best = candidate
         bestScore = score
+        bestHasDesignator = hasDesignator
       }
     }
-    if (bestScore > 0) return best
+    if (best && (bestScore >= 2 || bestHasDesignator)) return best
   }
   return ','
 }

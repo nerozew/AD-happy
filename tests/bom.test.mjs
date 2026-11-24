@@ -352,6 +352,22 @@ test('CSV 导入：分号分隔与缺少 Designator 列时报错', () => {
   assert.equal(referenceAlias.rows[0].footprint, '0805')
   assert.equal(referenceAlias.coverage.delimiter, ';')
 
+  // 单格标题行没有分隔符，不能被当成逗号表头；应继续向下找真正的分号表头。
+  const titledSemicolon = importBomCsv(
+    'Description\nDesignator;Comment;Footprint;Quantity\nC3;47uF;1210;1\n',
+  )
+  assert.equal(titledSemicolon.rows.length, 1)
+  assert.equal(titledSemicolon.rows[0].reference, 'C3')
+  assert.equal(titledSemicolon.coverage.delimiter, ';')
+
+  // 标题行含逗号但只映射出一列时也不应提前返回；后续 Tab 表头仍要识别。
+  const titledTab = importBomCsv(
+    'Description, Rev A\nDesignator\tComment\tFootprint\tQuantity\nC4\t0.1uF\t0603\t1\n',
+  )
+  assert.equal(titledTab.rows.length, 1)
+  assert.equal(titledTab.rows[0].reference, 'C4')
+  assert.equal(titledTab.coverage.delimiter, 'tab')
+
   assert.throws(
     () => importBomCsv('foo,bar\n1,2\n'),
     /Designator|位号/,

@@ -145,7 +145,7 @@ P2 已完成：新增 `scripts/bom.mjs`，从已解析的工程数据构建 BOM�
 
 `importBomCsv(text)`：
 
-- 去掉 UTF-8 BOM；自动识别 `,` / `;` / Tab 分隔符：对前 30 行逐行尝试三种分隔符，用 `mapColumn` 能映射出最多已知列的那个胜出（因此 `Reference`/`Refs` 等别名同样可用于探测，不再只认字面量 `designator`/`位号`）。
+- 去掉 UTF-8 BOM；自动识别 `,` / `;` / Tab 分隔符：对前 30 行逐行尝试三种分隔符，用 `mapColumn` 能映射出最多已知列的那个胜出（因此 `Reference`/`Refs` 等别名同样可用于探测，不再只认字面量 `designator`/`位号`）。候选分隔符必须真实出现在该行，并且至少映射出 2 列或命中 Designator 列；单格标题行（如 `Description`）不会触发提前返回。
 - 表头大小写不敏感；归一化时去掉空格、下划线、点、斜杠与中英文括号。
 - 在前 30 行内查找表头行，允许 Altium 导出文件带标题行。
 - 位号单元格可包含多个位号（逗号、分号、中文标点、空白分隔），逐位号展开。
@@ -327,3 +327,39 @@ python -B -m pytest -q         → 71 passed
 ```
 
 `docs/sample-report/` 已重新生成：`summary.status = complete`、`summary.rules.bom = found`、`summary.json` 约 12KB，报告含「物料」、`BM-001` 与 `procurement.csv`。
+
+## 15. 复审回归修复（第三轮）
+
+复审确认第二轮 4 项已解决，但指出 `detectDelimiter` 引入了一个回归：对第一条能拆出至少 1 个已知列的行立即返回，且不要求候选分隔符真的出现在该行。于是 `Description` 这类单格标题行会被当成逗号表头，导致后续分号表头无法识别。
+
+修复：
+
+- 候选分隔符必须真实出现在当前行（`line.includes(candidate)`）；
+- 拆分后至少 2 列，且映射列数 `>= 2` 或命中 `designator` 列，才认定该行是表头；
+- 映射列数为 1 且不是 Designator 的行（如 `Description, Rev A`）继续向下扫描，不再提前返回；
+- 单格标题行 `Description` 不包含任何候选分隔符，直接跳过。
+
+验证：
+
+```text
+输入 1：
+Description
+Designator;Comment;Footprint;Quantity
+C1;0.1uF;0805;1
+→ 分隔符 ;，成功导入 1 行
+
+输入 2：
+Description, Rev A
+Designator\tComment\tFootprint\tQuantity
+C4\t0.1uF\t0603\t1
+→ 分隔符 tab，成功导入 1 行
+```
+
+测试：`tests/bom.test.mjs` 的「CSV 导入：分号分隔与缺少 Designator 列时报错」新增上述两个回归用例。全量结果：
+
+```text
+node --test tests/*.test.mjs   → 110 passed, 0 failed
+python -B -m pytest -q         → 71 passed
+```
+
+样例报告说明：`docs/sample-report/` 的生成不使用 `--bom`，`detectDelimiter` 不在该路径上，因此本轮无需重新生成样例；已核对的样例内容与第二轮一致（`complete`、`rules.bom = found`、summary 约 12KB）。
