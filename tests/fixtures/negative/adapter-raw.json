@@ -1,0 +1,871 @@
+{
+  "schematic": {
+    "components": [
+      {
+        "recordIndex": 28,
+        "reference": "IC1",
+        "comment": "TPS561208DDCR",
+        "footprint": "SOT95P280X110-6N",
+        "x": 444.88213,
+        "y": 488.18924,
+        "pins": [
+          "3",
+          "5",
+          "6",
+          "2",
+          "4",
+          "1"
+        ]
+      },
+      {
+        "recordIndex": 48,
+        "reference": "C2",
+        "comment": "22µF",
+        "footprint": "CAP 0805_2012",
+        "x": 330.70884,
+        "y": 452.4412,
+        "pins": [
+          "1",
+          "2"
+        ]
+      },
+      {
+        "recordIndex": 91,
+        "reference": "C1",
+        "comment": "0.1µF",
+        "footprint": "CAP 0805_2012",
+        "x": 582.36253,
+        "y": 472.4412,
+        "pins": [
+          "1",
+          "2"
+        ]
+      },
+      {
+        "recordIndex": 134,
+        "reference": "L1",
+        "comment": "4.7µH",
+        "footprint": "TDK SPM3012-LR",
+        "x": 685.35469,
+        "y": 472.4412,
+        "pins": [
+          "2",
+          "1"
+        ]
+      },
+      {
+        "recordIndex": 183,
+        "reference": "R1",
+        "comment": "56.2 kOhms",
+        "footprint": "RES 0805_2012",
+        "x": 740.15788,
+        "y": 452.4412,
+        "pins": [
+          "2",
+          "1"
+        ]
+      },
+      {
+        "recordIndex": 227,
+        "reference": "R2",
+        "comment": "10 kOhms",
+        "footprint": "RES 0805_2012",
+        "x": 740.15788,
+        "y": 381.57502,
+        "pins": [
+          "2",
+          "1"
+        ]
+      },
+      {
+        "recordIndex": 273,
+        "reference": "C3",
+        "comment": "47µF",
+        "footprint": "CAP 1210_3225 - 2.8MM",
+        "x": 814.96107,
+        "y": 449.13409,
+        "pins": [
+          "1",
+          "2"
+        ]
+      },
+      {
+        "recordIndex": 326,
+        "reference": "J2",
+        "comment": "282834-2",
+        "footprint": "TE 282834-2",
+        "x": 910.07921,
+        "y": 472.4412,
+        "pins": [
+          "1",
+          "2"
+        ]
+      },
+      {
+        "recordIndex": 363,
+        "reference": "J1",
+        "comment": "282834-2",
+        "footprint": "TE 282834-2",
+        "x": 208.03156,
+        "y": 472.44097,
+        "pins": [
+          "1",
+          "2"
+        ]
+      }
+    ],
+    "pins": [
+      {
+        "componentIndex": 0,
+        "number": "3",
+        "name": "VIN",
+        "electrical": "passive",
+        "x": 444.88212,
+        "y": 472.4412,
+        "orientation": 2,
+        "lengthMil": 15.74803
+      },
+      {
+        "componentIndex": 0,
+        "number": "5",
+        "name": "EN",
+        "electrical": "passive",
+        "x": 444.88212,
+        "y": 444.88213,
+        "orientation": 2,
+        "lengthMil": 15.74803
+      },
+      {
+        "componentIndex": 0,
+        "number": "6",
+        "name": "VBST",
+        "electrical": "passive",
+        "x": 527.55935,
+        "y": 472.4412,
+        "orientation": 0,
+        "lengthMil": 15.74803
+      },
+      {
+        "componentIndex": 0,
+        "number": "2",
+        "name": "SW",
+        "electrical": "passive",
+        "x": 527.55935,
+        "y": 444.88213,
+        "orientation": 0,
+        "lengthMil": 15.74803
+      },
+      {
+        "componentIndex": 0,
+        "number": "4",
+        "name": "VFB",
+        "electrical": "passive",
+        "x": 527.55935,
+        "y": 405.51203,
+        "orientation": 0,
+        "lengthMil": 15.74803
+      },
+      {
+        "componentIndex": 0,
+        "number": "1",
+        "name": "GND",
+        "electrical": "passive",
+        "x": 527.55935,
+        "y": 385.82698,
+        "orientation": 0,
+        "lengthMil": 15.74803
+      },
+      {
+        "componentIndex": 1,
+        "number": "1",
+        "name": "1",
+        "electrical": "passive",
+        "x": 330.70884,
+        "y": 442.4412,
+        "orientation": 3,
+        "lengthMil": 10
+      },
+      {
+        "componentIndex": 1,
+        "number": "2",
+        "name": "2",
+        "electrical": "passive",
+        "x": 330.70884,
+        "y": 462.4412,
+        "orientation": 1,
+        "lengthMil": 10
+      },
+      {
+        "componentIndex": 2,
+        "number": "1",
+        "name": "1",
+        "electrical": "passive",
+        "x": 572.36253,
+        "y": 472.4412,
+        "orientation": 2,
+        "lengthMil": 10
+      },
+      {
+        "componentIndex": 2,
+        "number": "2",
+        "name": "2",
+        "electrical": "passive",
+        "x": 592.36253,
+        "y": 472.4412,
+        "orientation": 0,
+        "lengthMil": 10
+      },
+      {
+        "componentIndex": 3,
+        "number": "2",
+        "name": "2",
+        "electrical": "passive",
+        "x": 695.35469,
+        "y": 472.4412,
+        "orientation": 0,
+        "lengthMil": 10
+      },
+      {
+        "componentIndex": 3,
+        "number": "1",
+        "name": "1",
+        "electrical": "passive",
+        "x": 675.35469,
+        "y": 472.4412,
+        "orientation": 2,
+        "lengthMil": 10
+      },
+      {
+        "componentIndex": 4,
+        "number": "2",
+        "name": "2",
+        "electrical": "passive",
+        "x": 740.15788,
+        "y": 462.4412,
+        "orientation": 1,
+        "lengthMil": 10
+      },
+      {
+        "componentIndex": 4,
+        "number": "1",
+        "name": "1",
+        "electrical": "passive",
+        "x": 740.15788,
+        "y": 442.4412,
+        "orientation": 3,
+        "lengthMil": 10
+      },
+      {
+        "componentIndex": 5,
+        "number": "2",
+        "name": "2",
+        "electrical": "passive",
+        "x": 740.15788,
+        "y": 391.57502,
+        "orientation": 1,
+        "lengthMil": 10
+      },
+      {
+        "componentIndex": 5,
+        "number": "1",
+        "name": "1",
+        "electrical": "passive",
+        "x": 740.15788,
+        "y": 371.57502,
+        "orientation": 3,
+        "lengthMil": 10
+      },
+      {
+        "componentIndex": 6,
+        "number": "1",
+        "name": "1",
+        "electrical": "passive",
+        "x": 814.96107,
+        "y": 439.13409,
+        "orientation": 3,
+        "lengthMil": 10
+      },
+      {
+        "componentIndex": 6,
+        "number": "2",
+        "name": "2",
+        "electrical": "passive",
+        "x": 814.96107,
+        "y": 459.13409,
+        "orientation": 1,
+        "lengthMil": 10
+      },
+      {
+        "componentIndex": 7,
+        "number": "1",
+        "name": "1",
+        "electrical": "passive",
+        "x": 900.07921,
+        "y": 472.4412,
+        "orientation": 2,
+        "lengthMil": 30
+      },
+      {
+        "componentIndex": 7,
+        "number": "2",
+        "name": "2",
+        "electrical": "passive",
+        "x": 900.07921,
+        "y": 462.4412,
+        "orientation": 2,
+        "lengthMil": 30
+      },
+      {
+        "componentIndex": 8,
+        "number": "1",
+        "name": "1",
+        "electrical": "passive",
+        "x": 218.03156,
+        "y": 472.44097,
+        "orientation": 0,
+        "lengthMil": 30
+      },
+      {
+        "componentIndex": 8,
+        "number": "2",
+        "name": "2",
+        "electrical": "passive",
+        "x": 218.03156,
+        "y": 462.44097,
+        "orientation": 0,
+        "lengthMil": 30
+      }
+    ],
+    "wires": [
+      {
+        "x1": 248.03156,
+        "y1": 472.44097,
+        "x2": 429.13409,
+        "y2": 472.4412,
+        "points": [
+          {
+            "x": 248.03156,
+            "y": 472.44097
+          },
+          {
+            "x": 389.76399,
+            "y": 472.44097
+          },
+          {
+            "x": 429.13409,
+            "y": 472.44097
+          },
+          {
+            "x": 429.13409,
+            "y": 472.4412
+          }
+        ]
+      },
+      {
+        "x1": 562.36253,
+        "y1": 472.4412,
+        "x2": 543.30738,
+        "y2": 472.4412,
+        "points": [
+          {
+            "x": 562.36253,
+            "y": 472.4412
+          },
+          {
+            "x": 543.30738,
+            "y": 472.4412
+          }
+        ]
+      },
+      {
+        "x1": 602.36253,
+        "y1": 472.4412,
+        "x2": 665.35469,
+        "y2": 472.4412,
+        "points": [
+          {
+            "x": 602.36253,
+            "y": 472.4412
+          },
+          {
+            "x": 625.98459,
+            "y": 472.4412
+          },
+          {
+            "x": 665.35469,
+            "y": 472.4412
+          }
+        ]
+      },
+      {
+        "x1": 705.35469,
+        "y1": 472.4412,
+        "x2": 870.07921,
+        "y2": 472.4412,
+        "points": [
+          {
+            "x": 705.35469,
+            "y": 472.4412
+          },
+          {
+            "x": 814.96107,
+            "y": 472.4412
+          },
+          {
+            "x": 870.07921,
+            "y": 472.4412
+          }
+        ]
+      },
+      {
+        "x1": 814.96107,
+        "y1": 469.13409,
+        "x2": 814.96107,
+        "y2": 472.4412,
+        "points": [
+          {
+            "x": 814.96107,
+            "y": 469.13409
+          },
+          {
+            "x": 814.96107,
+            "y": 472.4412
+          }
+        ]
+      },
+      {
+        "x1": 814.96107,
+        "y1": 429.13409,
+        "x2": 814.96107,
+        "y2": 421.26007,
+        "points": [
+          {
+            "x": 814.96107,
+            "y": 429.13409
+          },
+          {
+            "x": 814.96107,
+            "y": 421.26007
+          }
+        ]
+      },
+      {
+        "x1": 740.15788,
+        "y1": 361.57502,
+        "x2": 740.15788,
+        "y2": 354.3309,
+        "points": [
+          {
+            "x": 740.15788,
+            "y": 361.57502
+          },
+          {
+            "x": 740.15788,
+            "y": 354.3309
+          }
+        ]
+      },
+      {
+        "x1": 870.07921,
+        "y1": 462.4412,
+        "x2": 862.20519,
+        "y2": 448.81914,
+        "points": [
+          {
+            "x": 870.07921,
+            "y": 462.4412
+          },
+          {
+            "x": 862.20519,
+            "y": 462.4412
+          },
+          {
+            "x": 862.20519,
+            "y": 448.81914
+          }
+        ]
+      },
+      {
+        "x1": 543.30738,
+        "y1": 444.88213,
+        "x2": 625.98459,
+        "y2": 472.4412,
+        "points": [
+          {
+            "x": 543.30738,
+            "y": 444.88213
+          },
+          {
+            "x": 625.98459,
+            "y": 444.88213
+          },
+          {
+            "x": 625.98459,
+            "y": 472.4412
+          }
+        ]
+      },
+      {
+        "x1": 283.46472,
+        "y1": 448.81914,
+        "x2": 248.03156,
+        "y2": 462.44097,
+        "points": [
+          {
+            "x": 283.46472,
+            "y": 448.81914
+          },
+          {
+            "x": 283.46472,
+            "y": 462.44097
+          },
+          {
+            "x": 248.03156,
+            "y": 462.44097
+          }
+        ]
+      },
+      {
+        "x1": 330.70884,
+        "y1": 432.4412,
+        "x2": 330.70884,
+        "y2": 421.26007,
+        "points": [
+          {
+            "x": 330.70884,
+            "y": 432.4412
+          },
+          {
+            "x": 330.70884,
+            "y": 421.26007
+          }
+        ]
+      },
+      {
+        "x1": 562.99243,
+        "y1": 374.01595,
+        "x2": 543.30738,
+        "y2": 385.82698,
+        "points": [
+          {
+            "x": 562.99243,
+            "y": 374.01595
+          },
+          {
+            "x": 562.99243,
+            "y": 385.82698
+          },
+          {
+            "x": 543.30738,
+            "y": 385.82698
+          }
+        ]
+      },
+      {
+        "x1": 429.13409,
+        "y1": 444.88213,
+        "x2": 389.76399,
+        "y2": 472.44097,
+        "points": [
+          {
+            "x": 429.13409,
+            "y": 444.88213
+          },
+          {
+            "x": 389.76399,
+            "y": 444.88213
+          },
+          {
+            "x": 389.76399,
+            "y": 472.44097
+          }
+        ]
+      },
+      {
+        "x1": 740.15788,
+        "y1": 432.4412,
+        "x2": 740.15788,
+        "y2": 401.57502,
+        "points": [
+          {
+            "x": 740.15788,
+            "y": 432.4412
+          },
+          {
+            "x": 740.15788,
+            "y": 401.57502
+          }
+        ]
+      },
+      {
+        "x1": 543.30738,
+        "y1": 405.51203,
+        "x2": 740.15788,
+        "y2": 405.51203,
+        "points": [
+          {
+            "x": 543.30738,
+            "y": 405.51203
+          },
+          {
+            "x": 740.15788,
+            "y": 405.51203
+          }
+        ]
+      }
+    ],
+    "labels": [
+      {
+        "text": "IN",
+        "x": 263.77967,
+        "y": 472.44097,
+        "kind": "net"
+      },
+      {
+        "text": "OUT",
+        "x": 846.45715,
+        "y": 472.4412,
+        "kind": "net"
+      },
+      {
+        "text": "FB",
+        "x": 555.11841,
+        "y": 405.51203,
+        "kind": "net"
+      },
+      {
+        "text": "SW",
+        "x": 555.11841,
+        "y": 444.88213,
+        "kind": "net"
+      },
+      {
+        "text": "GND",
+        "x": 740.15788,
+        "y": 354.3309,
+        "kind": "power"
+      },
+      {
+        "text": "GND",
+        "x": 562.99243,
+        "y": 374.01595,
+        "kind": "power"
+      },
+      {
+        "text": "GND",
+        "x": 330.70884,
+        "y": 421.26007,
+        "kind": "power"
+      },
+      {
+        "text": "GND",
+        "x": 814.96107,
+        "y": 421.26007,
+        "kind": "power"
+      },
+      {
+        "text": "GND",
+        "x": 862.20519,
+        "y": 448.81914,
+        "kind": "power"
+      },
+      {
+        "text": "GND",
+        "x": 283.46472,
+        "y": 448.81914,
+        "kind": "power"
+      }
+    ],
+    "powerPorts": [
+      {
+        "text": "GND",
+        "x": 740.15788,
+        "y": 354.3309
+      },
+      {
+        "text": "GND",
+        "x": 562.99243,
+        "y": 374.01595
+      },
+      {
+        "text": "GND",
+        "x": 330.70884,
+        "y": 421.26007
+      },
+      {
+        "text": "GND",
+        "x": 814.96107,
+        "y": 421.26007
+      },
+      {
+        "text": "GND",
+        "x": 862.20519,
+        "y": 448.81914
+      },
+      {
+        "text": "GND",
+        "x": 283.46472,
+        "y": 448.81914
+      }
+    ],
+    "junctions": [
+      {
+        "x": 330.70884,
+        "y": 472.4412
+      },
+      {
+        "x": 389.76399,
+        "y": 472.44097
+      },
+      {
+        "x": 625.98459,
+        "y": 472.4412
+      },
+      {
+        "x": 740.15788,
+        "y": 405.51203
+      },
+      {
+        "x": 740.15788,
+        "y": 472.4412
+      },
+      {
+        "x": 814.96107,
+        "y": 472.4412
+      }
+    ]
+  },
+  "nets": {
+    "nets": {
+      "IN": [
+        {
+          "reference": "C2",
+          "pin": "2"
+        },
+        {
+          "reference": "IC1",
+          "pin": "5"
+        },
+        {
+          "reference": "J1",
+          "pin": "1"
+        }
+      ],
+      "__unnamed_1": [
+        {
+          "reference": "C1",
+          "pin": "1"
+        },
+        {
+          "reference": "IC1",
+          "pin": "6"
+        }
+      ],
+      "SW": [
+        {
+          "reference": "C1",
+          "pin": "2"
+        },
+        {
+          "reference": "IC1",
+          "pin": "2"
+        },
+        {
+          "reference": "L1",
+          "pin": "1"
+        }
+      ],
+      "FB": [
+        {
+          "reference": "IC1",
+          "pin": "4"
+        },
+        {
+          "reference": "R1",
+          "pin": "1"
+        },
+        {
+          "reference": "R2",
+          "pin": "2"
+        }
+      ],
+      "GND": [
+        {
+          "reference": "C2",
+          "pin": "1"
+        },
+        {
+          "reference": "C3",
+          "pin": "1"
+        },
+        {
+          "reference": "IC1",
+          "pin": "1"
+        },
+        {
+          "reference": "J1",
+          "pin": "2"
+        },
+        {
+          "reference": "J2",
+          "pin": "2"
+        },
+        {
+          "reference": "R2",
+          "pin": "1"
+        }
+      ],
+      "OUT": [
+        {
+          "reference": "C3",
+          "pin": "2"
+        },
+        {
+          "reference": "J2",
+          "pin": "1"
+        },
+        {
+          "reference": "L1",
+          "pin": "2"
+        },
+        {
+          "reference": "R1",
+          "pin": "2"
+        },
+        {
+          "reference": "IC1",
+          "pin": "3"
+        }
+      ]
+    },
+    "pinNet": {
+      "C2.2": "IN",
+      "IC1.3": "OUT",
+      "IC1.5": "IN",
+      "J1.1": "IN",
+      "C1.1": "__unnamed_1",
+      "IC1.6": "__unnamed_1",
+      "C1.2": "SW",
+      "IC1.2": "SW",
+      "L1.1": "SW",
+      "IC1.4": "FB",
+      "R1.1": "FB",
+      "R2.2": "FB",
+      "C2.1": "GND",
+      "C3.1": "GND",
+      "IC1.1": "GND",
+      "J1.2": "GND",
+      "J2.2": "GND",
+      "R2.1": "GND",
+      "C3.2": "OUT",
+      "J2.1": "OUT",
+      "L1.2": "OUT",
+      "R1.2": "OUT"
+    },
+    "stats": {
+      "pinsMatched": 22,
+      "pinsTotal": 22,
+      "nets": 6
+    }
+  }
+}
