@@ -61,8 +61,9 @@ const RULE_LABELS = {
 
 // SVG 来自 altiumts 的渲染结果，正常板图不会包含脚本、事件属性或外部引用。
 // 为防注入与外部请求，含这些特征时宁可不内联，也不把可疑内容写进报告。
-// on[a-z]+\s*= 不限定前置空白，覆盖 <svg/onload=...> 这类解析器会接受的写法。
-const UNSAFE_SVG_PATTERN = /<\s*(?:script|foreignObject|iframe|object|embed)\b|on[a-z]+\s*=|javascript:|@import|(?:href|src)\s*=\s*["']?\s*(?:https?:)?\/\//i
+// 事件属性要求前面是分隔符（空白、引号、斜杠或标签开头），避免把
+// data-component= 这类普通属性名里的 "onent=" 误判成 on 事件。
+const UNSAFE_SVG_PATTERN = /<\s*(?:script|foreignObject|iframe|object|embed)\b|(?:^|[\s"'/<])on[a-z]+\s*=|javascript:|@import|(?:href|src)\s*=\s*["']?\s*(?:https?:)?\/\//i
 
 /**
  * 渲染完整报告 HTML。
@@ -126,7 +127,8 @@ function normalizeFinding(finding) {
   }
 }
 
-function severityGroup(severity) {
+// 供上层汇总 counts / top findings 复用，避免严重度词汇表在两处漂移。
+export function severityGroup(severity) {
   const key = scalarText(severity).trim().toLowerCase()
   return ownLookup(SEVERITY_ALIASES, key) || 'should_fix'
 }

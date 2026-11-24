@@ -145,6 +145,12 @@ test('SVG 直接内联，可疑脚本与外部引用被省略', () => {
   assert.ok(html.includes(svg), 'SVG 应内联输出')
   assert.match(html, /顶层板图/)
 
+  // altiumts 的板图会用 data-component= 标注元件；普通属性名里的 "onent="
+  // 不能被误判成 on 事件属性（Task 11 集成 --svg 时发现的真实误报）。
+  const annotated = '<svg xmlns="http://www.w3.org/2000/svg"><path data-record="ComponentBody" data-component="1" d="M0 0"/></svg>'
+  const safeHtml = renderReport({ ...data, svgs: [{ title: '带标注板图', svg: annotated }] })
+  assert.ok(safeHtml.includes(annotated), 'data-component 不应触发事件属性拦截')
+
   for (const badSvg of [
     '<svg onload="alert(1)"></svg>',
     '<svg/onload="alert(1)"></svg>',
