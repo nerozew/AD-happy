@@ -19,6 +19,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -74,6 +75,11 @@ const ARTIFACT_FILES = [
 const SUMMARY_LIMIT = 32 * 1024 // summary.json 必须严格小于 32KB
 const TOP_FINDINGS_LIMIT = 20
 const SUMMARY_TEXT_LIMIT = 400
+
+// 输出目录所有权标记：只有带匹配标记的已有目录才允许清理固定产物，
+// 避免 --out 指向用户自己的目录时误删同名文件。
+const RUN_MARKER = '.ad-happy-run'
+const RUN_MARKER_SCHEMA = 1
 
 const GROUP_RANK = { must_fix: 0, should_fix: 1, nice_to_have: 2 }
 
@@ -135,8 +141,12 @@ async function main() {
   }
 
   let state
+  const outProblem = prepareOutDir(outDir)
+  if (outProblem) {
+    console.error(outProblem)
+    return 2
+  }
   try {
-    mkdirSync(outDir, { recursive: true })
     const cleanupFailures = clearArtifacts(outDir)
     state = createState({ runId, startedAt, outDir, projectDir, options })
     for (const name of cleanupFailures) {
@@ -1005,6 +1015,49 @@ function isInside(parent, child) {
   if (isAbsolute(relation)) return false
   // 只把 ".." 与 "..<sep>..." 视为父目录；名为 "..foo" 的同级目录仍在内部。
   return relation !== '..' && !relation.startsWith(`..${sep}`)
+}
+
+function prepareOutDir(outDir) {
+  const markerPath = join(outDir, RUN_MARKER)
+  if (existsSync(outDir)) {
+    let entries
+    try {
+      entries = readdirSync(outDir)
+    } catch (error) {
+      return `无法读取输出目录 ${outDir}: ${error?.message ?? error}`
+    }
+    if (entries.length > 0) {
+      if (!existsSync(markerPath)) {
+        return `输出目录非空且没有 ${RUN_MARKER} 标记，拒绝清理: ${outDir}\n`
+          + '请换一个空目录，或删除该目录中的旧文件后重试。'
+      }
+      if (!isOwnRunMarker(markerPath)) {
+        return `输出目录的 ${RUN_MARKER} 标记无效，拒绝清理: ${outDir}`
+      }
+    }
+  }
+  try {
+    mkdirSync(outDir, { recursive: true })
+    writeFileSync(
+      markerPath,
+      `${JSON.stringify({ tool: 'ad-happy', schemaVersion: RUN_MARKER_SCHEMA })}\n`,
+      'utf8',
+    )
+  } catch (error) {
+    return `无法准备输出目录 ${outDir}: ${error?.message ?? error}`
+  }
+  return null
+}
+
+function isOwnRunMarker(markerPath) {
+  try {
+    const marker = JSON.parse(readFileSync(markerPath, 'utf8'))
+    return isPlainObject(marker)
+      && marker.tool === 'ad-happy'
+      && marker.schemaVersion === RUN_MARKER_SCHEMA
+  } catch {
+    return false
+  }
 }
 
 function clearArtifacts(outDir) {

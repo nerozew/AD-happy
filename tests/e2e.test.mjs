@@ -158,6 +158,31 @@ test('拒绝把输出写进源工程目录', () => {
   assert.deepEqual(readdirSync(root).sort(), before, '源工程目录不得被修改')
 })
 
+test('--out 指向无 marker 的非空目录时拒绝且不删除无关文件', () => {
+  const outDir = freshOut('ad-happy-user-dir-')
+  const unrelated = join(outDir, 'manifest.json')
+  const content = '{"owner":"user","note":"not ad-happy"}'
+  writeFileSync(unrelated, content, 'utf8')
+
+  const r = runAnalyze(['--project', root, '--out', outDir])
+  assert.equal(r.status, 2)
+  assert.match(r.stderr, /ad-happy-run|非空/)
+  // 用户的 manifest.json 必须原样保留。
+  assert.equal(readFileSync(unrelated, 'utf8'), content)
+  assert.equal(existsSync(join(outDir, 'report.html')), false)
+})
+
+test('同一输出目录可被后续运行安全复用（marker 匹配后清理旧产物）', () => {
+  const outDir = freshOut('ad-happy-reuse-')
+  const first = runAnalyze(['--project', root, '--out', outDir])
+  assert.equal(first.status, 0, first.stderr)
+  assert.ok(existsSync(join(outDir, '.ad-happy-run')))
+
+  const second = runAnalyze(['--project', root, '--out', outDir])
+  assert.equal(second.status, 0, second.stderr)
+  assert.ok(existsSync(join(outDir, 'summary.json')))
+})
+
 test('Python 阶段失败时退出码 3，写 manifest 错误且不产出假报告', () => {
   const fakeKicad = freshOut('ad-happy-fake-kicad-')
   // selfcheck 只检查文件存在；空模块会让 Python import 失败，模拟 Python 阶段异常。
