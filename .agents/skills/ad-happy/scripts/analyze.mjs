@@ -5,14 +5,14 @@
 // 用法：
 //   node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>]
 //                    [--project-file <PrjPcb 文件名>]
-//                    [--board <PcbDoc 文件名>] [--svg]
+//                    [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>] [--svg]
 //
 // 退出码：0 完成；2 输入无效；3 部分完成（文档解析失败、规则 failed、
-// Python 阶段异常或报告生成失败）。
+// Python/Gerber 阶段异常或报告生成失败）。
 //
 // 产物（写入 --out 或 %LOCALAPPDATA%\ad-happy\runs\<run-id>）：
 // manifest.json、snapshot.json、raw.json、pcb.json、findings.json、
-// pipeline-summary.json、summary.json、report.html。
+// pipeline-summary.json、gerber.json、summary.json、report.html。
 //
 // 源工程只读：--out 落在源工程目录内会被直接拒绝（退出码 2）。
 import { spawnSync } from 'node:child_process'
@@ -36,17 +36,24 @@ import {
   sep,
 } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import {
+  detectGerberDirectory,
+  emptyGerberCoverage,
+  runGerberAnalysis,
+} from './reuse/gerber.mjs'
 import { runSelfCheck } from './selfcheck.mjs'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const PIPELINE_PY = join(SCRIPT_DIR, 'pipeline.py')
 
-const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>] [--project-file <PrjPcb 文件名>] [--board <PcbDoc 文件名>] [--svg]
+const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>] [--project-file <PrjPcb 文件名>] [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>] [--svg]
 
   --project        包含 .PrjPcb 的工程目录，或 .PrjPcb 文件路径
   --out            输出目录；默认 %LOCALAPPDATA%\\ad-happy\\runs\\<run-id>
   --project-file   目录中有多个 .PrjPcb 时指定要审查的工程文件名（或路径）
   --board          指定要审查的 PcbDoc 文件名；默认文档清单中最后一块
+  --gerber         指定 Gerber/钻孔输出目录；省略时自动查找工程下的
+                   Gerber、Outputs、Project Outputs、Manufacturing 目录
   --svg            尝试把选中板卡渲染为 SVG 内联到报告；失败只降级，不中止分析`
 
 // 三组规则的完整键；即使某一侧输入缺失，报告也能展示全部规则状态。
@@ -59,7 +66,8 @@ const SCH_RULES = [
   'shorted_component',
 ]
 const PCB_RULES = ['dfm', 'pad_distance', 'current_capacity', 'decoupling_placement']
-const ALL_RULES = [...SCH_RULES, ...PCB_RULES, 'pin_pad']
+// gerber 是制造文件（Gerber/钻孔）检查，独立于原理图/PCB 解析。
+const ALL_RULES = [...SCH_RULES, ...PCB_RULES, 'pin_pad', 'gerber']
 // 这些规则依赖原理图网表（decoupling 还依赖可解析电容值）；引脚未全部
 // 入网时，空结果不能视为通过。
 const NETLIST_DEPENDENT_RULES = [
@@ -79,6 +87,8 @@ const ARTIFACT_FILES = [
   'pcb.json',
   'findings.json',
   'pipeline-summary.json',
+  'gerber.json',
+  'capability_mode.json',
   'summary.json',
   'report.html',
 ]
@@ -135,6 +145,10 @@ async function main() {
     console.error(`--project-file 不能为空\n\n${USAGE}`)
     return 2
   }
+  if (options.gerber !== null && !options.gerber.trim()) {
+    console.error(`--gerber 不能为空\n\n${USAGE}`)
+    return 2
+  }
 
   // 输入路径：工程目录，或直接给 .PrjPcb 文件。
   const inputPath = resolve(options.project)
@@ -155,6 +169,23 @@ async function main() {
   } else {
     console.error(`--project 需要工程目录或 .PrjPcb 文件: ${inputPath}`)
     return 2
+  }
+
+  // 显式 --gerber 必须是已存在的目录；省略时在 executeStages 中自动发现。
+  if (options.gerber !== null) {
+    const gerberPath = resolve(options.gerber)
+    let gerberStat
+    try {
+      gerberStat = statSync(gerberPath)
+    } catch {
+      console.error(`Gerber 目录不存在或不可访问: ${gerberPath}`)
+      return 2
+    }
+    if (!gerberStat.isDirectory()) {
+      console.error(`--gerber 需要目录: ${gerberPath}`)
+      return 2
+    }
+    options.gerber = gerberPath
   }
 
   const outDir = resolve(options.out ?? defaultOutDir(runId))
@@ -513,13 +544,19 @@ async function executeStages(state) {
     }
   }
 
+  // 9.5 Gerber/钻孔（制造文件）分析。独立于原理图/PCB 解析；缺目录、
+  //     空目录或缺少钻孔文件时写入 not_evaluated/partial，绝不静默通过。
+  const gerberStage = runGerberStage(state, ruleStatus)
+  const gerberFindings = gerberStage.findings
+
   const findings = [
     ...state.syntheticFindings,
     ...pipelineSummary.findings.filter(isPlainObject),
+    ...gerberFindings,
   ]
-  // Python 只写规则层 findings；解析/连通性失败的 DET-ERR 由 Node 补充，
-  // 保证 findings.json 是完整交付物（报告与 summary 使用同一份合并结果）。
-  if (state.syntheticFindings.length > 0) {
+  // Python 只写规则层 findings；解析/连通性失败的 DET-ERR 与 Gerber 结果
+  // 由 Node 补充，保证 findings.json 是完整交付物（报告与 summary 使用同一份合并结果）。
+  if (state.syntheticFindings.length > 0 || gerberFindings.length > 0) {
     writeJson(join(state.outDir, 'findings.json'), findings)
   }
 
@@ -546,9 +583,16 @@ async function executeStages(state) {
     pinsTotal,
     complete: !netlistIncomplete,
   }
+  coverage.gerber = gerberStage.coverage
   const missingInputs = []
   if (!selectedBoard) missingInputs.push('pcb')
   if (!selectedSchematic) missingInputs.push('schematic')
+  // 显式请求了 --gerber 却拿不到结论时，本次运行属于部分完成；
+  // 自动发现不到 Gerber 目录只记为 not_evaluated，不改变退出码。
+  if (state.options.gerber !== null && ruleStatus.gerber === 'not_evaluated') {
+    missingInputs.push('gerber')
+  }
+  const manufacturing = buildManufacturing(gerberStage.coverage, gerberFindings)
 
   // 10. 可选 SVG。失败只降级为不传并记录原因，绝不让整个分析失败。
   const svgs = await renderSvg(state, pcbSnapshot, selectedBoard)
@@ -570,6 +614,7 @@ async function executeStages(state) {
         kind: document.kind,
         selected: document === selectedBoard || document === selectedSchematic,
       })),
+      manufacturing,
       svgs,
     })
     writeFileSync(reportPath, html, 'utf8')
@@ -655,6 +700,76 @@ function readPipelineSummary(outDir) {
     )
   }
   return summary
+}
+
+// ---------------------------------------------------------------------------
+// Gerber / 制造文件
+// ---------------------------------------------------------------------------
+
+function runGerberStage(state, ruleStatus) {
+  const requested = state.options.gerber !== null
+  let directory = state.options.gerber
+  if (!directory) {
+    const detected = detectGerberDirectory(state.projectDir)
+    if (detected) directory = detected.directory
+  }
+
+  if (!directory) {
+    const reason = '工程目录中未找到 Gerber 输出目录'
+      + '（Gerber、Outputs、Project Outputs、Manufacturing）'
+    const coverage = emptyGerberCoverage([reason])
+    ruleStatus.gerber = 'not_evaluated'
+    state.manifest.stages.gerber = 'skipped'
+    state.manifest.gerber = {
+      requested,
+      autoDetected: true,
+      directory: null,
+      status: coverage.status,
+      findings: 0,
+    }
+    state.warnings.push(`${reason}，制造文件检查标记为 not_evaluated`)
+    return { findings: [], coverage }
+  }
+
+  const result = runGerberAnalysis(directory, state.outDir)
+  const coverage = result.coverage
+  ruleStatus.gerber = coverage.status
+  if (coverage.status === 'failed') {
+    state.manifest.stages.gerber = 'failed'
+    state.errors.push({
+      stage: 'gerber',
+      message: 'Gerber/钻孔分析失败',
+      details: coverage.reasons.join('；') || '（无错误输出）',
+    })
+  } else if (coverage.status === 'not_evaluated') {
+    state.manifest.stages.gerber = 'not_evaluated'
+    state.warnings.push(
+      `制造文件检查未评估：${coverage.reasons.join('；') || '输入不足'}`,
+    )
+  } else {
+    state.manifest.stages.gerber = 'pass'
+    if (coverage.status === 'partial') {
+      state.warnings.push(
+        `制造文件检查部分完成：${coverage.reasons.join('；') || '部分检查被跳过'}`,
+      )
+    }
+  }
+  state.manifest.gerber = {
+    requested,
+    autoDetected: !requested,
+    directory: coverage.directory,
+    status: coverage.status,
+    findings: result.findings.length,
+  }
+  return { findings: result.findings, coverage }
+}
+
+function buildManufacturing(coverage, findings) {
+  return {
+    ...coverage,
+    source: 'gerber',
+    findings,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -803,6 +918,7 @@ function statusKeyForFinding(finding) {
 }
 
 function summarizeFinding(finding, group) {
+  const source = scalarText(finding.source)
   const entry = {
     rule_id: scalarText(finding.rule_id),
     detector: scalarText(finding.detector),
@@ -821,6 +937,7 @@ function summarizeFinding(finding, group) {
     nets: locatorList(finding.nets, scalarText),
     pins: locatorList(finding.pins, pinText),
   }
+  if (source) entry.source = source
   const recommendation = truncateText(
     scalarText(finding.recommendation) || scalarText(finding.advice),
     240,
@@ -935,11 +1052,13 @@ function createState({ runId, startedAt, outDir, projectDir, options }) {
         parse: 'skipped',
         connectivity: 'skipped',
         python: 'skipped',
+        gerber: 'skipped',
         report: 'skipped',
       },
       documents: [],
       errors: [],
       warnings: [],
+      gerber: null,
       svg: null,
       artifacts: null,
       status: 'running',
@@ -1126,6 +1245,7 @@ function parseArgs(argv) {
     out: null,
     projectFile: null,
     board: null,
+    gerber: null,
     svg: false,
     help: false,
   }
@@ -1157,6 +1277,12 @@ function parseArgs(argv) {
       case '--board': {
         const taken = takeValue(key, inline, argv, index)
         options.board = taken.value
+        index = taken.index
+        break
+      }
+      case '--gerber': {
+        const taken = takeValue(key, inline, argv, index)
+        options.gerber = taken.value
         index = taken.index
         break
       }

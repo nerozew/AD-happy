@@ -35,7 +35,7 @@
       }
     ]
   },
-  "generatedAt": "2026-11-24 22:55:28",
+  "generatedAt": "2026-11-24 23:55:27",
   "status": "complete",
   "schematic": {
     "components": 9,
@@ -66,6 +66,35 @@
       "pinsTotal": 22,
       "complete": true
     },
+    "gerber": {
+      "status": "pass",
+      "directory": "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic",
+      "gerberFiles": 9,
+      "drillFiles": 1,
+      "unsupportedDrillFiles": 0,
+      "layerCount": 2,
+      "drillCount": 5,
+      "units": [
+        "mm"
+      ],
+      "missingLayers": [],
+      "missingRequired": [],
+      "missingRecommended": [],
+      "boardDimensions": {
+        "widthMm": 30,
+        "heightMm": 20,
+        "areaMm2": 600,
+        "source": "edge_cuts_extents"
+      },
+      "checks": {
+        "layer_completeness": "pass",
+        "drill_data": "pass",
+        "alignment": "pass",
+        "board_dimensions": "pass"
+      },
+      "reasons": [],
+      "findings": 0
+    },
     "crossCheck": {
       "compared": 22,
       "exact": 22,
@@ -81,7 +110,7 @@
     "total": 2,
     "facts": 8,
     "rules": {
-      "pass": 5,
+      "pass": 6,
       "found": 5,
       "partial": 0,
       "not_evaluated": 1,
@@ -99,7 +128,8 @@
     "pad_distance": "found",
     "current_capacity": "found",
     "decoupling_placement": "found",
-    "pin_pad": "pass"
+    "pin_pad": "pass",
+    "gerber": "pass"
   },
   "findings": [
     {

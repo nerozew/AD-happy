@@ -201,6 +201,34 @@
     font-size: 13px;
   }
   .locator-key { color: var(--muted); margin-right: 6px; }
+  .source-tag {
+    display: inline-block;
+    border: 1px dashed var(--na-border);
+    border-radius: 999px;
+    padding: 1px 10px;
+    color: var(--muted);
+    background: #f8fafc;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .layer-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    list-style: none;
+    margin: 0 0 8px;
+    padding: 0;
+  }
+  .layer-list li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 10px;
+    background: #fcfcfd;
+  }
   .empty { color: var(--muted); margin: 4px 0 0; }
   .coverage-grid {
     display: grid;
@@ -267,7 +295,7 @@
     <p class="kicker">AD-Happy 设计审查报告</p>
     <h1>DCDC Buck Converter</h1>
     <dl class="meta">
-      <div><dt>生成时间</dt><dd>2026-11-24 22:55:28</dd></div>
+      <div><dt>生成时间</dt><dd>2026-11-24 23:55:27</dd></div>
     </dl>
   </header>
   <main>
@@ -352,6 +380,32 @@
       <tr class="doc-selected"><th scope="row">PCB4 (Manual routing).PcbDoc</th><td>PCB</td><td><span class="badge badge-pass">本次审查</span></td></tr>
     </tbody>
   </table>
+</section>
+<section class="panel" id="manufacturing">
+  <h2>制造文件</h2>
+  <p class="hint">来源：Gerber 分析（复用 kicad-happy 的 Gerber/钻孔检查）。</p>
+  <dl class="coverage-grid">
+    <div><dt>状态</dt><dd><span class="badge badge-pass">通过</span></dd></div>
+    <div><dt>分析目录</dt><dd><code>d:\Code_all\ad-happy\tests\fixtures\gerber-basic</code></dd></div>
+    <div><dt>Gerber 文件</dt><dd>9</dd></div>
+    <div><dt>钻孔文件</dt><dd>1</dd></div>
+    <div><dt>铜层数量</dt><dd>2</dd></div>
+    <div><dt>钻孔数量</dt><dd>5</dd></div>
+    <div><dt>单位</dt><dd>毫米（mm）</dd></div>
+    <div><dt>板框尺寸</dt><dd>30 × 20 mm</dd></div>
+  </dl>
+  <p class="empty">没有缺失层。</p>
+  <h3>制造检查项</h3>
+  <table class="status-table" id="manufacturing-checks">
+    <thead><tr><th scope="col">检查项</th><th scope="col">状态</th></tr></thead>
+    <tbody>
+      <tr><th scope="row"><span class="rule-name">层完整性</span><code>layer_completeness</code></th><td><span class="badge badge-pass">通过</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">钻孔数据</span><code>drill_data</code></th><td><span class="badge badge-pass">通过</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">层对齐</span><code>alignment</code></th><td><span class="badge badge-pass">通过</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">板框尺寸</span><code>board_dimensions</code></th><td><span class="badge badge-pass">通过</span></td></tr>
+    </tbody>
+  </table>
+  <p class="empty">未发现制造文件问题。</p>
 </section>
 <section class="panel" id="findings">
   <h2>问题清单</h2>
@@ -469,6 +523,7 @@
       <tr><th scope="row"><span class="rule-name">去耦电容检查</span><code>decoupling</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
       <tr><th scope="row"><span class="rule-name">去耦布局检查</span><code>decoupling_placement</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
       <tr><th scope="row"><span class="rule-name">DFM 制造规则检查</span><code>dfm</code></th><td><span class="badge badge-pass">通过</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">制造文件（Gerber/钻孔）检查</span><code>gerber</code></th><td><span class="badge badge-pass">通过</span></td></tr>
       <tr><th scope="row"><span class="rule-name">焊盘间距检查</span><code>pad_distance</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
       <tr><th scope="row"><span class="rule-name">原理图与 PCB 引脚网络对照</span><code>pin_pad</code></th><td><span class="badge badge-pass">通过</span></td></tr>
       <tr><th scope="row"><span class="rule-name">稳压器识别</span><code>power_regulator</code></th><td><span class="badge badge-found">发现问题</span></td></tr>

@@ -1,11 +1,13 @@
 {
   "schemaVersion": 1,
   "run": {
-    "id": "20261124-225528-621f",
-    "startedAt": "2026-11-24T14:55:28.658Z",
+    "id": "20261124-235527-9a43",
+    "startedAt": "2026-11-24T15:55:27.582Z",
     "argv": [
       "--project",
       "tests/fixtures/Student-DCDC-Buck-Converter",
+      "--gerber",
+      "tests/fixtures/gerber-basic",
       "--out",
       "docs/sample-report"
     ],
@@ -61,6 +63,7 @@
     "parse": "pass",
     "connectivity": "pass",
     "python": "pass",
+    "gerber": "pass",
     "report": "pass"
   },
   "documents": [
@@ -137,6 +140,13 @@
   ],
   "errors": [],
   "warnings": [],
+  "gerber": {
+    "requested": true,
+    "autoDetected": false,
+    "directory": "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic",
+    "status": "pass",
+    "findings": 0
+  },
   "svg": {
     "requested": false,
     "rendered": false
@@ -153,6 +163,6 @@
   },
   "status": "complete",
   "exitCode": 0,
-  "finishedAt": "2026-11-24T14:55:29.064Z",
-  "durationMs": 376
+  "finishedAt": "2026-11-24T15:55:28.216Z",
+  "durationMs": 609
 }

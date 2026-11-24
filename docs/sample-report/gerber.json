@@ -1,0 +1,363 @@
+{
+  "analyzer_type": "gerber",
+  "schema_version": "1.4.0",
+  "directory": "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic",
+  "generator": "Altium Limited,Altium Designer,24.0",
+  "layer_count": 2,
+  "board_dimensions": {
+    "width_mm": 30.0,
+    "height_mm": 20.0,
+    "area_mm2": 600.0,
+    "source": "edge_cuts_extents"
+  },
+  "statistics": {
+    "gerber_files": 9,
+    "drill_files": 1,
+    "total_holes": 5,
+    "total_flashes": 18,
+    "total_draws": 17
+  },
+  "completeness": {
+    "found_layers": [
+      "B.Cu",
+      "B.Mask",
+      "B.Paste",
+      "B.SilkS",
+      "Edge.Cuts",
+      "F.Cu",
+      "F.Mask",
+      "F.Paste",
+      "F.SilkS"
+    ],
+    "expected_layers": [],
+    "missing_required": [],
+    "missing_recommended": [],
+    "has_pth_drill": true,
+    "has_npth_drill": false,
+    "complete": true,
+    "source": "defaults"
+  },
+  "alignment": {
+    "aligned": true,
+    "issues": [],
+    "layer_extents": {
+      "B.Cu": {
+        "width": 30.0,
+        "height": 20.0
+      },
+      "B.SilkS": {
+        "width": 6.0,
+        "height": 0.0
+      },
+      "B.Paste": {
+        "width": 20.0,
+        "height": 10.0
+      },
+      "B.Mask": {
+        "width": 20.0,
+        "height": 10.0
+      },
+      "Edge.Cuts": {
+        "width": 30.0,
+        "height": 20.0
+      },
+      "F.Cu": {
+        "width": 30.0,
+        "height": 20.0
+      },
+      "F.SilkS": {
+        "width": 6.0,
+        "height": 16.0
+      },
+      "F.Paste": {
+        "width": 20.0,
+        "height": 10.0
+      },
+      "F.Mask": {
+        "width": 20.0,
+        "height": 10.0
+      },
+      "drill_PTH": {
+        "width": 20.0,
+        "height": 10.0
+      }
+    }
+  },
+  "drill_classification": {
+    "vias": {
+      "count": 1,
+      "tools": [
+        {
+          "diameter_mm": 0.3,
+          "count": 1
+        }
+      ]
+    },
+    "component_holes": {
+      "count": 4,
+      "tools": [
+        {
+          "diameter_mm": 0.8,
+          "count": 4
+        }
+      ]
+    },
+    "mounting_holes": {
+      "count": 0,
+      "tools": []
+    },
+    "classification_method": "x2_attributes"
+  },
+  "pad_summary": {
+    "smd_apertures": 6,
+    "via_apertures": 0,
+    "heatsink_apertures": 0,
+    "tht_holes": 4,
+    "smd_source": "paste_layer_flashes",
+    "smd_ratio": 0.6
+  },
+  "gerbers": [
+    {
+      "filename": "board.GBL",
+      "layer_type": "B.Cu",
+      "units": "mm",
+      "aperture_count": 2,
+      "flash_count": 2,
+      "draw_count": 4,
+      "region_count": 0,
+      "x2_attributes": {
+        "FileFunction": "Copper,L2,Bot",
+        "GenerationSoftware": "Altium Limited,Altium Designer,24.0"
+      },
+      "aperture_analysis": {
+        "min_feature_mm": 0.25
+      }
+    },
+    {
+      "filename": "board.GBO",
+      "layer_type": "B.SilkS",
+      "units": "mm",
+      "aperture_count": 1,
+      "flash_count": 0,
+      "draw_count": 1,
+      "region_count": 0,
+      "x2_attributes": {
+        "FileFunction": "Legend,Bot"
+      },
+      "aperture_analysis": {
+        "min_feature_mm": 0.15
+      }
+    },
+    {
+      "filename": "board.GBP",
+      "layer_type": "B.Paste",
+      "units": "mm",
+      "aperture_count": 1,
+      "flash_count": 2,
+      "draw_count": 0,
+      "region_count": 0,
+      "x2_attributes": {
+        "FileFunction": "Paste,Bot"
+      },
+      "aperture_analysis": {
+        "min_feature_mm": 1.5
+      }
+    },
+    {
+      "filename": "board.GBS",
+      "layer_type": "B.Mask",
+      "units": "mm",
+      "aperture_count": 1,
+      "flash_count": 2,
+      "draw_count": 0,
+      "region_count": 0,
+      "x2_attributes": {
+        "FileFunction": "Soldermask,Bot"
+      },
+      "aperture_analysis": {
+        "min_feature_mm": 0.45
+      }
+    },
+    {
+      "filename": "board.GM1",
+      "layer_type": "Edge.Cuts",
+      "units": "mm",
+      "aperture_count": 1,
+      "flash_count": 0,
+      "draw_count": 5,
+      "region_count": 0,
+      "x2_attributes": {
+        "FileFunction": "Profile,NP"
+      },
+      "aperture_analysis": {
+        "min_feature_mm": 0.1
+      }
+    },
+    {
+      "filename": "board.GTL",
+      "layer_type": "F.Cu",
+      "units": "mm",
+      "aperture_count": 2,
+      "flash_count": 4,
+      "draw_count": 5,
+      "region_count": 0,
+      "x2_attributes": {
+        "FileFunction": "Copper,L1,Top",
+        "GenerationSoftware": "Altium Limited,Altium Designer,24.0"
+      },
+      "aperture_analysis": {
+        "min_feature_mm": 0.25
+      }
+    },
+    {
+      "filename": "board.GTO",
+      "layer_type": "F.SilkS",
+      "units": "mm",
+      "aperture_count": 1,
+      "flash_count": 0,
+      "draw_count": 2,
+      "region_count": 0,
+      "x2_attributes": {
+        "FileFunction": "Legend,Top"
+      },
+      "aperture_analysis": {
+        "min_feature_mm": 0.15
+      }
+    },
+    {
+      "filename": "board.GTP",
+      "layer_type": "F.Paste",
+      "units": "mm",
+      "aperture_count": 1,
+      "flash_count": 4,
+      "draw_count": 0,
+      "region_count": 0,
+      "x2_attributes": {
+        "FileFunction": "Paste,Top"
+      },
+      "aperture_analysis": {
+        "min_feature_mm": 1.5
+      }
+    },
+    {
+      "filename": "board.GTS",
+      "layer_type": "F.Mask",
+      "units": "mm",
+      "aperture_count": 1,
+      "flash_count": 4,
+      "draw_count": 0,
+      "region_count": 0,
+      "x2_attributes": {
+        "FileFunction": "Soldermask,Top"
+      },
+      "aperture_analysis": {
+        "min_feature_mm": 0.45
+      }
+    }
+  ],
+  "drills": [
+    {
+      "filename": "board.TXT",
+      "type": "PTH",
+      "units": "mm",
+      "hole_count": 5,
+      "tools": {
+        "T1": {
+          "diameter_mm": 0.8,
+          "hole_count": 4,
+          "aper_function": "Plated,PTH,ComponentDrill"
+        },
+        "T2": {
+          "diameter_mm": 0.3,
+          "hole_count": 1
+        }
+      },
+      "layer_span": [
+        1,
+        2
+      ],
+      "x2_attributes": {
+        "FileFunction": "Plated,1,2,PTH"
+      }
+    }
+  ],
+  "drill_tools": {
+    "0.8mm": {
+      "diameter_mm": 0.8,
+      "count": 4,
+      "type": "PTH"
+    },
+    "0.3mm": {
+      "diameter_mm": 0.3,
+      "count": 1,
+      "type": "PTH"
+    }
+  },
+  "findings": [],
+  "assessments": [],
+  "summary": {
+    "total_findings": 0,
+    "by_severity": {
+      "error": 0,
+      "warning": 0,
+      "info": 0
+    }
+  },
+  "trust_summary": {
+    "total_findings": 0,
+    "trust_level": "high",
+    "by_confidence": {
+      "deterministic": 0,
+      "heuristic": 0,
+      "datasheet_backed": 0
+    },
+    "by_evidence_source": {
+      "datasheet": 0,
+      "topology": 0,
+      "heuristic_rule": 0,
+      "symbol_footprint": 0,
+      "bom": 0,
+      "geometry": 0,
+      "api_lookup": 0
+    },
+    "provenance_coverage_pct": null
+  },
+  "inputs": {
+    "source_files": [
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GBL",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GBO",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GBP",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GBS",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GM1",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GTL",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GTO",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GTP",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GTS",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.TXT"
+    ],
+    "source_hashes": {
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GBL": "ab48f097a7afa8188fa870e521eec67392f6968c858fdbd7c8bab61dc5771657",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GBO": "dcedfff8c0816d2c7ad633af8523977a9ec39d65b2b128e5efa8e7680643329f",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GBP": "084485d52e2b831e993be89ae8232ff6b550868621775712bcce1262c5ec24d0",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GBS": "631ded8cf35b0fde81fc8c6eb42714d6da6420b390397a35ba2575e0c340ee32",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GM1": "bd35b829ef89522c5a7d09d438855317f40090c7255a7d87c36f151ae314dee3",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GTL": "0461c044836c4e6a1b6f9e47ea186e792127495f0f54793b68dbbf87f65aeb9a",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GTO": "1646570e0f53a60352bece9ffb70be23b146e4406aff28ffb29967a2de014629",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GTP": "e0687ee9b27ee9de42200b782690af169c84066c5969e3243697b0446141fbe5",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GTS": "a5eabd35789317a0ba9863236e1c1f0429afd335485a56e7ef37489b18044d68",
+      "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.TXT": "c9d8f10a6e1330b2b5a0ab4e627236f456750e00d8ab7a3b49d525ecb7601da2"
+    },
+    "run_id": "20261124T155528Z-d210c7",
+    "config_hash": null,
+    "upstream_artifacts": {}
+  },
+  "compat": {
+    "minimum_consumer_version": "1.4.0",
+    "deprecated_fields": [],
+    "experimental_fields": []
+  },
+  "capability_mode_ref": {
+    "source": "analysis/capability_mode.json",
+    "run_id": "20261124T155528Z-d210c7"
+  }
+}

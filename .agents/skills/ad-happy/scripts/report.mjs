@@ -58,6 +58,26 @@ const RULE_LABELS = {
   current_capacity: '载流能力检查',
   decoupling_placement: '去耦布局检查',
   pin_pad: '原理图与 PCB 引脚网络对照',
+  gerber: '制造文件（Gerber/钻孔）检查',
+}
+
+// 分析来源 → 报告展示名。目前只有 Gerber 复用层需要额外标注来源。
+const SOURCE_LABELS = {
+  gerber: 'Gerber 分析',
+}
+
+// 制造文件子检查 → 中文名。
+const MANUFACTURING_CHECK_LABELS = {
+  layer_completeness: '层完整性',
+  drill_data: '钻孔数据',
+  alignment: '层对齐',
+  board_dimensions: '板框尺寸',
+}
+
+// Gerber 文件里的单位枚举 → 中文展示。
+const UNIT_LABELS = {
+  mm: '毫米（mm）',
+  inch: '英寸（inch）',
 }
 
 // 文档类型 → 中文名；未知类型按「其他」展示。
@@ -118,6 +138,7 @@ function normalizeReport(data) {
     findings: findings.map(normalizeFinding),
     status: isPlainObject(source.status) ? source.status : {},
     boards: normalizeDocuments(source.boards),
+    manufacturing: normalizeManufacturing(source.manufacturing),
     svgs: Array.isArray(source.svgs) ? source.svgs : [],
   }
 }
@@ -182,11 +203,50 @@ function normalizeDocuments(value) {
   }))
 }
 
+function normalizeManufacturing(value) {
+  if (!isPlainObject(value)) return null
+  const checks = isPlainObject(value.checks) ? value.checks : {}
+  return {
+    status: scalarText(value.status) || 'not_evaluated',
+    directory: scalarText(value.directory),
+    gerberFiles: countValue(value.gerberFiles),
+    drillFiles: countValue(value.drillFiles),
+    layerCount: countValue(value.layerCount),
+    drillCount: countValue(value.drillCount),
+    units: stringList(value.units),
+    missingLayers: stringList(value.missingLayers),
+    missingRequired: stringList(value.missingRequired),
+    missingRecommended: stringList(value.missingRecommended),
+    boardDimensions: normalizeDimensions(value.boardDimensions),
+    checks: Object.keys(checks)
+      .map(key => ({ key, status: scalarText(checks[key]) }))
+      .filter(check => check.status),
+    reasons: stringList(value.reasons),
+    findings: Array.isArray(value.findings)
+      ? value.findings.filter(isPlainObject).map(normalizeFinding)
+      : [],
+  }
+}
+
+function normalizeDimensions(value) {
+  if (!isPlainObject(value)) return null
+  const width = countValue(value.widthMm)
+  const height = countValue(value.heightMm)
+  if (width <= 0 || height <= 0) return null
+  return { width, height, area: countValue(value.areaMm2) }
+}
+
+function stringList(value) {
+  if (!Array.isArray(value)) return []
+  return value.map(scalarText).filter(Boolean)
+}
+
 function normalizeFinding(finding) {
   const rawEvidence = evidenceText(finding.evidence)
   const description = scalarText(finding.description)
   return {
     ruleId: scalarText(finding.rule_id) || '（无规则 ID）',
+    source: scalarText(finding.source),
     kind: scalarText(finding.kind) === 'fact' ? 'fact' : 'issue',
     groupKey: severityGroup(finding.severity),
     title: scalarText(finding.title) || scalarText(finding.summary) || '（无标题）',
@@ -220,6 +280,7 @@ function renderBody(report) {
     renderConclusion(report),
     renderOverview(report),
     renderDocuments(report),
+    renderManufacturing(report),
     renderFindings(report),
     renderFacts(report),
     renderCoverage(report),
@@ -377,6 +438,98 @@ function renderDocuments({ boards }) {
   ].filter(Boolean).join('\n')
 }
 
+// 「制造文件」：Gerber/钻孔检查的层数、钻孔数、缺失层、单位与结果。
+// 来源固定标注为「Gerber 分析」，复用 kicad-happy 的 analyze_gerbers.py。
+function renderManufacturing({ manufacturing }) {
+  if (!manufacturing) return ''
+  const status = manufacturing.status
+  const rows = [
+    ['状态', statusBadgeHtml(status)],
+    ['分析目录', manufacturing.directory
+      ? `<code>${escapeHtml(manufacturing.directory)}</code>`
+      : '—'],
+    ['Gerber 文件', String(manufacturing.gerberFiles)],
+    ['钻孔文件', String(manufacturing.drillFiles)],
+    ['铜层数量', String(manufacturing.layerCount)],
+    ['钻孔数量', String(manufacturing.drillCount)],
+    ['单位', manufacturing.units.length
+      ? escapeHtml(manufacturing.units
+        .map(unit => ownLookup(UNIT_LABELS, unit) || unit)
+        .join('、'))
+      : '—'],
+    ['板框尺寸', manufacturing.boardDimensions
+      ? `${manufacturing.boardDimensions.width} × ${manufacturing.boardDimensions.height} mm`
+      : '—'],
+  ]
+  const grid = rows
+    .map(([label, value]) => `    <div><dt>${escapeHtml(label)}</dt><dd>${value}</dd></div>`)
+    .join('\n')
+  const required = new Set(manufacturing.missingRequired)
+  const missing = manufacturing.missingLayers.length
+    ? [
+        '  <h3>缺失层</h3>',
+        '  <ul class="layer-list" id="missing-layers">',
+        ...manufacturing.missingLayers.map(layer => {
+          const kind = required.has(layer) ? '必需' : '建议'
+          const kindClass = required.has(layer) ? 'must_fix' : 'nice_to_have'
+          return `    <li><code>${escapeHtml(layer)}</code><span class="badge badge-${kindClass}">${kind}</span></li>`
+        }),
+        '  </ul>',
+      ].join('\n')
+    : '  <p class="empty">没有缺失层。</p>'
+  const checks = manufacturing.checks.length
+    ? [
+        '  <h3>制造检查项</h3>',
+        '  <table class="status-table" id="manufacturing-checks">',
+        '    <thead><tr><th scope="col">检查项</th><th scope="col">状态</th></tr></thead>',
+        '    <tbody>',
+        ...manufacturing.checks.map(check => {
+          const label = ownLookup(MANUFACTURING_CHECK_LABELS, check.key) || check.key
+          return `      <tr><th scope="row"><span class="rule-name">${escapeHtml(label)}</span><code>${escapeHtml(check.key)}</code></th><td>${statusBadgeHtml(check.status)}</td></tr>`
+        }),
+        '    </tbody>',
+        '  </table>',
+      ].join('\n')
+    : ''
+  const reasons = manufacturing.reasons.length
+    ? [
+        '  <h3>未评估原因</h3>',
+        '  <ul class="status-list" id="manufacturing-reasons">',
+        ...manufacturing.reasons.map(reason => `    <li><span class="detail">${escapeHtml(reason)}</span></li>`),
+        '  </ul>',
+      ].join('\n')
+    : ''
+  const findings = manufacturing.findings.length
+    ? [
+        '  <h3>Gerber 分析结果</h3>',
+        '  <ul class="status-list" id="manufacturing-findings">',
+        ...manufacturing.findings.map(finding => {
+          const group = groupFor(finding.groupKey)
+          return `    <li><code>${escapeHtml(finding.ruleId)}</code><span class="source-tag">Gerber 分析</span><span class="badge badge-${group.key}">${escapeHtml(group.label)}</span><span class="rule-name">${escapeHtml(finding.title)}</span><span class="detail">${escapeHtml(finding.evidence)}</span></li>`
+        }),
+        '  </ul>',
+      ].join('\n')
+    : '  <p class="empty">未发现制造文件问题。</p>'
+
+  return [
+    '<section class="panel" id="manufacturing">',
+    '  <h2>制造文件</h2>',
+    '  <p class="hint">来源：Gerber 分析（复用 kicad-happy 的 Gerber/钻孔检查）。</p>',
+    '  <dl class="coverage-grid">',
+    grid,
+    '  </dl>',
+    missing,
+    checks,
+    reasons,
+    findings,
+    '</section>',
+  ].filter(Boolean).join('\n')
+}
+
+function statusBadgeHtml(value) {
+  return `<span class="badge badge-${statusBadgeClass(value)}">${escapeHtml(statusLabel(value))}</span>`
+}
+
 function renderFindings({ findings }) {
   const issues = findings.filter(finding => finding.kind !== 'fact')
   const counts = countFindings(issues)
@@ -434,9 +587,13 @@ function renderFindingItem(finding, options = {}) {
   const group = groupFor(finding.groupKey)
   const badgeLabel = options.badgeLabel ?? group.label
   const badgeClass = options.badgeClass ?? group.key
+  const sourceLabel = ownLookup(SOURCE_LABELS, finding.source)
+  const sourceTag = sourceLabel
+    ? `<span class="source-tag">${escapeHtml(sourceLabel)}</span>`
+    : ''
   const lines = [
     '      <article class="finding">',
-    `        <div class="finding-meta"><code class="rule-id">${escapeHtml(finding.ruleId)}</code><span class="badge badge-${badgeClass}">${escapeHtml(badgeLabel)}</span></div>`,
+    `        <div class="finding-meta"><code class="rule-id">${escapeHtml(finding.ruleId)}</code><span class="badge badge-${badgeClass}">${escapeHtml(badgeLabel)}</span>${sourceTag}</div>`,
     `        <h4 class="finding-title">${escapeHtml(finding.title)}</h4>`,
   ]
   if (finding.evidence) {

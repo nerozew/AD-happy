@@ -54,13 +54,14 @@ description: 审查 Altium Designer 工程（.PrjPcb/.SchDoc/.PcbDoc）：用户
 ### 3. 运行分析
 
 ```bash
-node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [--project-file "<PrjPcb 文件名>"] [--board "<PcbDoc 文件名>"] [--with-ad]
+node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [--project-file "<PrjPcb 文件名>"] [--board "<PcbDoc 文件名>"] [--gerber "<Gerber 目录>"] [--with-ad]
 ```
 
 - `<路径>`：第 2 步确认的工程目录绝对路径（也可直接给 `.PrjPcb` 文件路径）。
 - `<输出目录>`：源工程**之外**的绝对路径。用户没有指定时，使用 CLI 默认输出目录（省略 `--out`，产物位于 `%LOCALAPPDATA%\ad-happy\runs\<run-id>`）；需要自行指定临时目录时，使用当前 shell 解析得到的临时目录绝对路径，不要自行拼接 `%TEMP%` 等字面量。输出到源工程内会被拒绝。
 - 同一目录有多个工程时，追加 `--project-file "<PrjPcb 文件名>"`。
 - 默认审查文档清单中的最后一块 `PcbDoc`；用户指定板卡时追加 `--board "<PcbDoc 文件名>"`。
+- 用户提供了 Gerber/钻孔输出目录时追加 `--gerber "<目录>"`；省略时 CLI 自动查找工程下的 `Gerber`、`Outputs`、`Project Outputs`、`Manufacturing`。找不到或缺少钻孔文件时，制造文件检查会标记为未评估，汇报时如实说明。
 - 用户选择深度模式且 AD 已启动时追加 `--with-ad`；否则不要加。
 - 命令失败时按退出码处理（见下），不要改用其他方式自行解析工程。
 
