@@ -6,7 +6,7 @@
 //   node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>]
 //                    [--project-file <PrjPcb 文件名>]
 //                    [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>]
-//                    [--bom <CSV>] [--datasheets <目录>] [--svg]
+//                    [--bom <CSV>] [--datasheets <目录>] [--spice] [--svg]
 //
 // 退出码：0 完成；2 输入无效；3 部分完成（文档解析失败、规则 failed、
 // Python/Gerber 阶段异常或报告生成失败）。
@@ -14,7 +14,7 @@
 // 产物（写入 --out 或 %LOCALAPPDATA%\ad-happy\runs\<run-id>）：
 // manifest.json、snapshot.json、raw.json、pcb.json、findings.json、
 // pipeline-summary.json、gerber.json、bom.csv、procurement.csv、
-// datasheets.json、summary.json、report.html。
+// datasheets.json、spice.json（仅在 --spice 时）、summary.json、report.html。
 //
 // 源工程只读：--out 落在源工程目录内会被直接拒绝（退出码 2）。
 import { spawnSync } from 'node:child_process'
@@ -59,11 +59,17 @@ import {
   runGerberAnalysis,
 } from './reuse/gerber.mjs'
 import { runSelfCheck } from './selfcheck.mjs'
+import {
+  detectSimulators,
+  emptySpiceCoverage,
+  runSpice,
+  spiceErrorFinding,
+} from './spice.mjs'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const PIPELINE_PY = join(SCRIPT_DIR, 'pipeline.py')
 
-const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>] [--project-file <PrjPcb 文件名>] [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>] [--bom <CSV>] [--datasheets <目录>] [--svg]
+const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>] [--project-file <PrjPcb 文件名>] [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>] [--bom <CSV>] [--datasheets <目录>] [--spice] [--svg]
 
   --project        包含 .PrjPcb 的工程目录，或 .PrjPcb 文件路径
   --out            输出目录；默认 %LOCALAPPDATA%\\ad-happy\\runs\\<run-id>
@@ -75,6 +81,8 @@ const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--o
                    省略时按解析数据生成 bom.csv 与 procurement.csv
   --datasheets     指定数据手册（PDF）目录；省略时自动查找工程下的
                    datasheets 目录。只检查覆盖与提取计划，不解析引脚表
+  --spice          运行 SPICE 仿真（可选，默认关闭）。自动检测 ngspice、
+                   LTspice、Xyce；找不到时标记未评估，不伪造结果
   --svg            尝试把选中板卡渲染为 SVG 内联到报告；失败只降级，不中止分析`
 
 // 三组规则的完整键；即使某一侧输入缺失，报告也能展示全部规则状态。
@@ -89,8 +97,8 @@ const SCH_RULES = [
 const PCB_RULES = ['dfm', 'pad_distance', 'current_capacity', 'decoupling_placement']
 // gerber 是制造文件（Gerber/钻孔）检查，独立于原理图/PCB 解析；
 // bom 是物料清单检查，datasheets 是数据手册覆盖与提取计划检查，
-// 二者都独立于 Python 规则层。
-const ALL_RULES = [...SCH_RULES, ...PCB_RULES, 'pin_pad', 'gerber', 'bom', 'datasheets']
+// spice 是可选的 SPICE 仿真检查；三者都独立于 Python 规则层。
+const ALL_RULES = [...SCH_RULES, ...PCB_RULES, 'pin_pad', 'gerber', 'bom', 'datasheets', 'spice']
 // 这些规则依赖原理图网表（decoupling 还依赖可解析电容值）；引脚未全部
 // 入网时，空结果不能视为通过。
 const NETLIST_DEPENDENT_RULES = [
@@ -114,10 +122,16 @@ const ARTIFACT_FILES = [
   'bom.csv',
   'procurement.csv',
   'datasheets.json',
+  'spice.json',
   'capability_mode.json',
   'summary.json',
   'report.html',
 ]
+
+// 本次运行会重建的目录产物；spice/ 里是上一次的测试台与日志，
+// 不能留到下一次运行被误认成本次结果。datasheets/ 是跨运行缓存，
+// 不在清理范围内。
+const ARTIFACT_DIRS = ['spice']
 
 const SUMMARY_LIMIT = 32 * 1024 // summary.json 必须严格小于 32KB
 const TOP_FINDINGS_LIMIT = 20
@@ -637,12 +651,22 @@ async function executeStages(state) {
   const gerberStage = runGerberStage(state, ruleStatus)
   const gerberFindings = gerberStage.findings
 
+  // 9.6 SPICE 仿真（可选）。只有显式 --spice 才检测/运行仿真器；
+  //     没有仿真器时保持 not_evaluated，不改变退出码，也绝不伪造结果。
+  const spiceStage = runSpiceStage(state, {
+    ruleStatus,
+    detectedFindings: pipelineSummary.findings,
+    generatedAt,
+  })
+  const spiceFindings = spiceStage.findings
+
   const findings = [
     ...state.syntheticFindings,
     ...pipelineSummary.findings.filter(isPlainObject),
     ...gerberFindings,
     ...bomStage.findings,
     ...datasheetStage.findings,
+    ...spiceFindings,
   ]
   // Python 只写规则层 findings；解析/连通性失败的 DET-ERR、Gerber、BOM 与
   // 数据手册结果由 Node 补充，保证 findings.json 是完整交付物
@@ -652,6 +676,7 @@ async function executeStages(state) {
     || gerberFindings.length > 0
     || bomStage.findings.length > 0
     || datasheetStage.findings.length > 0
+    || spiceFindings.length > 0
   ) {
     writeJson(join(state.outDir, 'findings.json'), findings)
   }
@@ -682,6 +707,7 @@ async function executeStages(state) {
   coverage.gerber = gerberStage.coverage
   coverage.bom = bomStage.coverage
   coverage.datasheets = datasheetStage.coverage
+  coverage.spice = spiceStage.coverage
   const missingInputs = []
   if (!selectedBoard) missingInputs.push('pcb')
   if (!selectedSchematic) missingInputs.push('schematic')
@@ -715,6 +741,7 @@ async function executeStages(state) {
       manufacturing,
       bom: bomStage.report,
       datasheets: datasheetStage.report,
+      spice: spiceStage.report,
       svgs,
     })
     writeFileSync(reportPath, html, 'utf8')
@@ -731,11 +758,14 @@ async function executeStages(state) {
   }
 
   const ruleFailure = Object.values(ruleStatus).includes('failed')
-  // BOM 与数据手册的 partial/not_evaluated 只表示「输入数据不足」或
-  // 「需要 AI/人工继续」，不是分析失败；用户没有要求这些检查时不应因此把
-  // 整次运行降级为 partial。二者的执行失败（failed）仍参与聚合。
+  // BOM、数据手册与 SPICE 仿真的 partial/not_evaluated 只表示「输入数据
+  // 不足」或「需要 AI/人工/外部仿真器继续」，不是分析失败；用户没有要求
+  // 这些检查时不应因此把整次运行降级为 partial。三者的执行失败（failed）
+  // 仍参与聚合。
   const rulePartial = Object.entries(ruleStatus)
-    .some(([rule, value]) => rule !== 'bom' && rule !== 'datasheets' && value === 'partial')
+    .some(([rule, value]) => (
+      rule !== 'bom' && rule !== 'datasheets' && rule !== 'spice' && value === 'partial'
+    ))
   const partial = state.errors.length > 0
     || missingInputs.length > 0
     || ruleFailure
@@ -754,6 +784,7 @@ async function executeStages(state) {
     crossCoverage: pipelineSummary.coverage,
     bom: bomStage.summary,
     datasheets: datasheetStage.summary,
+    spice: spiceStage.summary,
     severityGroup: reportModule.severityGroup,
   })
   try {
@@ -1302,6 +1333,212 @@ function compactDatasheetsCoverage(coverage) {
 }
 
 // ---------------------------------------------------------------------------
+// SPICE 仿真 / spice
+// ---------------------------------------------------------------------------
+
+function runSpiceStage(state, { ruleStatus, detectedFindings, generatedAt }) {
+  const requested = state.options.spice === true
+
+  // 未显式请求：只记录「可选、未运行」，不产生 SP finding，也不检测仿真器。
+  if (!requested) {
+    const coverage = emptySpiceCoverage({
+      requested: false,
+      reasons: ['未启用 --spice：仿真为可选步骤，本次没有运行。'],
+    })
+    state.manifest.stages.spice = 'skipped'
+    state.manifest.spice = buildSpiceManifest({
+      requested: false,
+      detection: null,
+      coverage,
+    })
+    return {
+      findings: [],
+      coverage,
+      report: buildSpiceReport(coverage, []),
+      summary: buildSpiceSummary(coverage),
+    }
+  }
+
+  const detection = detectSimulators()
+  let result
+  try {
+    result = runSpice(
+      Array.isArray(detectedFindings) ? detectedFindings : [],
+      detection.chosen ?? null,
+      state.outDir,
+      { requested: true },
+    )
+  } catch (error) {
+    // 未预期异常也必须可见：failed + SP-002，而不是让报告静默缺一节。
+    const coverage = emptySpiceCoverage({
+      requested: true,
+      reasons: [`SPICE 仿真阶段异常：${error?.message ?? error}`],
+    })
+    coverage.status = 'failed'
+    coverage.checks.simulation = 'failed'
+    coverage.findings = 1
+    result = {
+      findings: [spiceErrorFinding(coverage.reasons[0])],
+      coverage,
+    }
+  }
+
+  const coverage = result.coverage
+  ruleStatus.spice = coverage.status
+
+  // spice.json 是本次仿真的可审计产物：输入、检测到的仿真器、测试台路径
+  // 与逐电路结果都在里面；summary 只保留压缩后的概览。
+  try {
+    coverage.artifacts = {
+      ...(isPlainObject(coverage.artifacts) ? coverage.artifacts : {}),
+      index: 'spice.json',
+    }
+    writeJson(join(state.outDir, 'spice.json'), {
+      schemaVersion: 1,
+      generatedAt,
+      requested: true,
+      detection,
+      coverage,
+    })
+    state.artifacts.spice = 'spice.json'
+  } catch (error) {
+    coverage.artifacts = isPlainObject(coverage.artifacts)
+      ? { ...coverage.artifacts, index: null }
+      : null
+    const message = `仿真结果写入失败：${error?.message ?? error}`
+    coverage.reasons.push(message)
+    state.warnings.push(message)
+  }
+
+  if (coverage.status === 'failed') {
+    state.manifest.stages.spice = 'failed'
+    state.errors.push({
+      stage: 'spice',
+      message: 'SPICE 仿真失败',
+      details: coverage.reasons.join('；') || '（无错误输出）',
+    })
+  } else if (coverage.status === 'not_evaluated') {
+    state.manifest.stages.spice = 'not_evaluated'
+    state.warnings.push(
+      `SPICE 仿真未评估：${coverage.reasons.join('；') || '仿真器不可用或输入不足'}`,
+    )
+  } else if (coverage.status === 'partial') {
+    state.manifest.stages.spice = 'partial'
+    state.warnings.push(
+      `SPICE 仿真部分完成：${coverage.reasons.join('；') || '部分子电路被跳过'}`,
+    )
+  } else {
+    state.manifest.stages.spice = coverage.status
+  }
+
+  state.manifest.spice = buildSpiceManifest({
+    requested: true,
+    detection,
+    coverage,
+  })
+
+  return {
+    findings: result.findings,
+    coverage,
+    report: buildSpiceReport(coverage, result.findings),
+    summary: buildSpiceSummary(coverage),
+  }
+}
+
+function buildSpiceManifest({ requested, detection, coverage }) {
+  return {
+    requested,
+    status: coverage.status,
+    simulator: coverage.simulator,
+    detection: detection ?? null,
+    availableCircuits: coverage.availableCircuits,
+    counts: coverage.counts,
+    findings: coverage.findings,
+    artifacts: coverage.artifacts ?? null,
+    reasons: coverage.reasons,
+  }
+}
+
+function buildSpiceReport(coverage, findings) {
+  return {
+    requested: coverage.requested,
+    status: coverage.status,
+    simulator: coverage.simulator,
+    availableCircuits: coverage.availableCircuits,
+    circuits: coverage.circuits,
+    counts: coverage.counts,
+    checks: coverage.checks,
+    artifacts: coverage.artifacts ?? null,
+    installHints: coverage.installHints,
+    detectedDetectors: coverage.detectedDetectors,
+    unsupportedDetectors: coverage.unsupportedDetectors,
+    reasons: coverage.reasons,
+    findings: findings.length,
+  }
+}
+
+function buildSpiceSummary(coverage) {
+  return {
+    requested: coverage.requested,
+    status: coverage.status,
+    simulator: coverage.simulator
+      ? {
+        name: coverage.simulator.name,
+        path: coverage.simulator.path,
+        version: coverage.simulator.version,
+        versionNote: coverage.simulator.versionNote,
+      }
+      : null,
+    circuits: coverage.counts.total,
+    counts: coverage.counts,
+    findings: coverage.findings,
+    artifact: coverage.artifacts?.index ?? null,
+    workdir: coverage.artifacts?.workdir ?? null,
+    reasons: Array.isArray(coverage.reasons)
+      ? coverage.reasons.slice(0, 10)
+      : [],
+  }
+}
+
+// summary.json 只保留前 50 个子电路的概览；完整测试台与结果在 spice.json。
+const SPICE_SUMMARY_CIRCUIT_LIMIT = 50
+const SPICE_SUMMARY_REASON_LIMIT = 10
+
+function compactSpiceCoverage(coverage) {
+  if (!isPlainObject(coverage)) return coverage ?? null
+  const circuits = Array.isArray(coverage.circuits) ? coverage.circuits : []
+  return {
+    status: coverage.status,
+    requested: coverage.requested === true,
+    simulator: coverage.simulator
+      ? {
+        name: coverage.simulator.name,
+        path: coverage.simulator.path,
+        version: coverage.simulator.version,
+        versionNote: coverage.simulator.versionNote,
+      }
+      : null,
+    availableCircuits: numberOrZero(coverage.availableCircuits),
+    counts: isPlainObject(coverage.counts) ? coverage.counts : null,
+    checks: isPlainObject(coverage.checks) ? coverage.checks : null,
+    circuitCount: circuits.length,
+    circuits: circuits.slice(0, SPICE_SUMMARY_CIRCUIT_LIMIT).map(circuit => ({
+      type: scalarText(circuit.type),
+      typeLabel: scalarText(circuit.typeLabel),
+      reference: scalarText(circuit.reference),
+      components: Array.isArray(circuit.components) ? circuit.components.slice(0, 10) : [],
+      status: scalarText(circuit.status),
+      testbench: scalarText(circuit.testbench),
+      testbenchExists: circuit.testbenchExists === true,
+    })),
+    reasons: (Array.isArray(coverage.reasons) ? coverage.reasons : [])
+      .slice(0, SPICE_SUMMARY_REASON_LIMIT)
+      .map(reason => truncateText(reason, 300)),
+    artifacts: isPlainObject(coverage.artifacts) ? coverage.artifacts : null,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // summary.json
 // ---------------------------------------------------------------------------
 
@@ -1317,6 +1554,7 @@ function buildSummary(state, context) {
     crossCoverage,
     bom,
     datasheets,
+    spice,
     severityGroup,
   } = context
 
@@ -1362,12 +1600,15 @@ function buildSummary(state, context) {
     pcb: overview.pcb,
     bom: bom ?? null,
     datasheets: datasheets ?? null,
+    spice: spice ?? null,
     coverage: {
       ...coverage,
       // summary.json 有 32KB 硬上限：BOM 明细列表必须截断，只保留计数与样本；
-      // 完整列表在 report.html / findings.json 中。数据手册覆盖只保留计数与原因。
+      // 完整列表在 report.html / findings.json 中。数据手册与仿真覆盖只保留
+      // 计数、状态与原因，测试台明细在 spice.json 中。
       bom: compactBomCoverage(coverage.bom),
       datasheets: compactDatasheetsCoverage(coverage.datasheets),
+      spice: compactSpiceCoverage(coverage.spice),
       crossCheck: summarizeCrossCoverage(crossCoverage),
     },
     counts: {
@@ -1632,6 +1873,7 @@ function createState({ runId, startedAt, outDir, projectDir, options }) {
         gerber: 'skipped',
         bom: 'skipped',
         datasheets: 'skipped',
+        spice: 'skipped',
         report: 'skipped',
       },
       documents: [],
@@ -1640,6 +1882,7 @@ function createState({ runId, startedAt, outDir, projectDir, options }) {
       gerber: null,
       bom: null,
       datasheets: null,
+      spice: null,
       svg: null,
       artifacts: null,
       status: 'running',
@@ -1792,6 +2035,20 @@ function printErrors(state) {
   }
 }
 
+function spiceCompletionLine(spice) {
+  if (!spice.requested) return '仿真：未启用（--spice 可选）'
+  if (!spice.simulator) {
+    return `仿真：未评估（${spice.reasons?.[0] ?? '未找到可用仿真器'}）`
+  }
+  const version = spice.simulator.version ? ` ${spice.simulator.version}` : ''
+  const counts = spice.counts ?? {}
+  if (spice.status === 'failed') {
+    return `仿真：失败（${spice.simulator.name}${version}）`
+  }
+  return `仿真：${spice.status}；${counts.pass ?? 0} 通过 / ${counts.warn ?? 0} 警告 / `
+    + `${counts.fail ?? 0} 失败 / ${counts.skip ?? 0} 跳过（${spice.simulator.name}${version}）`
+}
+
 function printCompletion(state, summary, reportPath, exitCode) {
   const counts = summary.counts
   const env = state.manifest.environment ?? {}
@@ -1820,6 +2077,9 @@ function printCompletion(state, summary, reportPath, exitCode) {
       + `状态 ${summary.datasheets.status}（引脚级核对未评估）`,
     )
   }
+  if (summary.spice) {
+    console.log(spiceCompletionLine(summary.spice))
+  }
   if (reportPath) console.log(`报告：${reportPath}`)
   console.log(
     `版本：Node ${env.node ?? '?'} / altiumts ${env.altiumts ?? '?'} / Python ${env.python ?? '?'}`,
@@ -1842,6 +2102,7 @@ function parseArgs(argv) {
     gerber: null,
     bom: null,
     datasheets: null,
+    spice: false,
     svg: false,
     help: false,
   }
@@ -1894,6 +2155,9 @@ function parseArgs(argv) {
         index = taken.index
         break
       }
+      case '--spice':
+        options.spice = true
+        break
       case '--svg':
         options.svg = true
         break
@@ -2015,6 +2279,13 @@ function clearArtifacts(outDir, preserve = new Set()) {
       rmSync(path, { force: true })
     } catch {
       // 不静默：清理失败会写入 manifest.warnings，避免旧报告被误认为本次结果。
+      failures.push(name)
+    }
+  }
+  for (const name of ARTIFACT_DIRS) {
+    try {
+      rmSync(join(outDir, name), { recursive: true, force: true })
+    } catch {
       failures.push(name)
     }
   }

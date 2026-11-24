@@ -295,14 +295,14 @@
     <p class="kicker">AD-Happy 设计审查报告</p>
     <h1>DCDC Buck Converter</h1>
     <dl class="meta">
-      <div><dt>生成时间</dt><dd>2026-11-25 02:50:16</dd></div>
+      <div><dt>生成时间</dt><dd>2026-11-25 03:23:17</dd></div>
     </dl>
   </header>
   <main>
 <section class="panel" id="conclusion">
   <h2>结论</h2>
-  <p class="verdict">未发现必须修复的问题，有 1 项建议修复；有 2 条规则未评估，不能据此认为全部通过。</p>
-  <ul class="stat-grid"><li class="stat must_fix"><span class="stat-value">0</span><span class="stat-label">必须修复</span></li><li class="stat should_fix"><span class="stat-value">1</span><span class="stat-label">建议修复</span></li><li class="stat nice_to_have"><span class="stat-value">2</span><span class="stat-label">可优化</span></li><li class="stat facts"><span class="stat-value">8</span><span class="stat-label">实测事实</span></li><li class="stat partial"><span class="stat-value">0</span><span class="stat-label">部分完成规则</span></li><li class="stat na"><span class="stat-value">2</span><span class="stat-label">未评估规则</span></li><li class="stat failed"><span class="stat-value">0</span><span class="stat-label">失败规则</span></li></ul>
+  <p class="verdict">未发现必须修复的问题，有 1 项建议修复；有 3 条规则未评估，不能据此认为全部通过。</p>
+  <ul class="stat-grid"><li class="stat must_fix"><span class="stat-value">0</span><span class="stat-label">必须修复</span></li><li class="stat should_fix"><span class="stat-value">1</span><span class="stat-label">建议修复</span></li><li class="stat nice_to_have"><span class="stat-value">2</span><span class="stat-label">可优化</span></li><li class="stat facts"><span class="stat-value">8</span><span class="stat-label">实测事实</span></li><li class="stat partial"><span class="stat-value">0</span><span class="stat-label">部分完成规则</span></li><li class="stat na"><span class="stat-value">3</span><span class="stat-label">未评估规则</span></li><li class="stat failed"><span class="stat-value">0</span><span class="stat-label">失败规则</span></li></ul>
   <p class="note">「未评估」表示输入数据不足，本次没有得出通过或失败的结论；「部分完成」表示规则已运行但部分子检查被跳过。两者都不等同于「通过」。</p>
 </section>
 <section class="panel" id="overview">
@@ -464,6 +464,43 @@
   </table>
   <p class="empty">未发现制造文件问题。</p>
 </section>
+<section class="panel" id="spice">
+  <h2>仿真</h2>
+  <p class="hint">来源：kicad-happy 的 SPICE 仿真（simulate_subcircuits.py）。仅当显式传入 --spice 时运行；没有可用仿真器时标记未评估，绝不伪造仿真结果。</p>
+  <p class="note note-warn" id="spice-status">本次未运行仿真：--spice 为可选开关，默认关闭；未运行不代表通过。</p>
+  <dl class="coverage-grid">
+    <div><dt>状态</dt><dd><span class="badge badge-not_evaluated">未评估</span></dd></div>
+    <div><dt>仿真器</dt><dd>—</dd></div>
+    <div><dt>版本</dt><dd>—</dd></div>
+    <div><dt>仿真器路径</dt><dd>—</dd></div>
+    <div><dt>可仿真子电路</dt><dd>0</dd></div>
+    <div><dt>结果计数</dt><dd>—</dd></div>
+    <div><dt>测试台目录</dt><dd>—</dd></div>
+    <div><dt>结果文件</dt><dd>—</dd></div>
+  </dl>
+  <h3>检查项</h3>
+  <table class="status-table" id="spice-checks">
+    <thead><tr><th scope="col">检查项</th><th scope="col">状态</th></tr></thead>
+    <tbody>
+      <tr><th scope="row"><span class="rule-name">仿真器检测</span><code>simulator_detection</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">测试台生成</span><code>testbench_generation</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">仿真执行</span><code>simulation</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
+    </tbody>
+  </table>
+  <h3>子电路结果</h3>
+  <p class="empty">本次未运行仿真，因此没有子电路结果。</p>
+  <h3>安装与配置</h3>
+  <ul class="status-list" id="spice-install-hints">
+    <li><span class="detail">ngspice：Windows 可安装官方 Spice64 包，或执行 choco install ngspice；也可设置 NGSPICE_PATH 指向 ngspice.exe。</span></li>
+    <li><span class="detail">LTspice：从 analog.com/ltspice 安装；也可设置 LTSPICE_PATH 指向 LTspice.exe / XVIIx64.exe。</span></li>
+    <li><span class="detail">Xyce：从 xyce.sandia.gov 安装；也可设置 XYCE_PATH 指向 Xyce 可执行文件。</span></li>
+    <li><span class="detail">三个环境变量都只在本机读取路径，不会联网下载或安装软件。</span></li>
+  </ul>
+  <h3>说明与限制</h3>
+  <ul class="status-list" id="spice-reasons">
+    <li><span class="detail">未启用 --spice：仿真为可选步骤，本次没有运行。</span></li>
+  </ul>
+</section>
 <section class="panel" id="findings">
   <h2>问题清单</h2>
   <p class="hint">共 3 条问题；按严重度分组，组内按规则 ID 排序。实测事实单独列在下一节，不计入问题数量。上游检测器文案已由本地化层翻译成中文；个别无法安全翻译的原文以「（检测器原文）」标注，完整原文见 findings.json 的 source_text。</p>
@@ -567,6 +604,7 @@
       <ul class="status-list">
       <li><code>datasheets</code><span class="rule-name">数据手册覆盖与提取计划检查</span><span class="badge badge-not_evaluated">未评估</span><span class="detail">规则所需输入不足，本次没有结论；此状态不等于「通过」。</span></li>
       <li><code>decoupling</code><span class="rule-name">去耦电容检查</span><span class="badge badge-not_evaluated">未评估</span><span class="detail">规则所需输入不足，本次没有结论；此状态不等于「通过」。</span></li>
+      <li><code>spice</code><span class="rule-name">SPICE 仿真检查</span><span class="badge badge-not_evaluated">未评估</span><span class="detail">规则所需输入不足，本次没有结论；此状态不等于「通过」。</span></li>
       </ul>
   </div>
   <h3>部分完成的规则</h3>
@@ -595,6 +633,7 @@
       <tr><th scope="row"><span class="rule-name">稳压器识别</span><code>power_regulator</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
       <tr><th scope="row"><span class="rule-name">RC 滤波识别</span><code>rc_filter</code></th><td><span class="badge badge-pass">通过</span></td></tr>
       <tr><th scope="row"><span class="rule-name">短路元件检查</span><code>shorted_component</code></th><td><span class="badge badge-pass">通过</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">SPICE 仿真检查</span><code>spice</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
       <tr><th scope="row"><span class="rule-name">分压器识别</span><code>voltage_divider</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
       </tbody>
     </table>

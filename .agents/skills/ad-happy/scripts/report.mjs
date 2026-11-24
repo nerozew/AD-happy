@@ -61,6 +61,7 @@ const RULE_LABELS = {
   gerber: '制造文件（Gerber/钻孔）检查',
   bom: '物料（BOM）检查',
   datasheets: '数据手册覆盖与提取计划检查',
+  spice: 'SPICE 仿真检查',
 }
 
 // 分析来源 → 报告展示名。目前只有 Gerber 复用层需要额外标注来源。
@@ -68,6 +69,22 @@ const SOURCE_LABELS = {
   gerber: 'Gerber 分析',
   bom: 'BOM 检查',
   datasheets: '数据手册检查',
+  spice: 'SPICE 仿真',
+}
+
+// 仿真结果状态 → 中文展示与徽标类别。
+const SPICE_STATUS_LABELS = {
+  pass: '通过',
+  warn: '警告',
+  fail: '失败',
+  skip: '跳过',
+}
+
+const SPICE_STATUS_BADGES = {
+  pass: 'pass',
+  warn: 'should_fix',
+  fail: 'must_fix',
+  skip: 'not_evaluated',
 }
 
 // 制造文件子检查 → 中文名。
@@ -187,6 +204,7 @@ function normalizeReport(data) {
     manufacturing: normalizeManufacturing(source.manufacturing),
     bom: normalizeBom(source.bom),
     datasheets: normalizeDatasheets(source.datasheets),
+    spice: normalizeSpice(source.spice),
     svgs: Array.isArray(source.svgs) ? source.svgs : [],
   }
 }
@@ -389,6 +407,74 @@ function normalizeDatasheets(value) {
   }
 }
 
+function normalizeSpice(value) {
+  if (!isPlainObject(value)) return null
+  const counts = isPlainObject(value.counts) ? value.counts : {}
+  const checks = isPlainObject(value.checks) ? value.checks : {}
+  const normalizedChecks = {}
+  for (const [key, status] of Object.entries(checks)) {
+    const content = scalarText(status)
+    if (content) normalizedChecks[key] = content
+  }
+  const artifacts = isPlainObject(value.artifacts) ? value.artifacts : {}
+  return {
+    requested: value.requested === true,
+    status: scalarText(value.status) || 'not_evaluated',
+    simulator: normalizeSpiceSimulator(value.simulator),
+    availableCircuits: countValue(value.availableCircuits),
+    circuits: Array.isArray(value.circuits)
+      ? value.circuits.filter(isPlainObject).map(circuit => ({
+          type: scalarText(circuit.type) || 'simulation',
+          typeLabel: scalarText(circuit.typeLabel),
+          reference: scalarText(circuit.reference),
+          components: stringList(circuit.components),
+          status: SPICE_STATUS_LABELS[scalarText(circuit.status)]
+            ? scalarText(circuit.status)
+            : 'skip',
+          note: scalarText(circuit.noteText) || scalarText(circuit.note),
+          testbench: scalarText(circuit.testbench),
+          testbenchExists: circuit.testbenchExists === true,
+          logFile: scalarText(circuit.logFile),
+          expected: isPlainObject(circuit.expected) ? circuit.expected : null,
+          simulated: isPlainObject(circuit.simulated) ? circuit.simulated : null,
+          delta: isPlainObject(circuit.delta) ? circuit.delta : null,
+        }))
+      : [],
+    counts: {
+      total: countValue(counts.total),
+      pass: countValue(counts.pass),
+      warn: countValue(counts.warn),
+      fail: countValue(counts.fail),
+      skip: countValue(counts.skip),
+    },
+    checks: normalizedChecks,
+    artifacts: {
+      index: scalarText(artifacts.index),
+      input: scalarText(artifacts.input),
+      report: scalarText(artifacts.report),
+      workdir: scalarText(artifacts.workdir),
+    },
+    installHints: stringList(value.installHints),
+    detectedDetectors: stringList(value.detectedDetectors),
+    unsupportedDetectors: stringList(value.unsupportedDetectors),
+    reasons: stringList(value.reasons),
+    findings: countValue(value.findings),
+  }
+}
+
+function normalizeSpiceSimulator(value) {
+  if (!isPlainObject(value)) return null
+  const name = scalarText(value.name)
+  if (!name) return null
+  return {
+    name,
+    path: scalarText(value.path),
+    version: scalarText(value.version),
+    versionText: scalarText(value.versionText),
+    versionNote: scalarText(value.versionNote),
+  }
+}
+
 function stringList(value) {
   if (!Array.isArray(value)) return []
   return value.map(scalarText).filter(Boolean)
@@ -436,6 +522,7 @@ function renderBody(report) {
     renderBom(report),
     renderDatasheets(report),
     renderManufacturing(report),
+    renderSpice(report),
     renderFindings(report),
     renderFacts(report),
     renderCoverage(report),
@@ -1027,6 +1114,198 @@ function renderManufacturing({ manufacturing }) {
     findings,
     '</section>',
   ].filter(Boolean).join('\n')
+}
+
+// 「仿真」：仿真器、逐子电路结果与测试台路径。
+// --spice 未启用时也渲染本节，明确「未运行」而不是省略后让人误以为通过。
+function renderSpice({ spice }) {
+  if (!spice) return ''
+  const simulator = spice.simulator
+  const statusText = spiceStatusText(spice)
+  const warning = spice.status === 'failed'
+    || spice.status === 'not_evaluated'
+    || spice.status === 'partial'
+    || !spice.requested
+  const version = simulator
+    ? simulator.version
+      || simulator.versionNote
+      || '版本未知'
+    : '—'
+  const rows = [
+    ['状态', statusBadgeHtml(spice.status)],
+    ['仿真器', simulator ? escapeHtml(simulator.name) : '—'],
+    ['版本', escapeHtml(version)],
+    ['仿真器路径', simulator?.path
+      ? `<code>${escapeHtml(simulator.path)}</code>`
+      : '—'],
+    ['可仿真子电路', String(spice.availableCircuits)],
+    ['结果计数', spice.counts.total > 0
+      ? `通过 ${spice.counts.pass} / 警告 ${spice.counts.warn} / 失败 ${spice.counts.fail} / 跳过 ${spice.counts.skip}`
+      : '—'],
+    ['测试台目录', spice.artifacts.workdir
+      ? `<code>${escapeHtml(spice.artifacts.workdir)}</code>`
+      : '—'],
+    ['结果文件', spice.artifacts.index
+      ? `<code>${escapeHtml(spice.artifacts.index)}</code>`
+      : '—'],
+  ]
+  const grid = rows
+    .map(([label, value]) => `    <div><dt>${escapeHtml(label)}</dt><dd>${value}</dd></div>`)
+    .join('\n')
+
+  const checks = Object.keys(spice.checks).length
+    ? [
+        '  <h3>检查项</h3>',
+        '  <table class="status-table" id="spice-checks">',
+        '    <thead><tr><th scope="col">检查项</th><th scope="col">状态</th></tr></thead>',
+        '    <tbody>',
+        ...Object.entries(spice.checks).map(([key, value]) => {
+          const label = ownLookup(SPICE_CHECK_LABELS, key) || key
+          return `      <tr><th scope="row"><span class="rule-name">${escapeHtml(label)}</span><code>${escapeHtml(key)}</code></th><td>${statusBadgeHtml(value)}</td></tr>`
+        }),
+        '    </tbody>',
+        '  </table>',
+      ].join('\n')
+    : ''
+
+  const circuits = spice.circuits.length
+    ? [
+        '  <h3>子电路结果</h3>',
+        '  <table class="status-table" id="spice-circuits">',
+        '    <thead><tr><th scope="col">类型</th><th scope="col">元件</th><th scope="col">结果</th><th scope="col">测试台</th><th scope="col">说明</th></tr></thead>',
+        '    <tbody>',
+        ...spice.circuits.map(circuit => {
+          const badgeClass = ownLookup(SPICE_STATUS_BADGES, circuit.status) || 'not_evaluated'
+          const label = ownLookup(SPICE_STATUS_LABELS, circuit.status) || circuit.status
+          const components = circuit.components.length
+            ? circuit.components.join('、')
+            : circuit.reference || '—'
+          const testbench = circuit.testbench
+            ? `<code>${escapeHtml(circuit.testbench)}</code>${circuit.testbenchExists ? '' : ' <span class="detail">（文件不存在）</span>'}`
+            : '未记录'
+          const details = [
+            circuit.note,
+            formatSpiceMetrics(circuit.expected, '解析值'),
+            formatSpiceMetrics(circuit.simulated, '仿真值'),
+            formatSpiceMetrics(circuit.delta, '偏差'),
+          ].filter(Boolean).join('；')
+          const typeText = circuit.typeLabel
+            ? `${circuit.typeLabel}（${circuit.type}）`
+            : circuit.type
+          return `      <tr><th scope="row">${escapeHtml(typeText)}</th><td>${escapeHtml(components)}</td><td><span class="badge badge-${badgeClass}">${escapeHtml(label)}</span></td><td>${testbench}</td><td><span class="detail">${escapeHtml(details || '—')}</span></td></tr>`
+        }),
+        '    </tbody>',
+        '  </table>',
+      ].join('\n')
+    : `  <h3>子电路结果</h3>\n  <p class="empty">${escapeHtml(spiceCircuitsEmptyText(spice))}</p>`
+
+  const installHints = !simulator && spice.installHints.length
+    ? [
+        '  <h3>安装与配置</h3>',
+        '  <ul class="status-list" id="spice-install-hints">',
+        ...spice.installHints.map(hint => `    <li><span class="detail">${escapeHtml(hint)}</span></li>`),
+        '  </ul>',
+      ].join('\n')
+    : ''
+
+  const reasons = spice.reasons.length
+    ? [
+        '  <h3>说明与限制</h3>',
+        '  <ul class="status-list" id="spice-reasons">',
+        ...spice.reasons.map(reason => `    <li><span class="detail">${escapeHtml(reason)}</span></li>`),
+        '  </ul>',
+      ].join('\n')
+    : ''
+
+  const artifacts = spice.artifacts.input || spice.artifacts.report || spice.artifacts.workdir
+    ? [
+        '  <h3>仿真产物</h3>',
+        '  <table class="status-table" id="spice-artifacts">',
+        '    <thead><tr><th scope="col">产物</th><th scope="col">路径</th></tr></thead>',
+        '    <tbody>',
+        `      <tr><th scope="row">分析输入</th><td>${spice.artifacts.input ? `<code>${escapeHtml(spice.artifacts.input)}</code>` : '未生成'}</td></tr>`,
+        `      <tr><th scope="row">上游仿真结果</th><td>${spice.artifacts.report ? `<code>${escapeHtml(spice.artifacts.report)}</code>` : '未生成'}</td></tr>`,
+        `      <tr><th scope="row">测试台目录</th><td>${spice.artifacts.workdir ? `<code>${escapeHtml(spice.artifacts.workdir)}</code>` : '未生成'}</td></tr>`,
+        '    </tbody>',
+        '  </table>',
+      ].join('\n')
+    : ''
+
+  return [
+    '<section class="panel" id="spice">',
+    '  <h2>仿真</h2>',
+    '  <p class="hint">来源：kicad-happy 的 SPICE 仿真（simulate_subcircuits.py）。'
+      + '仅当显式传入 --spice 时运行；没有可用仿真器时标记未评估，绝不伪造仿真结果。</p>',
+    `  <p class="note${warning ? ' note-warn' : ''}" id="spice-status">${escapeHtml(statusText)}</p>`,
+    '  <dl class="coverage-grid">',
+    grid,
+    '  </dl>',
+    checks,
+    circuits,
+    installHints,
+    artifacts,
+    reasons,
+    '</section>',
+  ].filter(Boolean).join('\n')
+}
+
+const SPICE_CHECK_LABELS = {
+  simulator_detection: '仿真器检测',
+  testbench_generation: '测试台生成',
+  simulation: '仿真执行',
+}
+
+function spiceStatusText(spice) {
+  if (!spice.requested) {
+    return '本次未运行仿真：--spice 为可选开关，默认关闭；未运行不代表通过。'
+  }
+  if (!spice.simulator) {
+    return `未评估：${spice.reasons.join('；') || '未找到可用的 SPICE 仿真器。'}`
+  }
+  if (spice.status === 'failed') {
+    return `仿真执行失败：${spice.reasons.join('；') || '上游仿真没有正常完成。'}`
+  }
+  if (spice.status === 'not_evaluated') {
+    return `未评估：${spice.reasons.join('；') || '没有子电路产出可用测量结果。'}`
+  }
+  if (spice.status === 'partial') {
+    return `部分完成：${spice.counts.skip}/${spice.counts.total} 个子电路未完成仿真；跳过项不代表通过。`
+  }
+  if (spice.status === 'found') {
+    return `发现 ${spice.findings} 条仿真问题，详见问题清单。`
+  }
+  return `全部 ${spice.counts.total} 个子电路仿真通过（结果来自 ${spice.simulator.name}`
+    + `${spice.simulator.version ? ` ${spice.simulator.version}` : ''}）。`
+}
+
+function spiceCircuitsEmptyText(spice) {
+  if (!spice.requested) return '本次未运行仿真，因此没有子电路结果。'
+  if (!spice.simulator) return '未找到可用仿真器，没有生成任何子电路结果。'
+  if (spice.status === 'failed') return '仿真执行失败，没有可用的子电路结果。'
+  return '没有可仿真的子电路。'
+}
+
+function formatSpiceMetrics(value, label) {
+  if (!isPlainObject(value)) return ''
+  const parts = Object.entries(value)
+    .map(([key, entry]) => {
+      if (typeof entry === 'number' && Number.isFinite(entry)) {
+        return `${key}=${formatSpiceNumber(entry)}`
+      }
+      if (typeof entry === 'string' || typeof entry === 'boolean') {
+        return `${key}=${entry}`
+      }
+      return ''
+    })
+    .filter(Boolean)
+  if (parts.length === 0) return ''
+  return `${label}：${parts.join(' / ')}`
+}
+
+function formatSpiceNumber(value) {
+  if (Math.abs(value) >= 1000) return value.toFixed(1)
+  if (Math.abs(value) >= 1) return value.toFixed(4)
+  return value.toPrecision(6)
 }
 
 function statusBadgeHtml(value) {

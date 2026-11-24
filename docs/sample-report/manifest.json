@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "run": {
-    "id": "20261125-025016-1b58",
-    "startedAt": "2026-11-24T18:50:16.835Z",
+    "id": "20261125-032317-ce6a",
+    "startedAt": "2026-11-24T19:23:17.225Z",
     "argv": [
       "--project",
       "tests/fixtures/Student-DCDC-Buck-Converter",
@@ -66,6 +66,7 @@
     "gerber": "pass",
     "bom": "found",
     "datasheets": "skipped",
+    "spice": "skipped",
     "report": "pass"
   },
   "documents": [
@@ -180,6 +181,25 @@
     "plans": 0,
     "findings": 0
   },
+  "spice": {
+    "requested": false,
+    "status": "not_evaluated",
+    "simulator": null,
+    "detection": null,
+    "availableCircuits": 0,
+    "counts": {
+      "total": 0,
+      "pass": 0,
+      "warn": 0,
+      "fail": 0,
+      "skip": 0
+    },
+    "findings": 0,
+    "artifacts": null,
+    "reasons": [
+      "未启用 --spice：仿真为可选步骤，本次没有运行。"
+    ]
+  },
   "svg": {
     "requested": false,
     "rendered": false
@@ -198,6 +218,6 @@
   },
   "status": "complete",
   "exitCode": 0,
-  "finishedAt": "2026-11-24T18:50:17.415Z",
-  "durationMs": 558
+  "finishedAt": "2026-11-24T19:23:17.797Z",
+  "durationMs": 547
 }

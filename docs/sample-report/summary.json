@@ -35,7 +35,7 @@
       }
     ]
   },
-  "generatedAt": "2026-11-25 02:50:16",
+  "generatedAt": "2026-11-25 03:23:17",
   "status": "complete",
   "schematic": {
     "components": 9,
@@ -87,6 +87,25 @@
     "pinVerification": "not_evaluated",
     "reasons": [
       "工程目录中没有 datasheets 目录，未找到可用的 PDF 数据手册"
+    ]
+  },
+  "spice": {
+    "requested": false,
+    "status": "not_evaluated",
+    "simulator": null,
+    "circuits": 0,
+    "counts": {
+      "total": 0,
+      "pass": 0,
+      "warn": 0,
+      "fail": 0,
+      "skip": 0
+    },
+    "findings": 0,
+    "artifact": null,
+    "workdir": null,
+    "reasons": [
+      "未启用 --spice：仿真为可选步骤，本次没有运行。"
     ]
   },
   "coverage": {
@@ -192,6 +211,30 @@
       "findings": 0,
       "reasonCount": 1
     },
+    "spice": {
+      "status": "not_evaluated",
+      "requested": false,
+      "simulator": null,
+      "availableCircuits": 0,
+      "counts": {
+        "total": 0,
+        "pass": 0,
+        "warn": 0,
+        "fail": 0,
+        "skip": 0
+      },
+      "checks": {
+        "simulator_detection": "not_evaluated",
+        "testbench_generation": "not_evaluated",
+        "simulation": "not_evaluated"
+      },
+      "circuitCount": 0,
+      "circuits": [],
+      "reasons": [
+        "未启用 --spice：仿真为可选步骤，本次没有运行。"
+      ],
+      "artifacts": null
+    },
     "crossCheck": {
       "compared": 22,
       "exact": 22,
@@ -210,7 +253,7 @@
       "pass": 6,
       "found": 6,
       "partial": 0,
-      "not_evaluated": 2,
+      "not_evaluated": 3,
       "failed": 0
     }
   },
@@ -228,7 +271,8 @@
     "pin_pad": "pass",
     "gerber": "pass",
     "bom": "found",
-    "datasheets": "not_evaluated"
+    "datasheets": "not_evaluated",
+    "spice": "not_evaluated"
   },
   "findings": [
     {
