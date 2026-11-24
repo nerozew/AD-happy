@@ -396,6 +396,7 @@ async function executeStages(state) {
     },
   }
   const netlistIncomplete = Boolean(schematic)
+    && !connectivityFailed
     && pinsTotal > 0
     && pinsMatched < pinsTotal
   if (netlistIncomplete) {
@@ -583,9 +584,11 @@ async function executeStages(state) {
   }
 
   const ruleFailure = Object.values(ruleStatus).includes('failed')
+  const rulePartial = Object.values(ruleStatus).includes('partial')
   const partial = state.errors.length > 0
     || missingInputs.length > 0
     || ruleFailure
+    || rulePartial
   const overallStatus = partial ? 'partial' : 'complete'
 
   // 12. summary.json：只放模型需要读的概览、覆盖、计数与 top findings。
