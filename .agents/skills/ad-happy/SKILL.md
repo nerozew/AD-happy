@@ -67,7 +67,7 @@ node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [
 - 用户提供了数据手册 PDF 目录时追加 `--datasheets "<目录>"`；省略时自动查找工程下的 `datasheets/`。CLI 只检查 PDF 覆盖、MPN 匹配并调用上游 `plan_extraction.py` 生成提取计划，**不解析 PDF 引脚表**。提取计划与 scout 缓存写在 `<输出目录>/datasheets/`，不写源工程；需要 AI 继续时，让 AI 读取 PDF 后把 `<MPN>.scout.json` 写入该目录，再重跑同一命令即可生成 `<MPN>.plan.json`。没有目录或没有提取计划时按 `not_evaluated` 汇报；引脚级核对必须由 AI/人工依据 PDF 完成，不得声称已经核对。
 - 用户明确要求 SPICE 仿真时追加 `--spice`；默认不要加。CLI 自动检测 ngspice、LTspice、Xyce，找不到时 `rules.spice = not_evaluated`，必须如实汇报缺什么/如何安装，**不得声称仿真通过，也不得自行安装软件**。仿真结果只能引用 `summary.spice` 与 `spice.json` 中的测试台路径和数值。
 - 用户明确要求 EMC、电磁兼容或预合规分析时追加 `--emc`；默认不要加。CLI 复用 kicad-happy 的 `analyze_emc.py`，默认标准为 FCC Part 15 Class B。铺铜实形、板框线段、层切换、走线邻近度与叠层介质不在离线解析范围内，相关类别会标 `not_evaluated`；必须按 `summary.emc.categories` / `notEvaluatedRules` 逐类说明，并检查 `summary.emc.netlistComplete`（为 false 时依赖网表的规则已降级），**不得把未评估类别说成通过**。上游脚本缺失时 `rules.emc = not_evaluated`，不改变退出码；只有 `failed` 才表示执行失败。EMC 结果是设计风险筛查，不是合规测试替代品。
-- 用户选择深度模式且已在第 3 步确认 AD 已启动时追加 `--with-ad`；否则不要加。CLI 通过本机 AD-MCP 调用 Altium 原生 ERC/DRC，并对工程中的 `.SchLib`/`.PcbLib` 做符号引脚与封装焊盘核对。AD 不可用、工具超时或库无法读取时，相应检查标 `failed`/`not_evaluated`，不得改写成通过。离线默认运行不产生 `AD-` finding；`rules.native_erc`/`native_drc`/`native_library` 为 `not_evaluated`。
+- 用户选择深度模式且已在第 3 步确认 AD 已启动时追加 `--with-ad`；否则不要加。CLI 通过本机 AD-MCP 调用 Altium 原生 ERC/DRC，并对工程中的 `.SchLib`/`.PcbLib` 做符号引脚与封装焊盘核对。AD 不可用、工具超时或库无法读取时，相应检查标 `failed`/`not_evaluated`；库明细被截断或部分元件未匹配到库符号/封装时标 `partial`，不得改写成通过，也不得把「已核对子集一致」说成全部通过。离线默认运行不产生 `AD-` finding；`rules.native_erc`/`native_drc`/`native_library` 为 `not_evaluated`。
 - 命令失败时按退出码处理（见下），不要改用其他方式自行解析工程。
 
 ### 4. 只读 `summary.json`

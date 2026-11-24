@@ -92,6 +92,27 @@ def test_bridge_reports_tool_failure(tmp_path):
     assert "did not run" in drc["error"]
 
 
+def test_bridge_records_real_call_duration(tmp_path):
+    pytest.importorskip("mcp")
+    request = _request([{
+        "id": "erc",
+        "tool": "get_erc_violations",
+        "arguments": {"compile": True, "project_path": ""},
+    }], tmp_path / "ad-home")
+    request["server"]["env"] = {"STUB_AD_SLEEP_MS": "150"}
+    payload = _run_bridge(request, tmp_path)
+
+    erc = payload["calls"]["erc"]
+    assert erc["ok"] is True
+    assert erc["durationMs"] >= 100, f"durationMs 未覆盖工具执行时间：{erc['durationMs']}"
+
+
+def test_build_server_env_disables_bytecode(tmp_path):
+    env = mcp_client.build_server_env({"altiumHome": str(tmp_path / "home")})
+    assert env["PYTHONDONTWRITEBYTECODE"] == "1"
+    assert (tmp_path / "home").is_dir()
+
+
 def test_bridge_skips_after_timeout(tmp_path):
     pytest.importorskip("mcp")
     request = _request([

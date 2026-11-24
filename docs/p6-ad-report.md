@@ -15,7 +15,7 @@
 | 可用性探测 | `detectAdAvailability()`：Windows、AD-MCP 服务端、Python `mcp`、`X2.EXE` 进程 |
 | CLI | `--with-ad`；不可用退出码 **2**，不静默退回离线 |
 | 归一化 | `AD-ERC-*` / `AD-DRC-*` / `AD-LIB-*`，`source: "altium-native"`，中文标题/描述 |
-| 测试 | Node **169 passed**；Python **77 passed** |
+| 测试 | Node **172 passed**；Python **79 passed** |
 | 真实链路 | 已用运行中的 Altium Designer 跑通 ERC；DRC 与封装明细由 AD-MCP/AD 侧失败，已如实记录 |
 | 样例报告 | `docs/sample-report/` 已按离线默认重新生成；AD 章节不渲染、`rules.native_* = not_evaluated` |
 
@@ -50,7 +50,12 @@ AD-MCP 的对话框自动化/脚本执行问题阻断。失败被标记为 `fail
 | `get_symbol_primitives` | `library_path: str = ""`, `symbol_name: str = ""` | 清单 `{library_name,symbol_count,symbols[{name,...}]}`；明细 `{primitives:[{type:"pin",pin_number,...}]}` |
 | `get_footprint_primitives` | `library_path: str = ""`, `footprint_name: str = ""` | 清单 `{library_name,footprint_count,footprints[{name,...}]}`；明细 `{primitives:[{type:"pad",name,...}]}` |
 
-未修改安装目录中的任何文件。AD-MCP 运行时只会写：
+未修改安装目录中的源码或配置。真实探测期间，AD-MCP 的 Python 导入曾在
+`server/__pycache__/` 生成/更新过 `.pyc`（例如 `drc.cpython-313.pyc`）；这是
+本阶段早期未加 `-B` 时的副作用，安装目录中的源码/配置没有被改写或删除。
+修复后桥接以 `-B` 与 `PYTHONDONTWRITEBYTECODE=1` 启动服务器，不再写字节码。
+
+AD-MCP 运行时只会写：
 
 - 本工具为每次运行创建的 `<--out>/ad/mcp-home/`（`config.json`、`altium_mcp.log`）；
 - AD-MCP 自身约定的共享交换目录 `C:/Users/Public/altium_mcp/`；
@@ -121,7 +126,9 @@ python -B -c "import importlib.util, sys; ... 检查 mcp / win32gui / win32ui /
 win32con / win32api / win32process / PIL ..."
 ```
 
-找到一个依赖齐全的解释器后，直接用该解释器运行 `server/main.py`。没有找到时：
+找到一个依赖齐全的解释器后，直接用该解释器以 `python -B server/main.py` 启动
+服务器，并在环境里设置 `PYTHONDONTWRITEBYTECODE=1`，避免向只读安装目录写
+`__pycache__`。没有找到时：
 
 - 如果安装目录有 `start_server.py`，报告精确的构建命令：
   `python "<server>/start_server.py" --build`；
@@ -227,6 +234,13 @@ win32con / win32api / win32process / PIL ..."
 - 符号名按原理图的 Comment、`LibReference`、`Library Reference`、`LibRef`、
   `Design Item ID` 匹配；封装名按 PCB 元件的 `footprint` 匹配；
 - 匹配不到时不猜、不产生不一致 finding，标记 `partial` 并说明原因；
+- **覆盖边界必须可见**：
+  - 每个库最多读取 `AD_HAPPY_AD_MAX_LIBRARY_DUMPS`（默认 50）个符号/封装明细；
+    达到上限时该库标 `truncated`，状态降级为 `partial`，报告列出「部分条目未核对」；
+  - 原理图/PCB 中存在、但没有匹配到任何已提供 `.SchLib`/`.PcbLib` 的元件，
+    计入 `unmatchedSymbols`/`unmatchedFootprints`，相关库与 `checks.library`
+    降级为 `partial`，报告在库表与警告条中列出这些元件；
+  - 因此「已匹配子集一致」不会被报告成「全部通过」；
 - 符号明细比较引脚号集合；封装明细比较具名焊盘号集合；只报告「原理图/PCB
   使用但库中缺失」的编号，库中多余引脚/焊盘不报错；
 - 多元件共用同一符号/封装时，按各自引脚/焊盘集合分别比较。
@@ -303,10 +317,10 @@ win32con / win32api / win32process / PIL ..."
 
 ```bash
 node --test tests/*.test.mjs
-# tests 169 / pass 169 / fail 0
+# tests 172 / pass 172 / fail 0
 ```
 
-新增 `tests/ad.test.mjs`（14 条）：
+新增 `tests/ad.test.mjs`（17 条）：
 
 1. `detectAdAvailability` 桩服务器可用；
 2. 服务端缺失 → `server_missing` + 中文原因/前提；
@@ -315,14 +329,20 @@ node --test tests/*.test.mjs
    `source: altium-native`、中文标题/描述、`ad/` 产物、不写源工程；
 5. DRC `ran:false` → `AD-DRC-000`，不产生 `AD-DRC-001`；
 6. 库缺引脚/焊盘 → `AD-LIB-001` / `AD-LIB-002`，含元件与引脚定位；
-7. 工具超时 → 不挂起，ERC 失败，后续调用跳过，无伪造 DRC/库结论；
-8. 离线 CLI：`native_* = not_evaluated`、无 `AD-` finding、无原生章节、无 `ad.json`；
-9. `--with-ad` + 桩服务器：退出 0、summary/规则状态、`ad.json`、报告章节与来源标签；
-10. `--with-ad` DRC 失败：退出 3、`native_drc=failed`、manifest 错误、无伪造违规；
-11. `--with-ad` 不可用：退出 2、中文 stderr、不创建输出目录；
-12. 桥收到非法 JSON → `{ok:false, phase:"request"}`；
-13. 桥服务端入口缺失 → 结构化失败；
-14. `discoverLibraries` 收集 `.SchLib`/`.PcbLib`/`.IntLib` 并去重。
+7. 库明细被截断（`maxLibraryDumps=1`）→ 两个库、`checks.library` 均为
+   `partial`，`truncatedLibraries=2`，不产生 `AD-LIB-000`；
+8. 未匹配符号/封装（stub 排除 `10 kOhms`、`CAP 0805_2012`）→ `unmatchedSymbols=1`、
+   `unmatchedFootprints=2`，库状态 `partial` 且 reasons 列出 R2/C1/C2；
+9. 工具超时 → 不挂起，ERC 失败，后续调用跳过，无伪造 DRC/库结论；
+10. 离线 CLI：`native_* = not_evaluated`、无 `AD-` finding、无原生章节、无 `ad.json`；
+11. `--with-ad` + 桩服务器：退出 0、summary/规则状态、`ad.json`、报告章节与来源标签；
+12. `--with-ad` + `AD_HAPPY_AD_MAX_LIBRARY_DUMPS=1`：退出 3、
+    `rules.native_library=partial`、报告出现 `native-library-coverage` 警告；
+13. `--with-ad` DRC 失败：退出 3、`native_drc=failed`、manifest 错误、无伪造违规；
+14. `--with-ad` 不可用：退出 2、中文 stderr、不创建输出目录；
+15. 桥收到非法 JSON → `{ok:false, phase:"request"}`；
+16. 桥服务端入口缺失 → 结构化失败；
+17. `discoverLibraries` 收集 `.SchLib`/`.PcbLib`/`.IntLib` 并去重。
 
 桩服务器：`tests/fixtures/ad-mcp-stub/server/main.py`，用 FastMCP 实现同名四个
 工具，返回固定结果；`STUB_AD_DRC_FAIL`、`STUB_AD_SLEEP_MS`、
@@ -334,14 +354,16 @@ node --test tests/*.test.mjs
 
 ```bash
 python -B -m pytest -q
-# 77 passed, 1 warning
+# 79 passed, 1 warning
 ```
 
-新增 `tests/test_mcp_client.py`（6 条）：
+新增 `tests/test_mcp_client.py`（8 条）：
 
 - 请求 JSON 不合法、未知工具被拒绝；
 - 与桩服务器的 ERC 端到端（`ok`、`StubAltiumMCP`、2 条违规）；
 - `success:false` 工具失败 → `tool_reported_failure`；
+- 成功调用的 `durationMs` 覆盖真实工具执行时间（stub sleep 150ms）；
+- `build_server_env` 设置 `PYTHONDONTWRITEBYTECODE=1`；
 - 超时 → `timeout`，后续调用 `skipped_after_timeout`；
 - 服务端入口缺失 → `phase:"request"`。
 
@@ -457,8 +479,9 @@ node .agents/skills/ad-happy/scripts/analyze.mjs \
 
 ## 10. 约束与已知限制
 
-- **AD-MCP 只读**：未修改安装目录；运行时只写本工具输出目录与 AD-MCP 自己的
-  共享交换目录。
+- **AD-MCP 只读**：未修改安装目录中的源码/配置；运行时只写本工具输出目录与
+  AD-MCP 自己的共享交换目录。早期未加 `-B` 的探测触发过 `server/__pycache__`
+  的 `.pyc` 写入；修复后服务器以 `-B` + `PYTHONDONTWRITEBYTECODE=1` 启动。
 - **不安装软件**：缺少 `mcp` 包时只报告精确安装命令；没有自动执行 `--build`
   或 pip。
 - **不联网**：本工具不发起网络请求；MCP 与 Altium 均为本机进程。
@@ -498,3 +521,63 @@ node .agents/skills/ad-happy/scripts/analyze.mjs \
 - `.agents/skills/ad-happy/SKILL.md`（深度模式行为、退出码、native 汇报）
 - `README.md`（`--with-ad`、环境变量、产物、限制）
 - `docs/sample-report/*`（离线重新生成）
+
+## 12. P6 评审修复记录
+
+评审提出 1 个 Important 与 2 个相关 Minor，本轮已全部修复；其余 Minor 记为 debt。
+
+### 12.1 Important：库明细截断/未匹配不再报 `pass`
+
+- 每个库在匹配数超过 `AD_HAPPY_AD_MAX_LIBRARY_DUMPS` 时设置
+  `state.truncated=true`，库状态与 `checks.library` 降级为 `partial`；
+  reasons 明确写出「只读取前 N 个，未被读取的符号/封装未核对」。
+- 新增全局未匹配统计：符号侧按所有已提供 `.SchLib` 的匹配结果汇总，
+  封装侧按所有 `.PcbLib` 汇总；未匹配元件写入
+  `coverage.libraries[].unmatchedComponents`、
+  `coverage.counts.libraries.unmatchedSymbols/unmatchedFootprints`，
+  并让相关库、`checks.library`、`rules.native_library` 降级为 `partial`。
+- 状态收尾顺序调整为：failed > 明细读取失败（AD-LIB-000）> 截断/明细不可用/
+  未匹配（partial）> 引脚/焊盘不一致（found）> pass。即「已核对子集一致」
+  不会覆盖「仍有未核对范围」。
+- 报告「库覆盖与核对」表新增“明细达到上限”“未匹配元件未参与核对”问题列，
+  并在表下增加 `id="native-library-coverage"` 警告条，明确写出未匹配符号数、
+  未匹配封装数与截断库数，以及「不能读成全部通过」。
+
+测试：
+
+- `runNativeChecks` + `maxLibraryDumps: 1` → 两个库与 `checks.library` 均为
+  `partial`、`truncatedLibraries=2`、无 `AD-LIB-000`；
+- `STUB_AD_SYMBOL_EXCLUDE=10 kOhms`、`STUB_AD_FOOTPRINT_EXCLUDE=CAP 0805_2012`
+  → `unmatchedSymbols=1`（R2）、`unmatchedFootprints=2`（C1/C2），库 reasons
+  列出元件，`checks.library=partial`，不产生 `AD-LIB-001/002`；
+- CLI + `AD_HAPPY_AD_MAX_LIBRARY_DUMPS=1` → `rules.native_library=partial`、
+  `summary.status=partial`、退出码 3、报告包含覆盖不足警告。
+
+### 12.2 Minor：`durationMs` 记录真实执行时间
+
+`mcp_client.py` 的 `_parse_tool_result()` 现在接收调用前的 `started`，成功、
+`isError`、非 JSON、`success:false` 四种返回都使用同一计时起点。新增 Python
+测试用 stub `STUB_AD_SLEEP_MS=150` 验证 `durationMs >= 100`。
+
+### 12.3 Minor：禁止向 AD-MCP 安装目录写 `__pycache__`
+
+- `build_server_env()` 增加 `PYTHONDONTWRITEBYTECODE=1`；
+- 启动参数改为 `python -B server/main.py`；
+- 报告 §2 的绝对表述已修正：承认早期未加 `-B` 的探测曾生成/更新
+  `server/__pycache__/drc.cpython-313.pyc`，但未改写或删除安装目录中的
+  源码/配置；修复后不再写字节码。
+- 未删除既有 `__pycache__`（删除同样属于修改安装目录）；关闭 AD 后如需清理，
+  由用户自行决定。
+
+### 12.4 本轮债务（不修）
+
+- `drc.complete` 缺省语义；文档顺序；桥测试依赖 PATH；离线打印文案；
+  测试缺口；真实证据入库。均按评审意见记入后续 debt。
+
+### 12.5 修复后验证
+
+- `node --test tests/*.test.mjs`：**172 passed / 0 failed**；
+- `python -B -m pytest -q`：**79 passed**；
+- `docs/sample-report/` 已在**不带 `--with-ad`** 下重新生成：`summary.status=complete`、
+  `native.requested=false`、`rules.native_*=not_evaluated`、无 `AD-` finding、
+  报告不渲染原生章节；`summary.json` 约 20.5KB。

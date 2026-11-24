@@ -43,6 +43,11 @@ def _misset(name: str) -> set[str]:
     return {item.strip() for item in os.environ.get(name, "").split(",") if item.strip()}
 
 
+def _visible(table: dict, exclude_env: str) -> dict:
+    excluded = _misset(exclude_env)
+    return {name: pins for name, pins in table.items() if name not in excluded}
+
+
 async def _delay() -> None:
     try:
         milliseconds = int(os.environ.get("STUB_AD_SLEEP_MS", "0") or 0)
@@ -131,16 +136,17 @@ async def run_drc(ctx: Context, board_path: str = "", max_violations: int = 200,
 async def get_symbol_primitives(ctx: Context, library_path: str = "", symbol_name: str = "") -> str:
     """Inventory a fake SchLib, or dump a fake symbol."""
     await _delay()
+    symbols = _visible(SYMBOLS, "STUB_AD_SYMBOL_EXCLUDE")
     if not symbol_name:
         return json.dumps({
             "library_name": os.path.basename(library_path),
-            "symbol_count": len(SYMBOLS),
+            "symbol_count": len(symbols),
             "symbols": [
                 {"name": name, "description": "", "part_count": 1, "pins": len(pins)}
-                for name, pins in SYMBOLS.items()
+                for name, pins in symbols.items()
             ],
         }, ensure_ascii=False)
-    pins = SYMBOLS.get(symbol_name)
+    pins = symbols.get(symbol_name)
     if pins is None:
         return json.dumps({
             "success": False,
@@ -176,17 +182,18 @@ async def get_footprint_primitives(ctx: Context, library_path: str = "",
                                    footprint_name: str = "") -> str:
     """Inventory a fake PcbLib, or dump a fake footprint."""
     await _delay()
+    footprints = _visible(FOOTPRINTS, "STUB_AD_FOOTPRINT_EXCLUDE")
     if not footprint_name:
         return json.dumps({
             "library_name": os.path.basename(library_path),
             "library_path": library_path,
-            "footprint_count": len(FOOTPRINTS),
+            "footprint_count": len(footprints),
             "footprints": [
                 {"name": name, "description": "", "pads": len(pads), "tracks": 1}
-                for name, pads in FOOTPRINTS.items()
+                for name, pads in footprints.items()
             ],
         }, ensure_ascii=False)
-    pads = FOOTPRINTS.get(footprint_name)
+    pads = footprints.get(footprint_name)
     if pads is None:
         return json.dumps({
             "success": False,

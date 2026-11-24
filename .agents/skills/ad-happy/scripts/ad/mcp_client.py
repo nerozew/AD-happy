@@ -202,6 +202,8 @@ def build_server_env(server: dict) -> dict:
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
     env["PYTHONUTF8"] = "1"
+    # AD-MCP 安装目录只读：禁止服务器在 server/ 下写 __pycache__。
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     return env
 
 
@@ -215,14 +217,13 @@ def _tool_text(result) -> str:
     return "\n".join(parts).strip()
 
 
-def _parse_tool_result(call: dict, result) -> dict:
+def _parse_tool_result(call: dict, result, started: int) -> dict:
     """把 CallToolResult 转成桥的逐项结果。
 
     AD-MCP 的失败有两种形式：MCP 层的 isError，以及工具自己返回的
     ``{"success": false, "error": ...}``。两者都按失败处理，绝不把错误
     文本当成成功结果交给上层归一化。
     """
-    started = _now_ms()
     text = _tool_text(result)
     if getattr(result, "isError", False):
         return {
@@ -281,7 +282,7 @@ async def _run_session(request: dict) -> dict:
     server = request["server"]
     params = StdioServerParameters(
         command=server["python"],
-        args=[server["main"]],
+        args=["-B", server["main"]],
         env=build_server_env(server),
         cwd=server.get("cwd") or None,
     )
@@ -349,7 +350,7 @@ async def _run_session(request: dict) -> dict:
                         errors.append(message)
                         continue
 
-                    record = _parse_tool_result(call, result)
+                    record = _parse_tool_result(call, result, started)
                     calls_out[call["id"]] = record
                     if not record.get("ok"):
                         errors.append(f"工具 {call['tool']}：{record.get('error', '未知错误')}")

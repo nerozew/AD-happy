@@ -662,6 +662,8 @@ function normalizeNative(value) {
             error: scalarText(entry.error),
           }))
           : [],
+        truncated: library.truncated === true,
+        unmatchedComponents: stringList(library.unmatchedComponents),
         reasons: stringList(library.reasons),
       }))
       : [],
@@ -675,6 +677,9 @@ function normalizeNative(value) {
         matchedSymbols: countValue(libraryCounts.matchedSymbols),
         matchedFootprints: countValue(libraryCounts.matchedFootprints),
         mismatches: countValue(libraryCounts.mismatches),
+        unmatchedSymbols: countValue(libraryCounts.unmatchedSymbols),
+        unmatchedFootprints: countValue(libraryCounts.unmatchedFootprints),
+        truncatedLibraries: countValue(libraryCounts.truncatedLibraries),
         failed: countValue(libraryCounts.failed),
       },
     },
@@ -1831,10 +1836,25 @@ function renderNative({ native, findings }) {
       }),
       ...library.failedDumps.map(entry => `${entry.name}：明细读取失败（${entry.error}）`),
       ...library.incompleteDumps.map(entry => `${entry.name}：明细不可用（${entry.error}）`),
+      ...(library.truncated ? ['明细读取达到上限，部分条目未核对'] : []),
+      ...(library.unmatchedComponents.length
+        ? [`未匹配元件未参与核对：${library.unmatchedComponents.join('、')}`]
+        : []),
       ...library.reasons,
     ].filter(Boolean)
     return `      <tr><th scope="row"><span class="rule-name">${escapeHtml(library.name)}</span><code>${escapeHtml(kindLabel)}</code></th><td>${statusBadgeHtml(library.status)}</td><td>${escapeHtml(String(library.inventory))}</td><td>${escapeHtml(matched)}</td><td>${library.dumped}/${library.matched.length}</td><td><span class="detail">${escapeHtml(problems.slice(0, 4).join('；') || '—')}</span></td></tr>`
   }).join('\n')
+  const coverageWarning = (
+    native.counts.libraries.unmatchedSymbols > 0
+    || native.counts.libraries.unmatchedFootprints > 0
+    || native.counts.libraries.truncatedLibraries > 0
+  )
+    ? '  <p class="note note-warn" id="native-library-coverage">'
+      + `库核对只覆盖已匹配且已读取明细的子集：未匹配符号 ${native.counts.libraries.unmatchedSymbols} 个、`
+      + `未匹配封装 ${native.counts.libraries.unmatchedFootprints} 个、`
+      + `明细被截断的库 ${native.counts.libraries.truncatedLibraries} 个。`
+      + '这些元件/条目不在本次核对范围内，相关库已标记为部分完成，不能读成全部通过。</p>'
+    : ''
   const libraryTable = native.libraries.length
     ? [
         '  <h3>库覆盖与核对</h3>',
@@ -1844,7 +1864,8 @@ function renderNative({ native, findings }) {
         libraryRows,
         '    </tbody>',
         '  </table>',
-      ].join('\n')
+        coverageWarning,
+      ].filter(Boolean).join('\n')
     : '  <h3>库覆盖与核对</h3>\n  <p class="empty">没有可用的 .SchLib / .PcbLib 路径，库核对未评估。</p>'
 
   const nativeFindings = findings

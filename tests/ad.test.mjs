@@ -225,6 +225,72 @@ test('runNativeChecks：库符号缺引脚 / 封装缺焊盘时产生 AD-LIB-001
   assert.equal(result.coverage.counts.libraries.mismatches >= 2, true)
 })
 
+test('runNativeChecks：库明细被截断时降级为 partial，不报 pass', () => {
+  const outDir = freshDir('ad-happy-ad-truncated-')
+  const { schematic, pcbSnapshot } = fixtures()
+  const result = runNativeChecks({
+    projectPath,
+    boardPath,
+    libraries: [
+      { path: join(projectDir, 'SCH_Lib.SchLib'), kind: 'schlib' },
+      { path: join(projectDir, 'PCB_Lib.PcbLib'), kind: 'pcblib' },
+    ],
+    schematic,
+    pcbSnapshot,
+    outDir,
+    env: stubEnv(),
+    maxLibraryDumps: 1,
+  })
+
+  assert.equal(result.coverage.checks.library.status, 'partial')
+  assert.equal(result.coverage.checks.symbol_libraries.status, 'partial')
+  assert.equal(result.coverage.checks.footprint_libraries.status, 'partial')
+  assert.equal(result.coverage.counts.libraries.truncatedLibraries, 2)
+  for (const library of result.coverage.libraries.filter(entry => entry.kind !== 'intlib')) {
+    assert.equal(library.status, 'partial', `${library.name} 不应因截断而通过`)
+    assert.equal(library.truncated, true)
+    assert.ok(library.reasons.some(reason => reason.includes('只读取前 1 个')))
+  }
+  // 截断是覆盖不足，不是执行失败；不应产生 AD-LIB-000。
+  assert.ok(!result.findings.some(finding => finding.rule_id === 'AD-LIB-000'))
+})
+
+test('runNativeChecks：未匹配到库符号/封装的元件计入 partial 并列出', () => {
+  const outDir = freshDir('ad-happy-ad-unmatched-')
+  const { schematic, pcbSnapshot } = fixtures()
+  const result = runNativeChecks({
+    projectPath,
+    boardPath,
+    libraries: [
+      { path: join(projectDir, 'SCH_Lib.SchLib'), kind: 'schlib' },
+      { path: join(projectDir, 'PCB_Lib.PcbLib'), kind: 'pcblib' },
+    ],
+    schematic,
+    pcbSnapshot,
+    outDir,
+    env: stubEnv({
+      STUB_AD_SYMBOL_EXCLUDE: '10 kOhms',
+      STUB_AD_FOOTPRINT_EXCLUDE: 'CAP 0805_2012',
+    }),
+  })
+
+  const symbolLibrary = result.coverage.libraries.find(library => library.kind === 'schlib')
+  const footprintLibrary = result.coverage.libraries.find(library => library.kind === 'pcblib')
+  assert.ok(symbolLibrary.unmatchedComponents.includes('R2'))
+  assert.ok(footprintLibrary.unmatchedComponents.includes('C1'))
+  assert.ok(footprintLibrary.unmatchedComponents.includes('C2'))
+  assert.ok(symbolLibrary.reasons.some(reason => reason.includes('R2')))
+  assert.ok(footprintLibrary.reasons.some(reason => reason.includes('C1')))
+  assert.equal(symbolLibrary.status, 'partial')
+  assert.equal(footprintLibrary.status, 'partial')
+  assert.equal(result.coverage.counts.libraries.unmatchedSymbols, 1)
+  assert.equal(result.coverage.counts.libraries.unmatchedFootprints, 2)
+  assert.equal(result.coverage.checks.library.status, 'partial')
+  // 未匹配是覆盖不足，不应产生引脚/焊盘不一致的 finding。
+  assert.ok(!result.findings.some(finding => finding.rule_id === 'AD-LIB-001'))
+  assert.ok(!result.findings.some(finding => finding.rule_id === 'AD-LIB-002'))
+})
+
 test('runNativeChecks：库工具超时不会挂起，后续调用跳过并标记失败', () => {
   const outDir = freshDir('ad-happy-ad-timeout-')
   const { schematic, pcbSnapshot } = fixtures()
@@ -319,6 +385,25 @@ test('CLI --with-ad + 桩服务器：合并 AD finding、写出 ad.json 与报�
   assert.ok(report.includes('AD-ERC-001'))
   assert.ok(report.includes('原生检查发现'))
   assert.ok(report.includes('Altium 原生检查'), '问题清单应显示来源标签')
+})
+
+test('CLI --with-ad 库明细截断：rules.native_library=partial 且报告提示覆盖不足', () => {
+  const outDir = freshDir('ad-happy-ad-cli-truncated-')
+  const result = runAnalyze(
+    ['--project', projectDir, '--out', outDir, '--with-ad'],
+    { env: stubEnv({ AD_HAPPY_AD_MAX_LIBRARY_DUMPS: '1' }) },
+  )
+  assert.equal(result.status, 3, result.stderr)
+
+  const summary = readJson(join(outDir, 'summary.json'))
+  assert.equal(summary.rules.native_library, 'partial')
+  assert.equal(summary.native.checks.library.status, 'partial')
+  assert.ok(summary.native.counts.libraries.truncatedLibraries >= 2)
+  assert.equal(summary.status, 'partial')
+
+  const report = readFileSync(join(outDir, 'report.html'), 'utf8')
+  assert.ok(report.includes('id="native-library-coverage"'))
+  assert.ok(report.includes('不能读成全部通过'))
 })
 
 test('CLI --with-ad 工具失败：退出码 3，失败可见且不伪造 DRC 违规', () => {

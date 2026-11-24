@@ -619,6 +619,8 @@ export function runNativeChecks(options = {}) {
       mismatches: [],
       failedDumps: [],
       incompleteDumps: [],
+      truncated: false,
+      unmatchedComponents: [],
       reasons: [],
     }
     if (library.kind === 'intlib') {
@@ -766,8 +768,9 @@ export function runNativeChecks(options = {}) {
         dumpMeta.set(id, { kind: 'symbol_dump', libraryIndex: state.index, match })
       }
       if (matches.length > maxLibraryDumps) {
+        state.truncated = true
         state.reasons.push(
-          `匹配到 ${matches.length} 个符号，只读取前 ${maxLibraryDumps} 个的引脚明细`,
+          `匹配到 ${matches.length} 个符号，只读取前 ${maxLibraryDumps} 个的引脚明细；未被读取的符号未核对`,
         )
       }
     } else if (state.kind === 'pcblib') {
@@ -806,8 +809,48 @@ export function runNativeChecks(options = {}) {
         dumpMeta.set(id, { kind: 'footprint_dump', libraryIndex: state.index, match })
       }
       if (matches.length > maxLibraryDumps) {
+        state.truncated = true
         state.reasons.push(
-          `匹配到 ${matches.length} 个封装，只读取前 ${maxLibraryDumps} 个的焊盘明细`,
+          `匹配到 ${matches.length} 个封装，只读取前 ${maxLibraryDumps} 个的焊盘明细；未被读取的封装未核对`,
+        )
+      }
+    }
+  }
+
+  // 5.5 未匹配元件的覆盖：库只核对了匹配到的符号/封装，未匹配的元件
+  //     不在核对范围内，不能把「已匹配子集一致」报告成全部通过。
+  const symbolLibraries = libraryStates.filter(state => state.kind === 'schlib')
+  if (symbolLibraries.length > 0 && schematicComponents) {
+    const matchedRefs = new Set(
+      symbolLibraries.flatMap(state => state.matched.flatMap(match => match.components)),
+    )
+    const unmatched = schematicComponents
+      .map(component => scalarText(component.reference))
+      .filter(Boolean)
+      .filter(reference => !matchedRefs.has(reference))
+    if (unmatched.length > 0) {
+      for (const state of symbolLibraries) {
+        state.unmatchedComponents = [...unmatched]
+        state.reasons.push(
+          `原理图元件 ${unmatched.join('、')} 未匹配到任何已提供符号库，未参与核对`,
+        )
+      }
+    }
+  }
+  const footprintLibraries = libraryStates.filter(state => state.kind === 'pcblib')
+  if (footprintLibraries.length > 0 && pcbComponents) {
+    const matchedRefs = new Set(
+      footprintLibraries.flatMap(state => state.matched.flatMap(match => match.components)),
+    )
+    const unmatched = pcbComponents
+      .map(component => scalarText(component.reference))
+      .filter(Boolean)
+      .filter(reference => !matchedRefs.has(reference))
+    if (unmatched.length > 0) {
+      for (const state of footprintLibraries) {
+        state.unmatchedComponents = [...unmatched]
+        state.reasons.push(
+          `PCB 元件 ${unmatched.join('、')} 未匹配到任何已提供封装库，未参与核对`,
         )
       }
     }
@@ -859,12 +902,11 @@ export function runNativeChecks(options = {}) {
     })
   }
 
-  // 8) 库状态收尾：dump 失败要把状态写回，不能让「清单成功」掩盖明细失败。
+  // 8) 库状态收尾：dump 失败、截断或未匹配元件都要把状态写回，
+  //    不能让「清单成功 + 已读子集一致」掩盖未核对范围。
   for (const state of libraryStates) {
     if (state.status === 'failed') continue
-    if (state.mismatches.length > 0) {
-      state.status = 'found'
-    } else if (state.failedDumps.length > 0) {
+    if (state.failedDumps.length > 0) {
       state.status = 'partial'
       findings.push(libraryFailureFinding(
         state,
@@ -872,13 +914,19 @@ export function runNativeChecks(options = {}) {
         `${state.failedDumps.length} 个条目读取失败：`
           + state.failedDumps.slice(0, 3).map(entry => `${entry.name}（${entry.error}）`).join('；'),
       ))
-    } else if (state.incompleteDumps.length > 0) {
-      // 工具调用成功但结果不可用（例如没有引脚/具名焊盘）：这是覆盖不足，
-      // 不是执行失败，记录 partial 和原因，不产生 AD-LIB-000 执行错误。
+    } else if (
+      state.truncated
+      || state.incompleteDumps.length > 0
+      || state.unmatchedComponents.length > 0
+    ) {
+      // 工具调用成功但只核对了子集（截断/明细不可用/元件未匹配）：
+      // 这是覆盖不足，不是执行失败，记录 partial 和原因，不产生 AD-LIB-000。
       state.status = 'partial'
       state.reasons.push(
         ...state.incompleteDumps.map(entry => `${entry.name}：${entry.error}`),
       )
+    } else if (state.mismatches.length > 0) {
+      state.status = 'found'
     } else if (state.status === 'not_evaluated' && state.inventory === 'ok') {
       state.status = 'pass'
     }
@@ -1546,6 +1594,8 @@ function finalizeNativeCoverage({ coverage, libraryStates, findings }) {
     mismatches: state.mismatches,
     failedDumps: state.failedDumps,
     incompleteDumps: state.incompleteDumps,
+    truncated: state.truncated === true,
+    unmatchedComponents: state.unmatchedComponents,
     reasons: uniqueText(state.reasons),
   }))
 
@@ -1554,6 +1604,8 @@ function finalizeNativeCoverage({ coverage, libraryStates, findings }) {
   coverage.checks.library_crosscheck = summarizeCrossCheck(allLibraries)
 
   const libraryStatus = aggregateLibraryStatus(allLibraries)
+  const unmatchedSymbols = uniqueText(schlibs.flatMap(state => state.unmatchedComponents))
+  const unmatchedFootprints = uniqueText(pcblibs.flatMap(state => state.unmatchedComponents))
   coverage.counts.libraries = {
     total: allLibraries.length,
     symbolLibraries: schlibs.length,
@@ -1561,6 +1613,9 @@ function finalizeNativeCoverage({ coverage, libraryStates, findings }) {
     matchedSymbols: schlibs.reduce((sum, state) => sum + state.matched.length, 0),
     matchedFootprints: pcblibs.reduce((sum, state) => sum + state.matched.length, 0),
     mismatches: allLibraries.reduce((sum, state) => sum + state.mismatches.length, 0),
+    unmatchedSymbols: unmatchedSymbols.length,
+    unmatchedFootprints: unmatchedFootprints.length,
+    truncatedLibraries: allLibraries.filter(state => state.truncated).length,
     failed: allLibraries.filter(state => state.status === 'failed').length,
   }
   coverage.counts.erc = {
