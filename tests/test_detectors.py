@@ -158,6 +158,32 @@ def test_connectivity_raw_lists_become_findings():
     assert r["status"]["decoupling"] == "pass"
 
 
+def _no_erc_ctx():
+    """U1.1 悬空但带 No-ERC 标记，应被 analyze_connectivity 抑制。"""
+    return AnalysisContext(
+        components=[{
+            "reference": "U1", "value": "TESTIC", "type": "ic",
+            "lib_id": "AD:TESTIC", "footprint": "", "properties": {},
+            "pins": [
+                {"number": "1", "name": "NC", "type": "passive",
+                 "x": 10.0, "y": 5.0},
+            ],
+        }],
+        nets={},
+        lib_symbols={},
+        pin_net={},
+        no_connects=[{"x": 10.0, "y": 5.0}],
+    )
+
+
+def test_no_erc_suppresses_unconnected_pin_finding():
+    r = run_schematic(_no_erc_ctx())
+    assert r["status"]["connectivity"] == "pass"
+    assert not any(
+        finding["rule_id"] == "NT-002" for finding in r["findings"]
+    )
+
+
 def test_rule_exception_marks_failed_and_reports(monkeypatch):
     import detectors
 

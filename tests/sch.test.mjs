@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { electricalTypeName, parseSch } from '../.agents/skills/ad-happy/scripts/sch.mjs'
+import { electricalTypeName, parseSch, readNoErcs } from '../.agents/skills/ad-happy/scripts/sch.mjs'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), 'fixtures/Student-DCDC-Buck-Converter')
 const sch = join(root, 'SCH1_Main.SchDoc')
@@ -64,10 +64,25 @@ test('引脚方向来自 PINCONGLOMERATE 低两位，长度取 PINLENGTH', () =>
   assert.ok(Math.abs(vin.lengthMil - 15.74803) < 1e-6)
   assert.ok(Math.abs(vin.x - 444.88212) < 1e-6)
   assert.ok(Math.abs(vin.y - 472.4412) < 1e-6)
+  // 热点 = LOCATION + 长度 × 方向；向左引脚的热点 x 更小。
+  assert.ok(Math.abs(vin.xHotspot - (vin.x - vin.lengthMil)) < 1e-6)
+  assert.ok(Math.abs(vin.yHotspot - vin.y) < 1e-6)
 
   assert.equal(findPin(s, 'C2', '1').orientation, 3)
   assert.equal(findPin(s, 'J1', '1').orientation, 0)
   assert.ok(Math.abs(findPin(s, 'J1', '1').lengthMil - 30) < 1e-6)
+})
+
+test('No-ERC 记录（recordKind 22）输出坐标', () => {
+  assert.deepEqual(
+    readNoErcs([
+      { recordKind: '22', position: { x: 1.5, y: -2 } },
+      { recordKind: '34', position: { x: 9, y: 9 } },
+    ]),
+    [{ x: 1.5, y: -2 }],
+  )
+  // 样板没有 No-ERC 标记，字段仍必须存在。
+  assert.deepEqual(parseSch(sch).noErcs, [])
 })
 
 test('元件注释与封装', () => {

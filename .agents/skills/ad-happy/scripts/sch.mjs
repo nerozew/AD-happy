@@ -41,10 +41,11 @@ const ELECTRICAL_BY_NAME = {
  * @param {string} path SchDoc 文件路径
  * @returns {{
  *   components: Array<{ recordIndex: number, reference: string, comment: string, footprint: string, x: number, y: number, pins: string[] }>,
- *   pins: Array<{ componentIndex: number, number: string, name: string, electrical: string, x: number, y: number, orientation: 0|1|2|3, lengthMil: number }>,
+ *   pins: Array<{ componentIndex: number, number: string, name: string, electrical: string, x: number, y: number, xHotspot: number, yHotspot: number, orientation: 0|1|2|3, lengthMil: number }>,
  *   wires: Array<{ x1: number, y1: number, x2: number, y2: number, points: Array<{ x: number, y: number }> }>,
  *   labels: Array<{ text: string, x: number, y: number, kind: 'net' | 'power' }>,
  *   powerPorts: Array<{ text: string, x: number, y: number }>,
+ *   noErcs: Array<{ x: number, y: number }>,
  *   junctions: Array<{ x: number, y: number }>
  * }}
  */
@@ -82,6 +83,8 @@ export function parseSch(path) {
       const position = record.position ?? { x: 0, y: 0 }
       return { text: record.text ?? '', x: position.x, y: position.y }
     }),
+    // No-ERC 标记落在引脚连接点（热点）上，用于抑制「故意悬空」的误报。
+    noErcs: readNoErcs(doc.records),
     junctions: doc.records
       .filter(record => record.recordKind === '29')
       .map(record => {
@@ -118,6 +121,9 @@ function readDesignators(records) {
 
 function toPin(record, componentIndexByRecordIndex) {
   const position = record.position ?? { x: 0, y: 0 }
+  const orientation = readOrientation(record)
+  const lengthMil = record.pinLengthSchematicUnits ?? 10
+  const direction = PIN_DIRECTIONS[orientation] ?? PIN_DIRECTIONS[0]
   return {
     componentIndex: componentIndexByRecordIndex.get(record.ownerIndex) ?? -1,
     number: record.designator ?? '',
@@ -125,9 +131,22 @@ function toPin(record, componentIndexByRecordIndex) {
     electrical: electricalTypeName(record.getCaseInsensitive('ELECTRICAL')),
     x: position.x,
     y: position.y,
-    orientation: readOrientation(record),
-    lengthMil: record.pinLengthSchematicUnits ?? 10,
+    // 连接点 = LOCATION + 引脚长度 × 方向；No-ERC 与检测器都按这个坐标匹配。
+    xHotspot: position.x + direction.x * lengthMil,
+    yHotspot: position.y + direction.y * lengthMil,
+    orientation,
+    lengthMil,
   }
+}
+
+// AltiumSchNoErcRecord 的 recordKind 是 "22"；位置即被标记引脚的连接点。
+export function readNoErcs(records) {
+  return records
+    .filter(record => record.recordKind === '22')
+    .map(record => {
+      const position = record.position ?? { x: 0, y: 0 }
+      return { x: position.x, y: position.y }
+    })
 }
 
 // 二进制 SchDoc 没有 ORIENTATION 字段；方向编码在 PINCONGLOMERATE 低 2 位。ASCII 文档缺 PINCONGLOMERATE 时回退 ORIENTATION。

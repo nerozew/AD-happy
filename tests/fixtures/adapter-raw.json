@@ -122,6 +122,8 @@
         "electrical": "passive",
         "x": 444.88212,
         "y": 472.4412,
+        "xHotspot": 429.13409,
+        "yHotspot": 472.4412,
         "orientation": 2,
         "lengthMil": 15.74803
       },
@@ -132,6 +134,8 @@
         "electrical": "passive",
         "x": 444.88212,
         "y": 444.88213,
+        "xHotspot": 429.13409,
+        "yHotspot": 444.88213,
         "orientation": 2,
         "lengthMil": 15.74803
       },
@@ -142,6 +146,8 @@
         "electrical": "passive",
         "x": 527.55935,
         "y": 472.4412,
+        "xHotspot": 543.30738,
+        "yHotspot": 472.4412,
         "orientation": 0,
         "lengthMil": 15.74803
       },
@@ -152,6 +158,8 @@
         "electrical": "passive",
         "x": 527.55935,
         "y": 444.88213,
+        "xHotspot": 543.30738,
+        "yHotspot": 444.88213,
         "orientation": 0,
         "lengthMil": 15.74803
       },
@@ -162,6 +170,8 @@
         "electrical": "passive",
         "x": 527.55935,
         "y": 405.51203,
+        "xHotspot": 543.30738,
+        "yHotspot": 405.51203,
         "orientation": 0,
         "lengthMil": 15.74803
       },
@@ -172,6 +182,8 @@
         "electrical": "passive",
         "x": 527.55935,
         "y": 385.82698,
+        "xHotspot": 543.30738,
+        "yHotspot": 385.82698,
         "orientation": 0,
         "lengthMil": 15.74803
       },
@@ -182,6 +194,8 @@
         "electrical": "passive",
         "x": 330.70884,
         "y": 442.4412,
+        "xHotspot": 330.70884,
+        "yHotspot": 432.4412,
         "orientation": 3,
         "lengthMil": 10
       },
@@ -192,6 +206,8 @@
         "electrical": "passive",
         "x": 330.70884,
         "y": 462.4412,
+        "xHotspot": 330.70884,
+        "yHotspot": 472.4412,
         "orientation": 1,
         "lengthMil": 10
       },
@@ -202,6 +218,8 @@
         "electrical": "passive",
         "x": 572.36253,
         "y": 472.4412,
+        "xHotspot": 562.36253,
+        "yHotspot": 472.4412,
         "orientation": 2,
         "lengthMil": 10
       },
@@ -212,6 +230,8 @@
         "electrical": "passive",
         "x": 592.36253,
         "y": 472.4412,
+        "xHotspot": 602.36253,
+        "yHotspot": 472.4412,
         "orientation": 0,
         "lengthMil": 10
       },
@@ -222,6 +242,8 @@
         "electrical": "passive",
         "x": 695.35469,
         "y": 472.4412,
+        "xHotspot": 705.35469,
+        "yHotspot": 472.4412,
         "orientation": 0,
         "lengthMil": 10
       },
@@ -232,6 +254,8 @@
         "electrical": "passive",
         "x": 675.35469,
         "y": 472.4412,
+        "xHotspot": 665.35469,
+        "yHotspot": 472.4412,
         "orientation": 2,
         "lengthMil": 10
       },
@@ -242,6 +266,8 @@
         "electrical": "passive",
         "x": 740.15788,
         "y": 462.4412,
+        "xHotspot": 740.15788,
+        "yHotspot": 472.4412,
         "orientation": 1,
         "lengthMil": 10
       },
@@ -252,6 +278,8 @@
         "electrical": "passive",
         "x": 740.15788,
         "y": 442.4412,
+        "xHotspot": 740.15788,
+        "yHotspot": 432.4412,
         "orientation": 3,
         "lengthMil": 10
       },
@@ -262,6 +290,8 @@
         "electrical": "passive",
         "x": 740.15788,
         "y": 391.57502,
+        "xHotspot": 740.15788,
+        "yHotspot": 401.57502,
         "orientation": 1,
         "lengthMil": 10
       },
@@ -272,6 +302,8 @@
         "electrical": "passive",
         "x": 740.15788,
         "y": 371.57502,
+        "xHotspot": 740.15788,
+        "yHotspot": 361.57502,
         "orientation": 3,
         "lengthMil": 10
       },
@@ -282,6 +314,8 @@
         "electrical": "passive",
         "x": 814.96107,
         "y": 439.13409,
+        "xHotspot": 814.96107,
+        "yHotspot": 429.13409,
         "orientation": 3,
         "lengthMil": 10
       },
@@ -292,6 +326,8 @@
         "electrical": "passive",
         "x": 814.96107,
         "y": 459.13409,
+        "xHotspot": 814.96107,
+        "yHotspot": 469.13409,
         "orientation": 1,
         "lengthMil": 10
       },
@@ -302,6 +338,8 @@
         "electrical": "passive",
         "x": 900.07921,
         "y": 472.4412,
+        "xHotspot": 870.07921,
+        "yHotspot": 472.4412,
         "orientation": 2,
         "lengthMil": 30
       },
@@ -312,6 +350,8 @@
         "electrical": "passive",
         "x": 900.07921,
         "y": 462.4412,
+        "xHotspot": 870.07921,
+        "yHotspot": 462.4412,
         "orientation": 2,
         "lengthMil": 30
       },
@@ -322,6 +362,8 @@
         "electrical": "passive",
         "x": 218.03156,
         "y": 472.44097,
+        "xHotspot": 248.03156,
+        "yHotspot": 472.44097,
         "orientation": 0,
         "lengthMil": 30
       },
@@ -332,6 +374,8 @@
         "electrical": "passive",
         "x": 218.03156,
         "y": 462.44097,
+        "xHotspot": 248.03156,
+        "yHotspot": 462.44097,
         "orientation": 0,
         "lengthMil": 30
       }
@@ -708,6 +752,7 @@
         "y": 448.81914
       }
     ],
+    "noErcs": [],
     "junctions": [
       {
         "x": 330.70884,

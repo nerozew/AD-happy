@@ -50,6 +50,8 @@ def to_context(raw: dict) -> AnalysisContext:
         pin_net=pin_net,
         # 显式传入非空集合，跳过 __post_init__ 的 #PWR 推断（AD 只有电源端口）。
         known_power_rails=_power_rails(schematic.get("powerPorts") or []),
+        # analyze_connectivity 按引脚热点坐标匹配 No-ERC；引脚 x/y 也用热点。
+        no_connects=_no_connects(schematic.get("noErcs") or []),
     )
 
 
@@ -93,13 +95,35 @@ def _group_pins(pins):
 
 
 def _pin_entry(pin):
+    x, y = _pin_coordinates(pin)
     return {
         "number": str(pin.get("number") or ""),
         "name": str(pin.get("name") or ""),
         "type": _pin_type(pin.get("electrical")),
-        "x": pin.get("x", 0.0),
-        "y": pin.get("y", 0.0),
+        "x": x,
+        "y": y,
     }
+
+
+def _pin_coordinates(pin):
+    """引脚连接点（热点）坐标；旧快照缺少热点字段时退回 LOCATION。"""
+    x = pin.get("xHotspot", pin.get("x", 0.0))
+    y = pin.get("yHotspot", pin.get("y", 0.0))
+    return x, y
+
+
+def _no_connects(no_ercs):
+    """AD No-ERC 标记 -> kicad-happy 的 no_connects（坐标为引脚热点）。"""
+    positions = []
+    for entry in no_ercs:
+        try:
+            positions.append({
+                "x": float(entry.get("x", 0.0)),
+                "y": float(entry.get("y", 0.0)),
+            })
+        except (TypeError, ValueError):
+            continue
+    return positions
 
 
 def _pin_type(electrical):
@@ -125,13 +149,14 @@ def _build_nets(net_result, schematic):
             reference = str(entry.get("reference") or "")
             pin_number = str(entry.get("pin") or "")
             pin = pin_index.get((reference, pin_number)) or {}
+            x, y = _pin_coordinates(pin)
             pins.append({
                 "component": reference,
                 "pin_number": pin_number,
                 "pin_name": str(pin.get("name") or ""),
                 "pin_type": _pin_type(pin.get("electrical")),
-                "x": pin.get("x", 0.0),
-                "y": pin.get("y", 0.0),
+                "x": x,
+                "y": y,
             })
         nets[str(name)] = {"pins": pins}
 
