@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "run": {
-    "id": "20261125-040546-a572",
-    "startedAt": "2026-11-24T20:05:46.060Z",
+    "id": "20261125-044944-eb5a",
+    "startedAt": "2026-11-24T20:49:44.430Z",
     "argv": [
       "--project",
       "tests/fixtures/Student-DCDC-Buck-Converter",
@@ -67,6 +67,7 @@
     "bom": "found",
     "datasheets": "skipped",
     "spice": "skipped",
+    "emc": "skipped",
     "report": "pass"
   },
   "documents": [
@@ -202,6 +203,31 @@
       "未启用 --spice：仿真为可选步骤，本次没有运行。"
     ]
   },
+  "emc": {
+    "requested": false,
+    "status": "not_evaluated",
+    "standard": "fcc-class-b",
+    "available": false,
+    "script": null,
+    "categories": {
+      "total": 0,
+      "evaluated": 0,
+      "partial": 0,
+      "notEvaluated": 0
+    },
+    "rules": {
+      "evaluated": 0,
+      "partial": 0,
+      "notEvaluated": 0,
+      "suppressedFindings": 0
+    },
+    "findings": 0,
+    "facts": 0,
+    "artifacts": null,
+    "reasons": [
+      "未启用 --emc：EMC 预合规分析为可选步骤，本次没有运行。"
+    ]
+  },
   "svg": {
     "requested": false,
     "rendered": false
@@ -220,6 +246,6 @@
   },
   "status": "complete",
   "exitCode": 0,
-  "finishedAt": "2026-11-24T20:05:46.631Z",
-  "durationMs": 548
+  "finishedAt": "2026-11-24T20:49:44.999Z",
+  "durationMs": 547
 }

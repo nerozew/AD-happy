@@ -35,7 +35,7 @@
       }
     ]
   },
-  "generatedAt": "2026-11-25 04:05:46",
+  "generatedAt": "2026-11-25 04:49:44",
   "status": "complete",
   "schematic": {
     "components": 9,
@@ -111,6 +111,32 @@
     "workdir": null,
     "reasons": [
       "未启用 --spice：仿真为可选步骤，本次没有运行。"
+    ]
+  },
+  "emc": {
+    "requested": false,
+    "status": "not_evaluated",
+    "standard": "fcc-class-b",
+    "available": false,
+    "script": null,
+    "categories": [],
+    "counts": {
+      "evaluated": 0,
+      "partial": 0,
+      "notEvaluated": 0,
+      "issues": 0,
+      "facts": 0
+    },
+    "evaluatedRules": [],
+    "partiallyEvaluatedRules": [],
+    "notEvaluatedRules": [],
+    "suppressedFindings": [],
+    "unsupportedRules": [],
+    "findings": 0,
+    "facts": 0,
+    "artifact": null,
+    "reasons": [
+      "未启用 --emc：EMC 预合规分析为可选步骤，本次没有运行。"
     ]
   },
   "coverage": {
@@ -246,6 +272,26 @@
       ],
       "artifacts": null
     },
+    "emc": {
+      "requested": false,
+      "status": "not_evaluated",
+      "standard": "fcc-class-b",
+      "available": false,
+      "counts": {
+        "evaluated": 0,
+        "partial": 0,
+        "notEvaluated": 0,
+        "issues": 0,
+        "facts": 0
+      },
+      "categories": [],
+      "findings": 0,
+      "facts": 0,
+      "artifact": null,
+      "reasons": [
+        "未启用 --emc：EMC 预合规分析为可选步骤，本次没有运行。"
+      ]
+    },
     "crossCheck": {
       "compared": 22,
       "exact": 22,
@@ -264,7 +310,7 @@
       "pass": 6,
       "found": 6,
       "partial": 0,
-      "not_evaluated": 3,
+      "not_evaluated": 4,
       "failed": 0
     }
   },
@@ -283,7 +329,8 @@
     "gerber": "pass",
     "bom": "found",
     "datasheets": "not_evaluated",
-    "spice": "not_evaluated"
+    "spice": "not_evaluated",
+    "emc": "not_evaluated"
   },
   "findings": [
     {

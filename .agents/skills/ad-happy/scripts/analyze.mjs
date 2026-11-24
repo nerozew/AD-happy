@@ -6,7 +6,7 @@
 //   node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>]
 //                    [--project-file <PrjPcb 文件名>]
 //                    [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>]
-//                    [--bom <CSV>] [--datasheets <目录>] [--spice] [--svg]
+//                    [--bom <CSV>] [--datasheets <目录>] [--spice] [--emc] [--svg]
 //
 // 退出码：0 完成；2 输入无效；3 部分完成（文档解析失败、规则 failed、
 // Python/Gerber 阶段异常或报告生成失败）。
@@ -19,6 +19,7 @@
 // 源工程只读：--out 落在源工程目录内会被直接拒绝（退出码 2）。
 import { spawnSync } from 'node:child_process'
 import {
+  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -54,6 +55,12 @@ import {
   summarizeComponents,
 } from './datasheets.mjs'
 import {
+  buildEmcInputs,
+  emptyEmcCoverage,
+  runEmc,
+  unavailableEmcCoverage,
+} from './reuse/emc.mjs'
+import {
   detectGerberDirectory,
   emptyGerberCoverage,
   runGerberAnalysis,
@@ -69,7 +76,7 @@ import {
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const PIPELINE_PY = join(SCRIPT_DIR, 'pipeline.py')
 
-const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>] [--project-file <PrjPcb 文件名>] [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>] [--bom <CSV>] [--datasheets <目录>] [--spice] [--svg]
+const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>] [--project-file <PrjPcb 文件名>] [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>] [--bom <CSV>] [--datasheets <目录>] [--spice] [--emc] [--svg]
 
   --project        包含 .PrjPcb 的工程目录，或 .PrjPcb 文件路径
   --out            输出目录；默认 %LOCALAPPDATA%\\ad-happy\\runs\\<run-id>
@@ -83,6 +90,9 @@ const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--o
                    datasheets 目录。只检查覆盖与提取计划，不解析引脚表
   --spice          运行 SPICE 仿真（可选，默认关闭）。自动检测 ngspice、
                    LTspice、Xyce；找不到时标记未评估，不伪造结果
+  --emc            运行 EMC 预合规分析（可选，默认关闭）。复用 kicad-happy
+                   的 EMC 规则；缺少铺铜/层切换等数据时相关类别标记未评估，
+                   不改变退出码
   --svg            尝试把选中板卡渲染为 SVG 内联到报告；失败只降级，不中止分析`
 
 // 三组规则的完整键；即使某一侧输入缺失，报告也能展示全部规则状态。
@@ -97,8 +107,18 @@ const SCH_RULES = [
 const PCB_RULES = ['dfm', 'pad_distance', 'current_capacity', 'decoupling_placement']
 // gerber 是制造文件（Gerber/钻孔）检查，独立于原理图/PCB 解析；
 // bom 是物料清单检查，datasheets 是数据手册覆盖与提取计划检查，
-// spice 是可选的 SPICE 仿真检查；三者都独立于 Python 规则层。
-const ALL_RULES = [...SCH_RULES, ...PCB_RULES, 'pin_pad', 'gerber', 'bom', 'datasheets', 'spice']
+// spice 是可选的 SPICE 仿真检查，emc 是可选的 EMC 预合规检查；
+// 它们都独立于 Python 规则层。
+const ALL_RULES = [
+  ...SCH_RULES,
+  ...PCB_RULES,
+  'pin_pad',
+  'gerber',
+  'bom',
+  'datasheets',
+  'spice',
+  'emc',
+]
 // 这些规则依赖原理图网表（decoupling 还依赖可解析电容值）；引脚未全部
 // 入网时，空结果不能视为通过。
 const NETLIST_DEPENDENT_RULES = [
@@ -123,15 +143,16 @@ const ARTIFACT_FILES = [
   'procurement.csv',
   'datasheets.json',
   'spice.json',
+  'emc.json',
   'capability_mode.json',
   'summary.json',
   'report.html',
 ]
 
 // 本次运行会重建的目录产物；spice/ 里是上一次的测试台与日志，
-// 不能留到下一次运行被误认成本次结果。datasheets/ 是跨运行缓存，
-// 不在清理范围内。
-const ARTIFACT_DIRS = ['spice']
+// emc-input/ 里是上一次的适配输入与上游原始输出，不能留到下一次运行
+// 被误认成本次结果。datasheets/ 是跨运行缓存，不在清理范围内。
+const ARTIFACT_DIRS = ['spice', 'emc-input']
 
 const SUMMARY_LIMIT = 32 * 1024 // summary.json 必须严格小于 32KB
 const TOP_FINDINGS_LIMIT = 20
@@ -660,6 +681,19 @@ async function executeStages(state) {
   })
   const spiceFindings = spiceStage.findings
 
+  // 9.7 EMC 预合规（可选）。只有显式 --emc 才调用上游 analyze_emc.py；
+  //     缺少铺铜/层切换等数据时相关类别保持 not_evaluated，不改变退出码。
+  const emcStage = runEmcStage(state, {
+    ruleStatus,
+    snapshot: snapshotData,
+    pcbSnapshot,
+    pipelineSummary,
+    nets,
+    netlistComplete: !netlistIncomplete,
+    generatedAt,
+  })
+  const emcFindings = emcStage.findings
+
   const findings = [
     ...state.syntheticFindings,
     ...pipelineSummary.findings.filter(isPlainObject),
@@ -667,6 +701,7 @@ async function executeStages(state) {
     ...bomStage.findings,
     ...datasheetStage.findings,
     ...spiceFindings,
+    ...emcFindings,
   ]
   // Python 只写规则层 findings；解析/连通性失败的 DET-ERR、Gerber、BOM 与
   // 数据手册结果由 Node 补充，保证 findings.json 是完整交付物
@@ -677,6 +712,7 @@ async function executeStages(state) {
     || bomStage.findings.length > 0
     || datasheetStage.findings.length > 0
     || spiceFindings.length > 0
+    || emcFindings.length > 0
   ) {
     writeJson(join(state.outDir, 'findings.json'), findings)
   }
@@ -708,6 +744,7 @@ async function executeStages(state) {
   coverage.bom = bomStage.coverage
   coverage.datasheets = datasheetStage.coverage
   coverage.spice = spiceStage.coverage
+  coverage.emc = emcStage.coverage
   const missingInputs = []
   if (!selectedBoard) missingInputs.push('pcb')
   if (!selectedSchematic) missingInputs.push('schematic')
@@ -742,6 +779,7 @@ async function executeStages(state) {
       bom: bomStage.report,
       datasheets: datasheetStage.report,
       spice: spiceStage.report,
+      emc: emcStage.report,
       svgs,
     })
     writeFileSync(reportPath, html, 'utf8')
@@ -758,13 +796,17 @@ async function executeStages(state) {
   }
 
   const ruleFailure = Object.values(ruleStatus).includes('failed')
-  // BOM、数据手册与 SPICE 仿真的 partial/not_evaluated 只表示「输入数据
-  // 不足」或「需要 AI/人工/外部仿真器继续」，不是分析失败；用户没有要求
-  // 这些检查时不应因此把整次运行降级为 partial。三者的执行失败（failed）
+  // BOM、数据手册、SPICE 仿真与 EMC 预合规的 partial/not_evaluated 只表示
+  // 「输入数据不足」或「需要 AI/人工/外部工具继续」，不是分析失败；用户没有
+  // 要求这些检查时不应因此把整次运行降级为 partial。它们的执行失败（failed）
   // 仍参与聚合。
   const rulePartial = Object.entries(ruleStatus)
     .some(([rule, value]) => (
-      rule !== 'bom' && rule !== 'datasheets' && rule !== 'spice' && value === 'partial'
+      rule !== 'bom'
+      && rule !== 'datasheets'
+      && rule !== 'spice'
+      && rule !== 'emc'
+      && value === 'partial'
     ))
   const partial = state.errors.length > 0
     || missingInputs.length > 0
@@ -785,6 +827,7 @@ async function executeStages(state) {
     bom: bomStage.summary,
     datasheets: datasheetStage.summary,
     spice: spiceStage.summary,
+    emc: emcStage.summary,
     severityGroup: reportModule.severityGroup,
   })
   try {
@@ -1515,6 +1558,278 @@ function buildSpiceSummary(coverage) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// EMC 预合规 / emc
+// ---------------------------------------------------------------------------
+
+function runEmcStage(state, {
+  ruleStatus,
+  snapshot,
+  pcbSnapshot,
+  pipelineSummary,
+  nets,
+  netlistComplete,
+  generatedAt,
+}) {
+  const requested = state.options.emc === true
+
+  // 未显式请求：只记录「可选、未运行」，不产生 EM finding，也不调用上游。
+  if (!requested) {
+    const coverage = emptyEmcCoverage({
+      requested: false,
+      reasons: ['未启用 --emc：EMC 预合规分析为可选步骤，本次没有运行。'],
+    })
+    ruleStatus.emc = 'not_evaluated'
+    state.manifest.stages.emc = 'skipped'
+    state.manifest.emc = buildEmcManifest({ requested: false, coverage })
+    return {
+      findings: [],
+      coverage,
+      report: buildEmcReport(coverage, []),
+      summary: buildEmcSummary(coverage),
+    }
+  }
+
+  if (!snapshot?.schematic && !pcbSnapshot) {
+    const coverage = unavailableEmcCoverage([
+      '没有可用的原理图或 PCB 数据，EMC 分析未评估。',
+    ])
+    ruleStatus.emc = 'not_evaluated'
+    state.manifest.stages.emc = 'not_evaluated'
+    state.manifest.emc = buildEmcManifest({ requested: true, coverage })
+    state.warnings.push('EMC 预合规分析未评估：没有可用的原理图或 PCB 数据')
+    return {
+      findings: [],
+      coverage,
+      report: buildEmcReport(coverage, []),
+      summary: buildEmcSummary(coverage),
+    }
+  }
+
+  const emcDir = join(state.outDir, 'emc-input')
+  let result
+  let coverage
+  try {
+    mkdirSync(emcDir, { recursive: true })
+    const inputs = buildEmcInputs(snapshot, pcbSnapshot, pipelineSummary, {
+      nets,
+      netlistComplete,
+    })
+    writeJson(join(emcDir, 'schematic.json'), inputs.schematicJson)
+    writeJson(join(emcDir, 'pcb.json'), inputs.pcbJson)
+    const rawSource = join(state.outDir, 'raw.json')
+    if (existsSync(rawSource)) {
+      copyFileSync(rawSource, join(emcDir, 'raw.json'))
+    }
+    result = runEmc(emcDir, state.outDir)
+    coverage = result.coverage
+    if (!coverage.artifacts) {
+      coverage.artifacts = {
+        schematic: 'emc-input/schematic.json',
+        pcb: 'emc-input/pcb.json',
+        raw: result.rawPath ? 'emc-input/emc-raw.json' : null,
+        inputRaw: existsSync(join(emcDir, 'raw.json')) ? 'emc-input/raw.json' : null,
+      }
+    }
+    coverage.artifacts.index = 'emc.json'
+  } catch (error) {
+    const message = `EMC 预合规阶段异常：${error?.message ?? error}`
+    coverage = emptyEmcCoverage({
+      requested: true,
+      status: 'failed',
+      reasons: [message],
+    })
+    coverage.upstream = { available: false, script: null, error: message }
+    coverage.findings = 1
+    result = { findings: [emcStageFailureFinding(message)], coverage, rawPath: null }
+  }
+
+  const findings = Array.isArray(result.findings) ? result.findings : []
+  ruleStatus.emc = coverage.status
+  state.manifest.stages.emc = coverage.status
+  state.manifest.emc = buildEmcManifest({ requested: true, coverage })
+
+  // 可复现产物：类别覆盖、检测器状态、上游摘要与归一化 finding 都写入 emc.json；
+  // 上游原始输出保留在 emc-input/emc-raw.json。
+  try {
+    writeJson(join(state.outDir, 'emc.json'), {
+      schemaVersion: 1,
+      generatedAt,
+      requested: true,
+      standard: coverage.standard,
+      coverage,
+      findings,
+    })
+    state.artifacts.emc = 'emc.json'
+  } catch (error) {
+    const message = `EMC 结果写入失败：${error?.message ?? error}`
+    coverage.reasons = [...(coverage.reasons ?? []), message]
+    state.warnings.push(message)
+  }
+
+  if (coverage.status === 'failed') {
+    state.errors.push({
+      stage: 'emc',
+      message: 'EMC 预合规分析失败',
+      details: coverage.reasons.join('；') || '（无错误输出）',
+    })
+  } else if (coverage.status === 'not_evaluated') {
+    state.warnings.push(
+      `EMC 预合规分析未评估：${coverage.reasons.join('；') || '输入不足'}`,
+    )
+  } else if (coverage.status === 'partial') {
+    state.warnings.push(
+      `EMC 预合规分析部分完成：${coverage.reasons.slice(0, 6).join('；') || '部分类别未评估'}`,
+    )
+  }
+
+  return {
+    findings,
+    coverage,
+    report: buildEmcReport(coverage, findings),
+    summary: buildEmcSummary(coverage),
+  }
+}
+
+function emcStageFailureFinding(message) {
+  return {
+    detector: 'emc',
+    rule_id: 'EM-000',
+    source_rule_id: null,
+    category: 'analysis_error',
+    kind: 'issue',
+    severity: 'must_fix',
+    confidence: 'deterministic',
+    evidence_source: 'emc',
+    summary: 'EMC 预合规阶段执行失败',
+    title: 'EMC 预合规阶段执行失败',
+    description: `${message}。这是分析执行错误，不是 EMC 设计结论。`,
+    evidence: message,
+    recommendation: '检查 --out 目录权限与 kicad-happy 安装；修复后重跑 --emc。',
+    components: [],
+    nets: [],
+    pins: [],
+    source: 'emc',
+  }
+}
+
+function buildEmcManifest({ requested, coverage }) {
+  const categories = Array.isArray(coverage.categories) ? coverage.categories : []
+  return {
+    requested,
+    status: coverage.status,
+    standard: coverage.standard,
+    available: coverage.available === true,
+    script: coverage.upstream?.script ?? null,
+    categories: {
+      total: categories.length,
+      evaluated: categories.filter(category => category.status === 'evaluated').length,
+      partial: categories.filter(category => category.status === 'partial').length,
+      notEvaluated: categories.filter(category => category.status === 'not_evaluated').length,
+    },
+    rules: {
+      evaluated: coverage.evaluatedRules?.length ?? 0,
+      partial: coverage.partiallyEvaluatedRules?.length ?? 0,
+      notEvaluated: coverage.notEvaluatedRules?.length ?? 0,
+      suppressedFindings: coverage.suppressedFindings?.length ?? 0,
+    },
+    findings: coverage.findings ?? 0,
+    facts: coverage.facts ?? 0,
+    artifacts: coverage.artifacts ?? null,
+    reasons: coverage.reasons ?? [],
+  }
+}
+
+function buildEmcReport(coverage, findings) {
+  const categories = Array.isArray(coverage.categories) ? coverage.categories : []
+  return {
+    requested: coverage.requested === true,
+    status: coverage.status,
+    standard: coverage.standard,
+    available: coverage.available === true,
+    script: coverage.upstream?.script ?? null,
+    upstream: coverage.upstream ?? null,
+    detectors: coverage.detectors ?? null,
+    categories,
+    evaluatedRules: coverage.evaluatedRules ?? [],
+    partiallyEvaluatedRules: coverage.partiallyEvaluatedRules ?? [],
+    notEvaluatedRules: coverage.notEvaluatedRules ?? [],
+    suppressedFindings: coverage.suppressedFindings ?? [],
+    unsupportedRules: coverage.unsupportedRules ?? [],
+    counts: coverage.counts ?? {},
+    reasons: coverage.reasons ?? [],
+    findings: findings.filter(finding => finding.kind !== 'fact').length,
+    facts: findings.filter(finding => finding.kind === 'fact').length,
+    items: findings.map(finding => ({
+      ruleId: finding.rule_id,
+      sourceRuleId: finding.source_rule_id,
+      severity: finding.severity,
+      kind: finding.kind,
+      title: finding.title,
+      description: finding.description,
+      components: finding.components,
+      nets: finding.nets,
+    })),
+    artifacts: coverage.artifacts ?? null,
+  }
+}
+
+function buildEmcSummary(coverage) {
+  const categories = Array.isArray(coverage.categories) ? coverage.categories : []
+  return {
+    requested: coverage.requested === true,
+    status: coverage.status,
+    standard: coverage.standard,
+    available: coverage.available === true,
+    script: coverage.upstream?.script ?? null,
+    categories: categories.map(category => ({
+      key: category.key,
+      label: category.label,
+      status: category.status,
+      evaluatedRules: category.evaluatedRules ?? [],
+      partiallyEvaluatedRules: category.partiallyEvaluatedRules ?? [],
+      notEvaluatedRules: (category.notEvaluatedRules ?? []).map(entry => entry.rule),
+    })),
+    counts: coverage.counts ?? {},
+    evaluatedRules: coverage.evaluatedRules ?? [],
+    partiallyEvaluatedRules: coverage.partiallyEvaluatedRules ?? [],
+    notEvaluatedRules: (coverage.notEvaluatedRules ?? [])
+      .slice(0, 40)
+      .map(entry => ({ rule: entry.rule, reason: truncateText(entry.reason, 240) })),
+    suppressedFindings: coverage.suppressedFindings ?? [],
+    unsupportedRules: coverage.unsupportedRules ?? [],
+    findings: coverage.findings ?? 0,
+    facts: coverage.facts ?? 0,
+    artifact: coverage.artifacts?.index ?? null,
+    reasons: (coverage.reasons ?? []).slice(0, 10).map(reason => truncateText(reason, 300)),
+  }
+}
+
+// summary.json 的 coverage.emc 只保留状态与计数；类别/规则明细在顶层 emc，
+// 避免同一份覆盖信息在 32KB 限制内重复占位。
+function compactEmcCoverage(emc) {
+  if (!isPlainObject(emc)) return null
+  return {
+    requested: emc.requested === true,
+    status: scalarText(emc.status) || 'not_evaluated',
+    standard: scalarText(emc.standard),
+    available: emc.available === true,
+    counts: isPlainObject(emc.counts) ? emc.counts : {},
+    categories: Array.isArray(emc.categories)
+      ? emc.categories.map(category => ({
+        key: scalarText(category.key),
+        status: scalarText(category.status),
+      }))
+      : [],
+    findings: numberOrZero(emc.findings),
+    facts: numberOrZero(emc.facts),
+    artifact: emc.artifact ?? null,
+    reasons: Array.isArray(emc.reasons)
+      ? emc.reasons.slice(0, 5).map(reason => truncateText(reason, 240))
+      : [],
+  }
+}
+
 // summary.json 只保留前 50 个子电路的概览；完整测试台与结果在 spice.json。
 const SPICE_SUMMARY_CIRCUIT_LIMIT = 50
 const SPICE_SUMMARY_CANDIDATE_LIMIT = 20
@@ -1595,6 +1910,7 @@ function buildSummary(state, context) {
     bom,
     datasheets,
     spice,
+    emc,
     severityGroup,
   } = context
 
@@ -1641,6 +1957,7 @@ function buildSummary(state, context) {
     bom: bom ?? null,
     datasheets: datasheets ?? null,
     spice: spice ?? null,
+    emc: emc ?? null,
     coverage: {
       ...coverage,
       // summary.json 有 32KB 硬上限：BOM 明细列表必须截断，只保留计数与样本；
@@ -1649,6 +1966,8 @@ function buildSummary(state, context) {
       bom: compactBomCoverage(coverage.bom),
       datasheets: compactDatasheetsCoverage(coverage.datasheets),
       spice: compactSpiceCoverage(coverage.spice),
+      // EMC 覆盖在 coverage 中只保留状态与计数；类别/规则明细在顶层 emc。
+      emc: compactEmcCoverage(emc),
       crossCheck: summarizeCrossCoverage(crossCoverage),
     },
     counts: {
@@ -1914,6 +2233,7 @@ function createState({ runId, startedAt, outDir, projectDir, options }) {
         bom: 'skipped',
         datasheets: 'skipped',
         spice: 'skipped',
+        emc: 'skipped',
         report: 'skipped',
       },
       documents: [],
@@ -1923,6 +2243,7 @@ function createState({ runId, startedAt, outDir, projectDir, options }) {
       bom: null,
       datasheets: null,
       spice: null,
+      emc: null,
       svg: null,
       artifacts: null,
       status: 'running',
@@ -2089,6 +2410,17 @@ function spiceCompletionLine(spice) {
     + `${counts.fail ?? 0} 失败 / ${counts.skip ?? 0} 跳过（${spice.simulator.name}${version}）`
 }
 
+function emcCompletionLine(emc) {
+  if (!emc.requested) return 'EMC：未启用（--emc 可选）'
+  if (!emc.available) {
+    return `EMC：未评估（${emc.reasons?.[0] ?? '上游不可用'}）`
+  }
+  const counts = emc.counts ?? {}
+  return `EMC：${emc.status}；问题 ${emc.findings ?? 0} / 事实 ${emc.facts ?? 0}；`
+    + `已评估规则 ${counts.evaluated ?? 0} + 部分 ${counts.partial ?? 0} / `
+    + `未评估 ${counts.notEvaluated ?? 0}（标准 ${emc.standard}）`
+}
+
 function printCompletion(state, summary, reportPath, exitCode) {
   const counts = summary.counts
   const env = state.manifest.environment ?? {}
@@ -2120,6 +2452,9 @@ function printCompletion(state, summary, reportPath, exitCode) {
   if (summary.spice) {
     console.log(spiceCompletionLine(summary.spice))
   }
+  if (summary.emc?.requested) {
+    console.log(emcCompletionLine(summary.emc))
+  }
   if (reportPath) console.log(`报告：${reportPath}`)
   console.log(
     `版本：Node ${env.node ?? '?'} / altiumts ${env.altiumts ?? '?'} / Python ${env.python ?? '?'}`,
@@ -2143,6 +2478,7 @@ function parseArgs(argv) {
     bom: null,
     datasheets: null,
     spice: false,
+    emc: false,
     svg: false,
     help: false,
   }
@@ -2197,6 +2533,9 @@ function parseArgs(argv) {
       }
       case '--spice':
         options.spice = true
+        break
+      case '--emc':
+        options.emc = true
         break
       case '--svg':
         options.svg = true

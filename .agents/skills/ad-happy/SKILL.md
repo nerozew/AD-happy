@@ -54,7 +54,7 @@ description: 审查 Altium Designer 工程（.PrjPcb/.SchDoc/.PcbDoc）：用户
 ### 3. 运行分析
 
 ```bash
-node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [--project-file "<PrjPcb 文件名>"] [--board "<PcbDoc 文件名>"] [--gerber "<Gerber 目录>"] [--bom "<BOM CSV>"] [--datasheets "<数据手册目录>"] [--spice] [--with-ad]
+node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [--project-file "<PrjPcb 文件名>"] [--board "<PcbDoc 文件名>"] [--gerber "<Gerber 目录>"] [--bom "<BOM CSV>"] [--datasheets "<数据手册目录>"] [--spice] [--emc] [--with-ad]
 ```
 
 - `<路径>`：第 2 步确认的工程目录绝对路径（也可直接给 `.PrjPcb` 文件路径）。
@@ -65,6 +65,7 @@ node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [
 - 用户提供了 Altium 导出的 BOM CSV 时追加 `--bom "<CSV>"`，CLI 会把它与解析到的元件比对；省略时按解析数据生成 `bom.csv` 与 `procurement.csv`。采购清单不联网，缺 MPN 的元件在报告中单独标出。
 - 用户提供了数据手册 PDF 目录时追加 `--datasheets "<目录>"`；省略时自动查找工程下的 `datasheets/`。CLI 只检查 PDF 覆盖、MPN 匹配并调用上游 `plan_extraction.py` 生成提取计划，**不解析 PDF 引脚表**。提取计划与 scout 缓存写在 `<输出目录>/datasheets/`，不写源工程；需要 AI 继续时，让 AI 读取 PDF 后把 `<MPN>.scout.json` 写入该目录，再重跑同一命令即可生成 `<MPN>.plan.json`。没有目录或没有提取计划时按 `not_evaluated` 汇报；引脚级核对必须由 AI/人工依据 PDF 完成，不得声称已经核对。
 - 用户明确要求 SPICE 仿真时追加 `--spice`；默认不要加。CLI 自动检测 ngspice、LTspice、Xyce，找不到时 `rules.spice = not_evaluated`，必须如实汇报缺什么/如何安装，**不得声称仿真通过，也不得自行安装软件**。仿真结果只能引用 `summary.spice` 与 `spice.json` 中的测试台路径和数值。
+- 用户明确要求 EMC、电磁兼容或预合规分析时追加 `--emc`；默认不要加。CLI 复用 kicad-happy 的 `analyze_emc.py`，默认标准为 FCC Part 15 Class B。铺铜实形、板框线段、层切换、走线邻近度与叠层介质不在离线解析范围内，相关类别会标 `not_evaluated`；必须按 `summary.emc.categories` / `notEvaluatedRules` 逐类说明，**不得把未评估类别说成通过**。上游脚本缺失时 `rules.emc = not_evaluated`，不改变退出码；只有 `failed` 才表示执行失败。EMC 结果是设计风险筛查，不是合规测试替代品。
 - 用户选择深度模式且 AD 已启动时追加 `--with-ad`；否则不要加。
 - 命令失败时按退出码处理（见下），不要改用其他方式自行解析工程。
 
@@ -82,7 +83,7 @@ node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [
 2. **工程概览**：工程名、选中板卡（`project.selectedBoard`）、原理图、文档覆盖（`coverage`）。
 3. **问题清单**：只讲 `kind` 为 `issue` 的条目，按 `must_fix` → `should_fix` → `nice_to_have` 排序；每条给出规则、标题、定位（元件/网络/引脚）、证据。有建议（`recommendation`）时给出；没有就说明未给出，不要自行补充建议。summary 中的证据被截断时，从 `findings.json` 取对应单条补全。
 4. **实测事实**：`kind` 为 `fact` 的条目（焊盘间距、载流、去耦摆放等）单独汇报，明确「不计入问题数量」。
-5. **数据覆盖与未检查项**：列出 `rules` 中为 `partial`、`not_evaluated` 或 `failed` 的规则，并按 `coverage` 说明未覆盖范围与网表匹配率；summary 未给出原因时只说明「数据不足/未评估」，不要猜测。`datasheets` 只汇报 PDF 覆盖、MPN 匹配与提取计划状态；`datasheets.pinVerification` 始终为 `not_evaluated`，**不得说引脚已核对或通过**。`spice` 只汇报实际使用的仿真器/版本、逐子电路结果与测试台路径；未运行或未找到仿真器时明确说明，不得把 `not_evaluated` 说成通过。若 `summary.spice.missingCircuits > 0`（`excludedCircuits`/`unaccountedCircuits`），必须说明有候选未生成结果，不得说全部候选都已验证。说明 `findingsOmitted` 表示还有多少条结果未出现在 summary 中（完整清单在 `report.html`）。
+5. **数据覆盖与未检查项**：列出 `rules` 中为 `partial`、`not_evaluated` 或 `failed` 的规则，并按 `coverage` 说明未覆盖范围与网表匹配率；summary 未给出原因时只说明「数据不足/未评估」，不要猜测。`datasheets` 只汇报 PDF 覆盖、MPN 匹配与提取计划状态；`datasheets.pinVerification` 始终为 `not_evaluated`，**不得说引脚已核对或通过**。`spice` 只汇报实际使用的仿真器/版本、逐子电路结果与测试台路径；未运行或未找到仿真器时明确说明，不得把 `not_evaluated` 说成通过。若 `summary.spice.missingCircuits > 0`（`excludedCircuits`/`unaccountedCircuits`），必须说明有候选未生成结果，不得说全部候选都已验证。`emc` 只汇报 `summary.emc` 中实际评估的类别/规则、问题与事实计数、未评估类别及原因；未启用、上游不可用或类别 `partial` 时必须如实说明，不得省略原因或声称合规。说明 `findingsOmitted` 表示还有多少条结果未出现在 summary 中（完整清单在 `report.html`）。
 6. **报告**：给出 `report` 字段中 `report.html` 的绝对路径。
 
 ## 退出码

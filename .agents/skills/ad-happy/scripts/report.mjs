@@ -40,6 +40,7 @@ const SEVERITY_ALIASES = {
 const STATUS_LABELS = {
   pass: '通过',
   found: '发现问题',
+  evaluated: '已评估',
   partial: '部分完成',
   not_evaluated: '未评估',
   failed: '失败',
@@ -62,6 +63,7 @@ const RULE_LABELS = {
   bom: '物料（BOM）检查',
   datasheets: '数据手册覆盖与提取计划检查',
   spice: 'SPICE 仿真检查',
+  emc: 'EMC 预合规检查',
 }
 
 // 分析来源 → 报告展示名。目前只有 Gerber 复用层需要额外标注来源。
@@ -70,6 +72,7 @@ const SOURCE_LABELS = {
   bom: 'BOM 检查',
   datasheets: '数据手册检查',
   spice: 'SPICE 仿真',
+  emc: 'EMC 预合规分析',
 }
 
 // 仿真结果状态 → 中文展示与徽标类别。
@@ -205,6 +208,7 @@ function normalizeReport(data) {
     bom: normalizeBom(source.bom),
     datasheets: normalizeDatasheets(source.datasheets),
     spice: normalizeSpice(source.spice),
+    emc: normalizeEmc(source.emc),
     svgs: Array.isArray(source.svgs) ? source.svgs : [],
   }
 }
@@ -491,6 +495,67 @@ function normalizeSpiceSimulator(value) {
   }
 }
 
+function normalizeEmc(value) {
+  if (!isPlainObject(value)) return null
+  const counts = isPlainObject(value.counts) ? value.counts : {}
+  const artifacts = isPlainObject(value.artifacts) ? value.artifacts : {}
+  return {
+    requested: value.requested === true,
+    status: scalarText(value.status) || 'not_evaluated',
+    standard: scalarText(value.standard) || 'fcc-class-b',
+    available: value.available === true,
+    script: scalarText(value.script),
+    categories: Array.isArray(value.categories)
+      ? value.categories.filter(isPlainObject).map(category => ({
+          key: scalarText(category.key),
+          label: scalarText(category.label) || scalarText(category.key),
+          status: scalarText(category.status) || 'not_evaluated',
+          evaluatedRules: stringList(category.evaluatedRules),
+          partiallyEvaluatedRules: stringList(category.partiallyEvaluatedRules),
+          notEvaluatedRules: Array.isArray(category.notEvaluatedRules)
+            ? category.notEvaluatedRules.filter(isPlainObject).map(entry => ({
+                rule: scalarText(entry.rule),
+                reason: scalarText(entry.reason),
+              }))
+            : [],
+          reasons: stringList(category.reasons),
+        }))
+      : [],
+    evaluatedRules: stringList(value.evaluatedRules),
+    partiallyEvaluatedRules: stringList(value.partiallyEvaluatedRules),
+    notEvaluatedRules: Array.isArray(value.notEvaluatedRules)
+      ? value.notEvaluatedRules.filter(isPlainObject).map(entry => ({
+          rule: scalarText(entry.rule),
+          reason: scalarText(entry.reason),
+        }))
+      : [],
+    suppressedFindings: Array.isArray(value.suppressedFindings)
+      ? value.suppressedFindings.filter(isPlainObject).map(entry => ({
+          rule: scalarText(entry.rule),
+          count: countValue(entry.count),
+          reason: scalarText(entry.reason),
+        }))
+      : [],
+    unsupportedRules: stringList(value.unsupportedRules),
+    counts: {
+      evaluated: countValue(counts.evaluated),
+      partial: countValue(counts.partial),
+      notEvaluated: countValue(counts.notEvaluated),
+      issues: countValue(counts.issues),
+      facts: countValue(counts.facts),
+    },
+    reasons: stringList(value.reasons),
+    findings: countValue(value.findings),
+    facts: countValue(value.facts),
+    artifacts: {
+      index: scalarText(artifacts.index),
+      schematic: scalarText(artifacts.schematic),
+      pcb: scalarText(artifacts.pcb),
+      raw: scalarText(artifacts.raw),
+    },
+  }
+}
+
 function stringList(value) {
   if (!Array.isArray(value)) return []
   return value.map(scalarText).filter(Boolean)
@@ -539,6 +604,7 @@ function renderBody(report) {
     renderDatasheets(report),
     renderManufacturing(report),
     renderSpice(report),
+    renderEmc(report),
     renderFindings(report),
     renderFacts(report),
     renderCoverage(report),
@@ -1384,6 +1450,138 @@ function manufacturingFindingsEmptyText(status) {
   return '未发现制造文件问题。'
 }
 
+const EMC_STANDARD_LABELS = {
+  'fcc-class-b': 'FCC Part 15 Class B',
+  'fcc-class-a': 'FCC Part 15 Class A',
+  'cispr-class-b': 'CISPR 32 Class B',
+  'cispr-class-a': 'CISPR 32 Class A',
+  'cispr-25': 'CISPR 25 Class 5',
+  'mil-std-461': 'MIL-STD-461',
+}
+
+// 只有显式 --emc 时才渲染本节点；默认运行不增加噪声。
+function renderEmc({ emc, findings }) {
+  if (!emc || !emc.requested) return ''
+  const standard = ownLookup(EMC_STANDARD_LABELS, emc.standard) || emc.standard
+  const warning = emc.status !== 'pass' && emc.status !== 'found'
+  const categoryRows = emc.categories.map(category => {
+    const evaluated = [
+      ...category.evaluatedRules,
+      ...category.partiallyEvaluatedRules.map(rule => `${rule}（部分）`),
+    ]
+    const notEvaluated = category.notEvaluatedRules
+      .map(entry => `${entry.rule}：${entry.reason || '输入不足'}`)
+    const reasons = category.reasons.length
+      ? category.reasons
+      : notEvaluated
+    return `      <tr><th scope="row"><span class="rule-name">${escapeHtml(category.label)}</span><code>${escapeHtml(category.key)}</code></th><td>${statusBadgeHtml(category.status)}</td><td>${escapeHtml(evaluated.join('、') || '—')}</td><td><span class="detail">${escapeHtml(reasons.slice(0, 3).join('；') || '—')}</span></td></tr>`
+  }).join('\n')
+
+  const categoryTable = emc.categories.length
+    ? [
+        '  <h3>类别覆盖</h3>',
+        '  <table class="status-table" id="emc-categories">',
+        '    <thead><tr><th scope="col">类别</th><th scope="col">状态</th><th scope="col">已评估 / 部分评估规则</th><th scope="col">未评估原因</th></tr></thead>',
+        '    <tbody>',
+        categoryRows,
+        '    </tbody>',
+        '  </table>',
+      ].join('\n')
+    : '  <p class="empty">没有类别覆盖信息。</p>'
+
+  const emcFindings = findings
+    .filter(finding => finding.source === 'emc' || finding.ruleId.startsWith('EM-'))
+  const issues = emcFindings.filter(finding => finding.kind !== 'fact')
+  const facts = emcFindings.filter(finding => finding.kind === 'fact')
+  const findingRows = emcFindings.map(finding => {
+    const group = groupFor(finding.groupKey)
+    const location = [
+      finding.components ? `元件：${finding.components}` : '',
+      finding.nets ? `网络：${finding.nets}` : '',
+    ].filter(Boolean).join('；')
+    return `      <tr><th scope="row"><code>${escapeHtml(finding.ruleId)}</code><span class="rule-name">${escapeHtml(finding.title)}</span></th><td><span class="badge badge-${finding.groupKey}">${escapeHtml(group.label)}</span></td><td>${escapeHtml(finding.kind === 'fact' ? '实测事实' : '问题')}</td><td><span class="detail">${escapeHtml(finding.evidence || '')}${location ? `<br>${escapeHtml(location)}` : ''}</span></td></tr>`
+  }).join('\n')
+  const findingsTable = emcFindings.length
+    ? [
+        '  <h3>EMC 发现</h3>',
+        `  <p class="hint">问题 ${issues.length} 条，实测事实 ${facts.length} 条`
+          + '（事实不计入问题数量）。完整清单见 findings.json 与 emc.json。</p>',
+        '  <table class="status-table" id="emc-findings">',
+        '    <thead><tr><th scope="col">规则 / 标题</th><th scope="col">级别</th><th scope="col">类型</th><th scope="col">说明</th></tr></thead>',
+        '    <tbody>',
+        findingRows,
+        '    </tbody>',
+        '  </table>',
+      ].join('\n')
+    : '  <h3>EMC 发现</h3>\n  <p class="empty">本次已评估的 EMC 规则没有产生 finding。</p>'
+
+  const suppressed = emc.suppressedFindings.length
+    ? [
+        '  <h3>因数据缺失而排除的上游结果</h3>',
+        '  <p class="note note-warn">以下上游规则结果依赖 AD-Happy 不提供的数据，'
+          + '本次标记为未评估并排除，不能当作通过。</p>',
+        '  <ul class="status-list" id="emc-suppressed">',
+        ...emc.suppressedFindings.map(entry => `    <li><code>${escapeHtml(entry.rule)}</code><span class="detail">${escapeHtml(entry.reason)}（${entry.count} 条）</span></li>`),
+        '  </ul>',
+      ].join('\n')
+    : ''
+
+  const reasons = emc.reasons.length
+    ? [
+        '  <h3>说明与限制</h3>',
+        '  <ul class="status-list" id="emc-reasons">',
+        ...emc.reasons.map(reason => `    <li><span class="detail">${escapeHtml(reason)}</span></li>`),
+        '  </ul>',
+      ].join('\n')
+    : ''
+
+  const artifacts = [
+    '  <h3>产物</h3>',
+    '  <table class="status-table" id="emc-artifacts">',
+    '    <thead><tr><th scope="col">产物</th><th scope="col">路径</th></tr></thead>',
+    '    <tbody>',
+    `      <tr><th scope="row">归一化结果</th><td>${emc.artifacts.index ? `<code>${escapeHtml(emc.artifacts.index)}</code>` : '未生成'}</td></tr>`,
+    `      <tr><th scope="row">适配后的原理图/PCB</th><td>${[emc.artifacts.schematic, emc.artifacts.pcb].filter(Boolean).map(path => `<code>${escapeHtml(path)}</code>`).join('、') || '未生成'}</td></tr>`,
+    `      <tr><th scope="row">上游原始输出</th><td>${emc.artifacts.raw ? `<code>${escapeHtml(emc.artifacts.raw)}</code>` : '未生成'}</td></tr>`,
+    '    </tbody>',
+    '  </table>',
+  ].join('\n')
+
+  const statusText = emc.status === 'failed'
+    ? 'EMC 预合规分析执行失败，本次没有可用的 EMC 设计结论。'
+    : emc.status === 'not_evaluated'
+      ? `EMC 预合规分析未评估${emc.reasons.length ? `：${emc.reasons[0]}` : ''}`
+      : emc.status === 'partial'
+        ? `EMC 预合规分析部分完成：${emc.counts.evaluated} 条规则已评估，`
+          + `${emc.counts.partial} 条部分评估，${emc.counts.notEvaluated} 条未评估。`
+          + '未评估类别不能视为通过。'
+        : `EMC 预合规分析${emc.status === 'found' ? '发现问题' : '已完成'}：`
+          + `问题 ${emc.counts.issues} 条，事实 ${emc.counts.facts} 条。`
+
+  return [
+    '<section class="panel" id="emc">',
+    '  <h2>EMC 预合规</h2>',
+    '  <p class="hint">来源：kicad-happy 的 analyze_emc.py。仅当显式传入 --emc 时运行；'
+      + '铺铜实形、板框线段、层切换与叠层介质等数据不在离线解析范围内，相关类别标记未评估。</p>',
+    `  <p class="note${warning ? ' note-warn' : ''}" id="emc-status">${escapeHtml(statusText)}</p>`,
+    '  <dl class="coverage-grid">',
+    `    <div><dt>状态</dt><dd>${statusBadgeHtml(emc.status)}</dd></div>`,
+    `    <div><dt>适用标准</dt><dd>${escapeHtml(standard)}</dd></div>`,
+    `    <div><dt>上游可用</dt><dd>${emc.available ? '是' : '否'}</dd></div>`,
+    `    <div><dt>已评估规则</dt><dd>${emc.counts.evaluated}</dd></div>`,
+    `    <div><dt>部分评估规则</dt><dd>${emc.counts.partial}</dd></div>`,
+    `    <div><dt>未评估规则</dt><dd>${emc.counts.notEvaluated}</dd></div>`,
+    `    <div><dt>上游脚本</dt><dd>${emc.script ? `<code>${escapeHtml(emc.script)}</code>` : '—'}</dd></div>`,
+    '  </dl>',
+    categoryTable,
+    findingsTable,
+    suppressed,
+    reasons,
+    artifacts,
+    '</section>',
+  ].filter(Boolean).join('\n')
+}
+
 function renderFindings({ findings }) {
   const issues = findings.filter(finding => finding.kind !== 'fact')
   const counts = countFindings(issues)
@@ -1486,6 +1684,19 @@ function renderCoverage({ coverage, status, overview }) {
     ? `  <p class="hint">原理图网表匹配：${overview.schematic.pinsMatched}/${overview.schematic.pinsTotal} 个引脚；`
       + `${overview.schematic.pinsMatched < overview.schematic.pinsTotal ? '匹配不完整，依赖网表的原理图规则已按「未评估」处理。' : '全部引脚已进入网表。'}</p>`
     : ''
+  const detailFor = (key, value) => {
+    const detail = value === 'not_evaluated'
+      ? '规则所需输入不足，本次没有结论；此状态不等于「通过」。'
+      : value === 'partial'
+        ? '规则已运行，但部分子检查因输入缺失被跳过；跳过项不代表通过。'
+        : '规则执行时出错，本次结论不完整；请检查对应的 DET-ERR 问题与运行环境。'
+    // EMC 在未显式启用时也是 not_evaluated；说明「可选未运行」，
+    // 避免被读成「数据不足但尝试过」。
+    if (key === 'emc' && coverage.emc?.requested === false) {
+      return '未启用 --emc（可选步骤），本次没有运行。'
+    }
+    return detail
+  }
   const statusRows = entries.map(([key, value]) => {
     const label = ruleLabel(key)
     return `      <tr><th scope="row"><span class="rule-name">${label ? escapeHtml(label) : '—'}</span><code>${escapeHtml(key)}</code></th><td><span class="badge badge-${statusBadgeClass(value)}">${escapeHtml(statusLabel(value))}</span></td></tr>`
@@ -1514,15 +1725,15 @@ function renderCoverage({ coverage, status, overview }) {
     skippedSection,
     '  <h3>未评估的规则</h3>',
     '  <div id="not-evaluated">',
-    renderStatusList(notEvaluated, '没有未评估的规则。', '规则所需输入不足，本次没有结论；此状态不等于「通过」。'),
+    renderStatusList(notEvaluated, '没有未评估的规则。', '规则所需输入不足，本次没有结论；此状态不等于「通过」。', detailFor),
     '  </div>',
     '  <h3>部分完成的规则</h3>',
     '  <div id="partial-rules">',
-    renderStatusList(partial, '没有部分完成的规则。', '规则已运行，但部分子检查因输入缺失被跳过；跳过项不代表通过。'),
+    renderStatusList(partial, '没有部分完成的规则。', '规则已运行，但部分子检查因输入缺失被跳过；跳过项不代表通过。', detailFor),
     '  </div>',
     '  <h3>执行失败的规则</h3>',
     '  <div id="failed-rules">',
-    renderStatusList(failed, '没有执行失败的规则。', '规则执行时出错，本次结论不完整；请检查对应的 DET-ERR 问题与运行环境。'),
+    renderStatusList(failed, '没有执行失败的规则。', '规则执行时出错，本次结论不完整；请检查对应的 DET-ERR 问题与运行环境。', detailFor),
     '  </div>',
     '  <h3>规则状态一览</h3>',
     '  <div id="rules-status">',
@@ -1532,13 +1743,14 @@ function renderCoverage({ coverage, status, overview }) {
   ].join('\n')
 }
 
-function renderStatusList(entries, emptyText, detail) {
+function renderStatusList(entries, emptyText, detail, detailFor = null) {
   if (entries.length === 0) {
     return `    <p class="empty">${escapeHtml(emptyText)}</p>`
   }
   const items = entries.map(([key, value]) => {
     const label = ruleLabel(key)
-    return `      <li><code>${escapeHtml(key)}</code>${label ? `<span class="rule-name">${escapeHtml(label)}</span>` : ''}<span class="badge badge-${statusBadgeClass(value)}">${escapeHtml(statusLabel(value))}</span><span class="detail">${escapeHtml(detail)}</span></li>`
+    const text = detailFor ? detailFor(key, value) : detail
+    return `      <li><code>${escapeHtml(key)}</code>${label ? `<span class="rule-name">${escapeHtml(label)}</span>` : ''}<span class="badge badge-${statusBadgeClass(value)}">${escapeHtml(statusLabel(value))}</span><span class="detail">${escapeHtml(text)}</span></li>`
   })
   return [
     '      <ul class="status-list">',
@@ -1606,6 +1818,9 @@ function statusLabel(value) {
 
 function statusBadgeClass(value) {
   const raw = scalarText(value)
+  // 「已评估」不是规则聚合状态，但 EMC 类别用它表示「规则已运行且无缺失输入」；
+  // 复用通过样式的绿色徽标，避免出现无样式的 badge-evaluated。
+  if (raw === 'evaluated') return 'pass'
   return Object.hasOwn(STATUS_LABELS, raw) ? raw : 'unknown'
 }
 
