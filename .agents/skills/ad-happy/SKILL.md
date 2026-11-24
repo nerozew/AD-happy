@@ -16,6 +16,26 @@ description: 审查 Altium Designer 工程（.PrjPcb/.SchDoc/.PcbDoc）：用户
 - kicad-happy 的 scripts 目录（包含 `kicad_types.py`、`finding_schema.py`）。默认路径为 `D:/Tools/kicad-happy/skills/kicad/scripts`；若安装在其他位置，设置环境变量 `KICAD_HAPPY_SCRIPTS` 指向该目录。该目录只读，不要修改。
 - 运行 `node "<skill>/scripts/selfcheck.mjs"` 可检查以上依赖；报错信息会给出缺失项与技能目录绝对路径。
 
+## 分析前：先说明两种模式
+
+收到工程路径后，**先不要直接运行命令**。先告诉用户：
+
+> 这个工程可以分两种方式分析：
+>
+> **离线模式（默认，不需要打开 Altium）**
+> 能查：原理图与 PCB 的结构、元件、网络；10 条设计规则；原理图 ↔ PCB 交叉检查；中文 HTML 报告。
+>
+> **深度模式（需要打开 Altium Designer）**
+> 在离线结果之外，额外能查：AD 原生的 ERC/DRC、库文件本身的引脚与焊盘、编译后的完整网表。
+> 需要打开 AD 的原因：ERC/DRC 与库读取必须由 Altium 自己执行，工程文件里没有现成结果。
+>
+> 要打开 AD 做深度检查吗？不开也能出完整报告，只是上述三项会标「未检查」。
+
+用户选择后：
+
+- **不开 AD（或未回应）**：按离线模式运行，不要加 `--with-ad`。报告中与 AD 相关的检查项会标 `not_evaluated`，汇报时说明原因。
+- **开 AD**：先确认 AD 已启动，再加 `--with-ad`。若 CLI 返回「深度模式尚未接入」或检测不到 AD，如实转告用户，并照常汇报离线结果，不要声称做过原生检查。
+
 ## 步骤
 
 ### 1. 确认工程路径
@@ -34,13 +54,14 @@ description: 审查 Altium Designer 工程（.PrjPcb/.SchDoc/.PcbDoc）：用户
 ### 3. 运行分析
 
 ```bash
-node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [--project-file "<PrjPcb 文件名>"]
+node "<skill>/scripts/analyze.mjs" --project "<路径>" --out "<输出目录>" [--project-file "<PrjPcb 文件名>"] [--board "<PcbDoc 文件名>"] [--with-ad]
 ```
 
 - `<路径>`：第 2 步确认的工程目录绝对路径（也可直接给 `.PrjPcb` 文件路径）。
 - `<输出目录>`：源工程**之外**的绝对路径。用户没有指定时，使用 CLI 默认输出目录（省略 `--out`，产物位于 `%LOCALAPPDATA%\ad-happy\runs\<run-id>`）；需要自行指定临时目录时，使用当前 shell 解析得到的临时目录绝对路径，不要自行拼接 `%TEMP%` 等字面量。输出到源工程内会被拒绝。
 - 同一目录有多个工程时，追加 `--project-file "<PrjPcb 文件名>"`。
 - 默认审查文档清单中的最后一块 `PcbDoc`；用户指定板卡时追加 `--board "<PcbDoc 文件名>"`。
+- 用户选择深度模式且 AD 已启动时追加 `--with-ad`；否则不要加。
 - 命令失败时按退出码处理（见下），不要改用其他方式自行解析工程。
 
 ### 4. 只读 `summary.json`
