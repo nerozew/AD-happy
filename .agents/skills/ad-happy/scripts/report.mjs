@@ -261,7 +261,7 @@ function renderNetlistWarning(overview) {
   if (!(pinsTotal > 0) || pinsMatched >= pinsTotal) return ''
   return `  <p class="note note-warn">网表匹配率不足：${pinsMatched}/${pinsTotal} 个原理图引脚进入网表。`
     + '依赖网表的原理图规则（voltage_divider、rc_filter、power_regulator、shorted_component）'
-    + '已按「未评估」处理，本次不能视为通过。</p>'
+    + '的空结果已按「未评估」处理，本次不能视为通过。</p>'
 }
 
 function buildVerdict(counts, notEvaluated, partial, failed) {

@@ -213,6 +213,32 @@ def test_dfm_partial_when_subchecks_skipped():
     assert {"via_annular_ring", "pth_pad_drill"} <= checks
 
 
+def test_arc_tracks_are_converted_for_detectors():
+    # 半径 100 mil = 2.54 mm，0° -> 90°，宽 10 mil = 0.254 mm。
+    arcs = [{
+        "netIndex": 0,
+        "layer": "TOP",
+        "widthMil": 10,
+        "x": 0,
+        "y": 0,
+        "radiusMil": 100,
+        "startAngle": 0,
+        "endAngle": 90,
+    }]
+    tracks = pcb_detectors._tracks([], arcs)
+    assert tracks["arc_count"] == 1
+    assert tracks["total_count"] == 1
+    arc = tracks["arcs"][0]
+    assert arc["width"] == pytest.approx(0.254)
+    assert arc["net"] == 1  # netIndex 0 -> 检测器 net id 1
+    assert arc["start"][0] == pytest.approx(2.54)
+    assert arc["start"][1] == pytest.approx(0)
+    assert arc["end"][0] == pytest.approx(0, abs=1e-9)
+    assert arc["end"][1] == pytest.approx(2.54)
+    assert arc["mid"][0] == pytest.approx(2.54 / 2 ** 0.5)
+    assert arc["mid"][1] == pytest.approx(2.54 / 2 ** 0.5)
+
+
 def test_rule_failure_is_visible(monkeypatch):
     def boom(*args, **kwargs):
         raise RuntimeError("boom")

@@ -237,7 +237,7 @@ def _dfm_skipped_checks(data):
 
 
 def _pad_distance(data):
-    if not data["tracks"]["segments"]:
+    if not data["tracks"]["segments"] and not data["tracks"]["arcs"]:
         return [], NOT_EVALUATED, []
     if not _pad_nets(data["footprints"]):
         return [], NOT_EVALUATED, []
@@ -504,11 +504,11 @@ def _pad_nets(footprints):
 
 
 def _pad_nets_without_tracks(footprints, tracks):
-    """有多个焊盘、却没有任何铜走线的网络 —— 铺铜数据缺失时的漏检来源。"""
+    """有多个焊盘、却没有任何铜走线/圆弧的网络 —— 铺铜数据缺失时的漏检来源。"""
     routed = {
-        segment["net"]
-        for segment in tracks.get("segments", [])
-        if segment.get("net", 0) > 0
+        entry["net"]
+        for entry in [*tracks.get("segments", []), *tracks.get("arcs", [])]
+        if entry.get("net", 0) > 0
     }
     return {net for net in _pad_nets(footprints) if net not in routed}
 
