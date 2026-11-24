@@ -125,7 +125,7 @@ node .agents/skills/ad-happy/scripts/analyze.mjs \
 
 `findings.json` 中上述三条 finding 均带 `source_text`，保留原始英文；规则
 状态、严重度与 finding 数量与本地化前一致（必须修复 0 / 建议修复 0 /
-可优化 2，实测事实 9 条）。
+可优化 2，实测事实 8 条）。
 
 ## 7. 提交计划
 
