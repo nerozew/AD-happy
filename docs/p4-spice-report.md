@@ -193,11 +193,11 @@ python simulate_subcircuits.py <analysis.json> \
 ### 5.1 测试命令与结果
 
 ```text
-node --test tests/*.test.mjs   → 146 passed, 0 failed, 0 skipped
+node --test tests/*.test.mjs   → 147 passed, 0 failed, 0 skipped
 python -B -m pytest -q         → 71 passed, 1 warning（任何现有第三方库弃用警告）
 ```
 
-新增 `tests/spice.test.mjs`（18 个测试）：
+新增 `tests/spice.test.mjs`（19 个测试）：
 
 1. PATH 中 ngspice/LTspice 替身的检测与优先级；`SPICE_SIMULATOR` 指定。
 2. `NGSPICE_PATH` 覆盖；空 PATH 的「无仿真器」分支。
@@ -221,6 +221,8 @@ python -B -m pytest -q         → 71 passed, 1 warning（任何现有第三方�
     `submittedCircuits=1`、状态 `partial`；只有该候选时 `not_evaluated` 且不调用上游。
 17. 备注翻译覆盖 `feedback divider` / `will be wrong` 两个上游变体。
 18. 报告渲染未生成结果的候选：`partial` 文案与缺失清单，不得写「全部通过」。
+19. 直接构造 `renderReport({status:"failed", simulator:null})`：报告写「仿真执行失败」，
+    而不是「未评估」。
 
 替身实现：
 - Windows 写 `ngspice.cmd`（调用 Node 脚本），POSIX 写可执行的 `ngspice` sh 脚本；
@@ -365,9 +367,74 @@ node .agents/skills/ad-happy/scripts/analyze.mjs \
 ### 9.5 回归
 
 ```text
-node --test tests/*.test.mjs   → 146 passed, 0 failed, 0 skipped
+node --test tests/*.test.mjs   → 147 passed, 0 failed, 0 skipped
 python -B -m pytest -q         → 71 passed, 1 warning
 ```
 
 样例已重新生成（不带 `--spice`，`summary.json` 约 15.0KB）。本轮按评审要求
 将 opt-in 噪音、summary 余量、报告措辞等其余 Minor 记为 debt，未修改。
+
+## 10. P4 复审 Minor 修复
+
+### 10.1 Minor 1：未提交分支的计数自洽
+
+问题：无仿真器、仿真器不可执行、不支持的仿真器名称、上游脚本缺失等分支在
+`submittedCircuits=0` 时仍保留 `missingCircuits=0`，报告显示
+「可仿真子电路 2 / 已提交仿真 0 / 未生成结果 0」，与「available 与 submitted
+的差额必须被解释」的不变式矛盾。
+
+修复：
+
+- 所有**未提交**的提前返回分支统一设置
+  `missingCircuits = availableCircuits`（包括无仿真器、名称不支持、路径不可执行、
+  上游脚本缺失）；全候选预过滤分支本来就是 `missing = excluded = available`。
+- `spiceStageFailure()`（已提交但执行失败）也把
+  `submittedCircuits + excludedCircuits` 计入 `missingCircuits`。
+- 报告在 `missingCircuits > 0` 但没有逐候选清单时（例如没有仿真器、脚本缺失、
+  执行失败），显示「共 N 个候选未生成结果；本次没有可用于这些候选的仿真结果，
+  原因见上方状态与说明」，避免出现「计数 2 但列表为空」。
+- summary/报告/summary.coverage 现在在所有分支都满足：
+  `submittedCircuits=0` 时 `missingCircuits=availableCircuits`；
+  有结果时 `missingCircuits = excluded + unaccounted`。
+
+新增/更新断言：
+
+- `runSpice` 无仿真器：`available=1 / submitted=0 / missing=1`。
+- CLI `--spice` 无仿真器：`available=2 / submitted=0 / missing=2`，报告出现
+  「未生成结果的候选」与「共 2 个候选未生成结果」。
+- CLI `--spice` 上游脚本缺失：`submitted=0`、`missing=available`。
+
+### 10.2 Minor 2：`failed + simulator=null` 的真实覆盖
+
+原断言位于「上游脚本缺失」CLI 测试，而该路径在检查脚本前已经设置
+`coverage.simulator`，所以没有真正覆盖 `simulator=null` 的失败场景。
+
+修复：新增独立单测，直接构造：
+
+```js
+renderReport({
+  status: { spice: 'failed' },
+  spice: {
+    requested: true,
+    status: 'failed',
+    simulator: null,
+    reasons: ['仿真器不可执行或不存在：C:/tools/ngspice.exe'],
+    // ...
+  },
+})
+```
+
+断言 `id="spice-status"` 的文案是「仿真执行失败」，不含「未评估」；
+空结果文案是「仿真执行失败，没有可用的子电路结果」，不是
+「未找到可用仿真器，没有生成任何子电路结果」。
+
+### 10.3 回归
+
+```text
+node --test tests/*.test.mjs   → 147 passed, 0 failed, 0 skipped
+python -B -m pytest -q         → 71 passed, 1 warning
+```
+
+`docs/sample-report/` 已在不带 `--spice` 下重新生成，计数行显示
+`available=0 / submitted=0 / missing=0`（未启用时不做候选映射，不矛盾）。
+范围外的 summary 余量、报告措辞等观察继续记为 debt。

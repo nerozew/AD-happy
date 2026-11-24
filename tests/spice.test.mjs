@@ -324,6 +324,9 @@ test('runSpice 没有仿真器时 SP-001 未评估，不创建 spice/ 产物', (
   assert.equal(result.coverage.requested, true)
   assert.equal(result.coverage.findings, 1)
   assert.equal(result.coverage.simulator, null)
+  assert.equal(result.coverage.availableCircuits, 1)
+  assert.equal(result.coverage.submittedCircuits, 0)
+  assert.equal(result.coverage.missingCircuits, 1, '未提交时差额必须计入未生成结果')
   assert.equal(result.coverage.installHints.length, simulatorInstallHints().length)
   assert.equal(existsSync(join(out, 'spice')), false, '未运行的仿真不得创建测试台目录')
   const finding = result.findings.find(item => item.rule_id === 'SP-001')
@@ -514,6 +517,44 @@ test('报告渲染「仿真」章节：仿真器、测试台、未评估与安�
   assert.match(html, /全部 1 个子电路仿真通过/)
 })
 
+test('报告渲染 failed + simulator=null：必须写「仿真执行失败」而不是「未评估」', () => {
+  const html = renderReport({
+    project: '演示工程',
+    generatedAt: '2026-11-25 10:00',
+    coverage: { documents: 2, parsed: 2, notEvaluated: 0 },
+    findings: [],
+    status: { spice: 'failed' },
+    spice: {
+      requested: true,
+      status: 'failed',
+      simulator: null,
+      availableCircuits: 1,
+      submittedCircuits: 0,
+      missingCircuits: 1,
+      circuits: [],
+      excludedCircuits: [],
+      unaccountedCircuits: [],
+      counts: { total: 0, pass: 0, warn: 0, fail: 0, skip: 0 },
+      checks: {
+        simulator_detection: 'failed',
+        testbench_generation: 'failed',
+        simulation: 'failed',
+      },
+      reasons: ['仿真器不可执行或不存在：C:/tools/ngspice.exe'],
+      findings: 1,
+    },
+  })
+  const start = html.indexOf('id="spice-status"')
+  const end = html.indexOf('</p>', start)
+  const statusText = html.slice(html.indexOf('>', start) + 1, end)
+  assert.match(statusText, /仿真执行失败/)
+  assert.ok(!statusText.includes('未评估'), `failed 文案不应是未评估：${statusText}`)
+
+  const section = html.slice(html.indexOf('id="spice"'), html.indexOf('id="findings"'))
+  assert.match(section, /仿真执行失败，没有可用的子电路结果/)
+  assert.ok(!section.includes('未找到可用仿真器，没有生成任何子电路结果'))
+})
+
 test('报告渲染未生成结果的候选：partial 不得写成全部通过', () => {
   const html = renderReport({
     project: '演示工程',
@@ -624,6 +665,11 @@ test('CLI --spice 无仿真器：未评估、退出码 0、原因与安装提示
   assert.equal(summary.spice.simulator, null)
   assert.equal(summary.spice.submittedCircuits, 0, '没有仿真器时不得记为已提交')
   assert.equal(summary.spice.availableCircuits, 2, '仍应展示识别到的候选数')
+  assert.equal(
+    summary.spice.missingCircuits,
+    summary.spice.availableCircuits,
+    '未提交时 available - submitted 必须由 missingCircuits 解释',
+  )
   assert.ok(summary.spice.reasons.some(reason => reason.includes('SPICE 仿真器')))
   assert.ok(summary.spice.reasons.some(reason => reason.includes('ngspice')))
 
@@ -657,6 +703,9 @@ test('CLI --spice 无仿真器：未评估、退出码 0、原因与安装提示
   assert.match(html, /id="spice-install-hints"/)
   assert.match(html, /SPICE 仿真器/)
   assert.match(html, /未评估/)
+  const section = html.slice(html.indexOf('id="spice"'), html.indexOf('id="findings"'))
+  assert.match(section, /未生成结果的候选/)
+  assert.match(section, /共 2 个候选未生成结果/)
 })
 
 test('CLI --spice + 仿真器替身：产出结果并记录测试台路径', () => {
@@ -769,6 +818,12 @@ test('CLI --spice 上游脚本缺失：rules.spice=failed 且退出码 3', () =>
   const summary = readJson(join(out, 'summary.json'))
   assert.equal(summary.rules.spice, 'failed')
   assert.equal(summary.spice.status, 'failed')
+  assert.equal(summary.spice.submittedCircuits, 0, '脚本缺失时尚未提交候选')
+  assert.equal(
+    summary.spice.missingCircuits,
+    summary.spice.availableCircuits,
+    '脚本缺失时差额必须计入未生成结果',
+  )
   assert.ok(summary.spice.reasons.some(reason => reason.includes('simulate_subcircuits.py')))
 
   const findings = readJson(join(out, 'findings.json'))

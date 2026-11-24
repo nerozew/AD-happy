@@ -460,6 +460,8 @@ export function runSpice(circuits, simulator, outDir, options = {}) {
       )
     }
     coverage.installHints = simulatorInstallHints()
+    // 没有提交任何候选：available 与 submitted 的差额全部是「未生成结果」。
+    coverage.missingCircuits = coverage.availableCircuits
     coverage.findings = 1
     return {
       findings: [spiceNotRunFinding(coverage)],
@@ -471,6 +473,7 @@ export function runSpice(circuits, simulator, outDir, options = {}) {
     coverage.reasons.push(
       `不支持的仿真器 "${text(selectedSimulator.name)}"；仅支持 ngspice、LTspice、Xyce。`,
     )
+    coverage.missingCircuits = coverage.availableCircuits
     coverage.findings = 1
     return {
       findings: [spiceNotRunFinding(coverage)],
@@ -484,6 +487,7 @@ export function runSpice(circuits, simulator, outDir, options = {}) {
     coverage.checks.simulator_detection = 'failed'
     coverage.checks.simulation = 'failed'
     coverage.reasons.push(`仿真器不可执行或不存在：${simulatorPath}`)
+    coverage.missingCircuits = coverage.availableCircuits
     const finding = spiceFailureFinding(
       `仿真器不可执行或不存在：${simulatorPath}`,
       selectedSimulator,
@@ -542,6 +546,8 @@ export function runSpice(circuits, simulator, outDir, options = {}) {
       `未找到上游仿真脚本：${scriptPath}；请安装 kicad-happy，或设置环境变量 `
       + 'KICAD_HAPPY_SPICE_SCRIPTS 指向 skills/spice/scripts 目录。',
     )
+    // 脚本缺失时尚未提交候选，差额同样全部记为「未生成结果」。
+    coverage.missingCircuits = coverage.availableCircuits
     const finding = spiceFailureFinding(coverage.reasons.join('；'), selectedSimulator)
     coverage.findings = 1
     return { findings: [finding], coverage }
@@ -762,6 +768,11 @@ function spiceStageFailure(coverage, { reason, simulator }) {
   coverage.status = 'failed'
   coverage.checks.simulation = 'failed'
   coverage.reasons.push(reason)
+  // 已提交但没有可用结果时，也用 missingCircuits 解释差额。
+  coverage.missingCircuits = Math.max(
+    coverage.missingCircuits ?? 0,
+    (coverage.submittedCircuits ?? 0) + (coverage.excludedCircuits?.length ?? 0),
+  )
   const finding = spiceFailureFinding(reason, simulator)
   coverage.findings = 1
   return { findings: [finding], coverage }

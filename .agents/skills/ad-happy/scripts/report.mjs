@@ -1241,7 +1241,13 @@ function renderSpice({ spice }) {
           ? '  <p class="note">仅展示前 50 个候选，完整列表见 spice.json。</p>'
           : '',
       ].join('\n')
-    : ''
+    : spice.missingCircuits > 0
+      ? [
+          '  <h3>未生成结果的候选</h3>',
+          `  <p class="empty">共 ${spice.missingCircuits} 个候选未生成结果；`
+            + '本次没有可用于这些候选的仿真结果，原因见上方状态与说明。</p>',
+        ].join('\n')
+      : ''
 
   const installHints = !simulator && spice.installHints.length
     ? [
