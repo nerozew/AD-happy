@@ -1,0 +1,175 @@
+// tests/report.test.mjs
+import test from 'node:test'
+import assert from 'node:assert'
+import { renderReport } from '../.agents/skills/ad-happy/scripts/report.mjs'
+
+const data = {
+  project: 'Student-DCDC-Buck-Converter',
+  generatedAt: '2026-11-24 10:00',
+  coverage: { documents: 9, parsed: 6, notEvaluated: 3 },
+  findings: [{ rule_id: 'XP-001', severity: 'must_fix', title: 'IC1 VIN 网络不一致', evidence: '原理图 IN / PCB OUT' }],
+  status: { decoupling: 'not_evaluated' },
+}
+
+test('HTML 为中文且含结论', () => {
+  const html = renderReport(data)
+  assert.match(html, /<html/)
+  assert.match(html, /结论/)
+  assert.match(html, /未评估/)
+})
+
+test('未评估项单独成节', () => {
+  const html = renderReport(data)
+  assert.match(html, /数据覆盖/)
+  assert.match(html, /decoupling/)
+})
+
+test('没有外部依赖', () => {
+  const html = renderReport(data)
+  assert.ok(!/src=["']https?:/.test(html))
+  assert.ok(!/href=["']https?:.*\.css/.test(html))
+})
+
+test('按 must_fix / should_fix / nice_to_have 三组展示，组内按规则 ID 排序', () => {
+  const html = renderReport({
+    ...data,
+    findings: [
+      { rule_id: 'XP-001', severity: 'must_fix', title: '甲', evidence: '证据甲' },
+      { rule_id: 'AM-001', severity: 'must_fix', title: '乙', evidence: '证据乙' },
+      { rule_id: 'NT-002', severity: 'should_fix', title: '丙', evidence: '证据丙' },
+      { rule_id: 'DC-001', severity: 'nice_to_have', title: '丁', evidence: '证据丁' },
+    ],
+  })
+
+  const must = html.indexOf('id="group-must_fix"')
+  const should = html.indexOf('id="group-should_fix"')
+  const nice = html.indexOf('id="group-nice_to_have"')
+  assert.ok(must !== -1 && should !== -1 && nice !== -1, '三组都应渲染')
+  assert.ok(must < should && should < nice, '分组顺序应为必须修复、建议修复、可优化')
+
+  // 同组内按 rule_id 稳定排序。
+  assert.ok(html.indexOf('AM-001') < html.indexOf('XP-001'))
+})
+
+test('每条 finding 显示规则 ID、严重度、标题、证据、建议与定位', () => {
+  const html = renderReport({
+    ...data,
+    findings: [{
+      rule_id: 'XP-001',
+      severity: 'must_fix',
+      title: 'IC1 VIN 网络不一致',
+      evidence: '原理图 IN / PCB OUT',
+      recommendation: '以原理图为准同步 PCB。',
+      components: ['IC1', 'C2'],
+      nets: ['IN', 'OUT'],
+      pins: ['IC1.3'],
+    }],
+  })
+
+  assert.match(html, /XP-001/)
+  assert.match(html, /必须修复/)
+  assert.match(html, /IC1 VIN 网络不一致/)
+  assert.match(html, /原理图 IN \/ PCB OUT/)
+  assert.match(html, /以原理图为准同步 PCB。/)
+  assert.match(html, /IC1、C2/)
+  assert.match(html, /IN、OUT/)
+  assert.match(html, /IC1\.3/)
+})
+
+test('兼容原始 finding 字段 title/summary、evidence/description', () => {
+  const html = renderReport({
+    ...data,
+    findings: [{
+      rule_id: 'NT-002',
+      severity: 'warning',
+      summary: 'Unconnected pin: IC1.4',
+      description: '引脚 IC1.4 未连接，也没有 no-connect 标记。',
+      recommendation: '连接或放置 no-connect 标记。',
+    }],
+  })
+
+  assert.match(html, /Unconnected pin: IC1\.4/)
+  assert.match(html, /引脚 IC1\.4 未连接/)
+  assert.match(html, /连接或放置 no-connect 标记。/)
+})
+
+test('区分通过、未评估与失败，不把未评估当作通过', () => {
+  const html = renderReport({
+    ...data,
+    findings: [],
+    status: {
+      decoupling: 'not_evaluated',
+      rc_filter: 'pass',
+      dfm: 'failed',
+      connectivity: 'found',
+    },
+  })
+
+  assert.match(html, /规则状态一览/)
+  assert.match(html, /不能据此认为全部通过/)
+
+  const notEvaluated = html.slice(
+    html.indexOf('id="not-evaluated"'),
+    html.indexOf('id="rules-status"'),
+  )
+  assert.match(notEvaluated, /decoupling/)
+  assert.match(notEvaluated, /未评估/)
+  assert.ok(!notEvaluated.includes('rc_filter'), '通过的规则不应出现在未评估清单')
+})
+
+test('工程名、标题、网络名等用户可控文本会被转义', () => {
+  const html = renderReport({
+    ...data,
+    project: '<script>alert("x")</script>',
+    findings: [{
+      rule_id: 'XP-001',
+      severity: 'must_fix',
+      title: '<img src=x onerror=alert(1)>',
+      evidence: '网 <b>IN</b> & "OUT"',
+      recommendation: '<svg onload=alert(1)>',
+      components: ['<script>'],
+      nets: ['A&B'],
+    }],
+  })
+
+  assert.ok(!html.includes('<script>alert'), '工程名中的脚本不得原样输出')
+  assert.ok(!html.includes('<img src=x'), '标题中的标签不得原样输出')
+  assert.ok(!html.includes('<svg onload'), '建议中的标签不得原样输出')
+  assert.ok(html.includes('&lt;script&gt;'), '脚本应被转义')
+  assert.ok(html.includes('A&amp;B'), '网络名中的 & 应被转义')
+})
+
+test('SVG 直接内联，可疑脚本与外部引用被省略', () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10"/></svg>'
+  const html = renderReport({ ...data, svgs: [{ title: '顶层板图', svg }] })
+  assert.ok(html.includes(svg), 'SVG 应内联输出')
+  assert.match(html, /顶层板图/)
+
+  for (const badSvg of [
+    '<svg onload="alert(1)"></svg>',
+    '<svg/onload="alert(1)"></svg>',
+    '<svg><image href="https://example.com/x.png"/></svg>',
+  ]) {
+    const unsafe = renderReport({ ...data, svgs: [{ title: '坏图', svg: badSvg }] })
+    assert.ok(!unsafe.includes('onload="alert(1)"'), '带事件属性的 SVG 不得内联')
+    assert.ok(!unsafe.includes('https://example.com'), '带外部引用的 SVG 不得内联')
+    assert.match(unsafe, /已省略/)
+  }
+})
+
+test('未知严重度归入建议修复，不泄漏原型属性', () => {
+  const html = renderReport({
+    ...data,
+    findings: [{ rule_id: 'XX-001', severity: '__proto__', title: '未知严重度' }],
+  })
+  assert.match(html, /XX-001/)
+  assert.ok(!html.includes('[object Object]'))
+})
+
+test('空输入也能生成完整 HTML', () => {
+  const html = renderReport({})
+  assert.match(html, /<html/)
+  assert.match(html, /结论/)
+  assert.match(html, /数据覆盖/)
+  assert.match(html, /没有此类问题/)
+})
