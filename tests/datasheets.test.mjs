@@ -81,6 +81,18 @@ function writeScout(cacheDir, mpn, overrides = {}) {
   }), 'utf8')
 }
 
+// 模拟上游成功路径：用原始 MPN 作为文件名写出 plan。
+function writePlanScript(scriptsDir) {
+  mkdirSync(scriptsDir, { recursive: true })
+  writeFileSync(join(scriptsDir, 'plan_extraction.py'), [
+    'import hashlib, json, pathlib, sys',
+    'mpn, pdf, flag, cache = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]',
+    'sha = "sha256:" + hashlib.sha256(open(pdf, "rb").read()).hexdigest()',
+    'plan = {"mpn": mpn, "pdf_sha256": sha, "tasks": [{"task_id": "base"}]}',
+    'pathlib.Path(cache, mpn + ".plan.json").write_text(json.dumps(plan))',
+  ].join('\n'), 'utf8')
+}
+
 function runAnalyze(args, { env = {} } = {}) {
   return spawnSync(process.execPath, [analyze, ...args], {
     cwd: repoRoot,
@@ -275,7 +287,7 @@ test('上游 plan_extraction.py + scout 缓存可以生成提取计划', (t) => 
   assert.equal(second.status, 'existing')
 })
 
-test('上游计划生成失败 → DS-003，规则状态 failed', () => {
+test('上游计划生成失败 → DS-003，规则状态为 found 而不是 failed', () => {
   const dir = freshDir()
   writePdf(join(dir, 'ABC-1.pdf'))
   const cacheDir = join(dir, 'extracted')
@@ -290,16 +302,60 @@ test('上游计划生成失败 → DS-003，规则状态 failed', () => {
   const result = evaluateDatasheets({
     directory: dir,
     bomRows: [{ reference: 'U1', mpn: 'ABC-1', value: 'IC', footprint: 'SOP8' }],
+    cacheDir,
     planOptions: { scriptsDir },
   })
 
-  assert.equal(result.coverage.status, 'failed')
-  assert.equal(result.coverage.checks.extraction_plan, 'failed')
+  // 提取计划未生成是覆盖缺口（found + DS-003），不是规则执行失败。
+  assert.equal(result.coverage.status, 'found')
+  assert.equal(result.coverage.checks.extraction_plan, 'found')
   const finding = result.findings.find(item => item.rule_id === 'DS-003')
   assert.ok(finding)
   assert.deepEqual(finding.components, ['U1'])
   assert.match(finding.evidence, /synthetic failure/)
   assert.equal(result.coverage.checks.pin_verification, 'not_evaluated')
+})
+
+test('含点号的 MPN 使用上游原始文件名定位 plan（保留点号）', () => {
+  const dir = freshDir()
+  const mpn = 'ABM8G-106-12.000MHZ-T'
+  writePdf(join(dir, `${mpn}.pdf`), 'Crystal datasheet')
+  const cacheDir = join(dir, 'extracted')
+  writeScout(cacheDir, mpn)
+  const scriptsDir = freshDir('ad-happy-ds-dot-')
+  // 模拟上游：直接用原始 MPN 写 plan，验证 wrapper 检查同一个文件名。
+  writePlanScript(scriptsDir)
+
+  const result = planExtraction(mpn, join(dir, `${mpn}.pdf`), cacheDir, { scriptsDir })
+  assert.equal(result.ok, true, result.error)
+  assert.equal(result.status, 'generated')
+  assert.equal(result.planPath, join(cacheDir, `${mpn}.plan.json`))
+  assert.ok(existsSync(result.planPath))
+  assert.equal(result.taskCount, 1)
+})
+
+test('含路径分隔符或非法文件名字符的 MPN 被拒绝，不会启动 python', () => {
+  const dir = freshDir()
+  writePdf(join(dir, 'PART-1.pdf'))
+  const cacheDir = join(dir, 'extracted')
+  const scriptsDir = freshDir('ad-happy-ds-unsafe-')
+  writeFileSync(join(scriptsDir, 'plan_extraction.py'), '# stub', 'utf8')
+
+  let spawned = false
+  for (const mpn of ['A/B', 'A\\B', '..', 'A:B']) {
+    const result = planExtraction(mpn, join(dir, 'PART-1.pdf'), cacheDir, {
+      scriptsDir,
+      spawn: () => {
+        spawned = true
+        return { status: 0, stdout: '', stderr: '' }
+      },
+    })
+    assert.equal(result.ok, false, `${mpn} 应被拒绝`)
+    assert.equal(result.status, 'failed')
+    assert.match(result.error, /路径分隔符|非法文件名字符|MPN/)
+    assert.equal(result.expectedPlanPath, null)
+  }
+  assert.equal(spawned, false)
 })
 
 test('报告渲染「数据手册」章节：覆盖率、缺手册元件与引脚核对未评估', () => {
@@ -363,6 +419,49 @@ test('报告渲染「数据手册」章节：覆盖率、缺手册元件与引�
   assert.ok(!html.includes('引脚级核对：通过'), '不得声称做过引脚级核对')
 })
 
+test('报告在 failed 且无缺失列表时写「无法判断」，不写「没有缺失」', () => {
+  const html = renderReport({
+    project: '演示工程',
+    generatedAt: '2026-11-25 10:00',
+    coverage: { documents: 2, parsed: 2, notEvaluated: 0 },
+    findings: [],
+    status: { datasheets: 'failed' },
+    datasheets: {
+      status: 'failed',
+      directory: 'C:/demo/datasheets',
+      cacheDir: 'C:/out/datasheets',
+      pdfCount: 0,
+      components: 9,
+      componentsWithMpn: 8,
+      componentsWithPdf: 0,
+      componentsWithoutPdf: 0,
+      icComponents: 1,
+      icsWithoutPdf: 0,
+      matched: [],
+      unmatchedPdfs: [],
+      componentsWithoutPdfList: [],
+      plans: [],
+      checks: {
+        coverage: 'not_evaluated',
+        pdf_match: 'not_evaluated',
+        extraction_plan: 'not_evaluated',
+        pin_verification: 'not_evaluated',
+      },
+      reasons: ['数据手册目录扫描失败：拒绝访问'],
+      findings: 0,
+      pinVerification: 'not_evaluated',
+    },
+  })
+
+  const section = html.slice(
+    html.indexOf('id="datasheets"'),
+    html.indexOf('id="manufacturing"'),
+  )
+  assert.match(section, /无法判断/)
+  assert.match(section, /数据手册检查执行失败/)
+  assert.ok(!section.includes('没有缺失数据手册的元件'), 'failed 时不得写成没有缺失')
+})
+
 test('CLI --datasheets 指向不存在的目录时退出码 2 且说明原因', () => {
   const out = freshDir()
   const r = runAnalyze([
@@ -396,6 +495,7 @@ test('CLI 自动查找 datasheets：缺 IC 手册产出 DS-001，但退出码仍
   assert.equal(summary.datasheets.componentsWithPdf, 1)
   assert.equal(summary.datasheets.icsWithoutPdf, 1)
   assert.equal(summary.datasheets.pinVerification, 'not_evaluated')
+  assert.equal(summary.datasheets.cacheDir, join(out, 'datasheets'))
   assert.equal(summary.coverage.datasheets.checks.pin_verification, 'not_evaluated')
 
   const findings = readJson(join(out, 'findings.json'))
@@ -407,6 +507,7 @@ test('CLI 自动查找 datasheets：缺 IC 手册产出 DS-001，但退出码仍
 
   const artifact = readJson(join(out, 'datasheets.json'))
   assert.equal(artifact.coverage.status, 'found')
+  assert.equal(artifact.coverage.cacheDir, join(out, 'datasheets'))
   assert.equal(artifact.matched.length, 1)
   assert.equal(artifact.matched[0].reference, 'C2')
   assert.equal(artifact.matched[0].planStatus, 'not_evaluated')
@@ -417,7 +518,9 @@ test('CLI 自动查找 datasheets：缺 IC 手册产出 DS-001，但退出码仍
   assert.equal(manifest.stages.datasheets, 'found')
   assert.equal(manifest.datasheets.requested, false)
   assert.equal(manifest.datasheets.autoDetected, true)
+  assert.equal(manifest.datasheets.cacheDir, join(out, 'datasheets'))
   assert.equal(manifest.datasheets.pinVerification, 'not_evaluated')
+  assert.equal(existsSync(join(projectDir, 'datasheets', 'extracted')), false, '不得写入源工程')
 
   const html = readFileSync(join(out, 'report.html'), 'utf8')
   const section = html.slice(
@@ -429,6 +532,88 @@ test('CLI 自动查找 datasheets：缺 IC 手册产出 DS-001，但退出码仍
   assert.match(section, /需要 AI 或人工/)
   assert.ok(!section.includes('引脚级核对：通过'))
   assert.match(html, /DS-001/)
+})
+
+test('CLI 把 scout 与提取计划缓存写到 --out，不写源工程', () => {
+  const projectDir = copyFixtureProject()
+  writePdf(join(projectDir, 'datasheets', 'CL21A226KOQNNNG.pdf'), 'C2 capacitor')
+  const out = freshDir()
+  const stubScripts = freshDir('ad-happy-ds-stub-')
+  writeFileSync(join(stubScripts, 'plan_extraction.py'), '# stub', 'utf8')
+
+  // 第一次运行创建 --out 与 .ad-happy-run 标记。
+  const first = runAnalyze(['--project', projectDir, '--out', out], {
+    env: { KICAD_HAPPY_DATASHEETS_SCRIPTS: stubScripts },
+  })
+  assert.equal(first.status, 0, first.stderr)
+
+  // AI scout 的交接位置：<out>/datasheets/<MPN>.scout.json。
+  const cacheDir = join(out, 'datasheets')
+  writeScout(cacheDir, 'CL21A226KOQNNNG')
+
+  const scriptsDir = freshDir('ad-happy-ds-plan-')
+  writePlanScript(scriptsDir)
+  const second = runAnalyze(['--project', projectDir, '--out', out], {
+    env: { KICAD_HAPPY_DATASHEETS_SCRIPTS: scriptsDir },
+  })
+  assert.equal(second.status, 0, second.stderr)
+
+  const planPath = join(cacheDir, 'CL21A226KOQNNNG.plan.json')
+  assert.ok(existsSync(planPath), 'plan 应写在 --out/datasheets 下')
+  assert.equal(existsSync(join(projectDir, 'datasheets', 'extracted')), false, '不得写入源工程')
+
+  const summary = readJson(join(out, 'summary.json'))
+  assert.equal(summary.status, 'complete')
+  assert.equal(summary.datasheets.cacheDir, cacheDir)
+  assert.equal(summary.datasheets.planGenerated, 1)
+  assert.equal(summary.datasheets.planNotEvaluated, 0)
+
+  const artifact = readJson(join(out, 'datasheets.json'))
+  const plan = artifact.plans.find(item => item.mpn === 'CL21A226KOQNNNG')
+  assert.equal(plan.status, 'generated')
+  assert.equal(plan.planPath, planPath)
+  assert.equal(artifact.matched.find(item => item.reference === 'C2').planStatus, 'generated')
+})
+
+test('CLI 上游计划失败 → DS-003 但规则 found、整体 complete/exit 0', () => {
+  const projectDir = copyFixtureProject()
+  writePdf(join(projectDir, 'datasheets', 'CL21A226KOQNNNG.pdf'), 'C2 capacitor')
+  const out = freshDir()
+  const stubScripts = freshDir('ad-happy-ds-stub-')
+  writeFileSync(join(stubScripts, 'plan_extraction.py'), '# stub', 'utf8')
+
+  const first = runAnalyze(['--project', projectDir, '--out', out], {
+    env: { KICAD_HAPPY_DATASHEETS_SCRIPTS: stubScripts },
+  })
+  assert.equal(first.status, 0, first.stderr)
+
+  const cacheDir = join(out, 'datasheets')
+  writeScout(cacheDir, 'CL21A226KOQNNNG')
+  const failScripts = freshDir('ad-happy-ds-fail-cli-')
+  writeFileSync(
+    join(failScripts, 'plan_extraction.py'),
+    'import sys\nprint("synthetic cli failure", file=sys.stderr)\nsys.exit(3)\n',
+    'utf8',
+  )
+
+  const second = runAnalyze(['--project', projectDir, '--out', out], {
+    env: { KICAD_HAPPY_DATASHEETS_SCRIPTS: failScripts },
+  })
+  assert.equal(second.status, 0, second.stderr)
+
+  const summary = readJson(join(out, 'summary.json'))
+  assert.equal(summary.status, 'complete')
+  assert.equal(summary.rules.datasheets, 'found')
+  assert.equal(summary.datasheets.planFailed, 1)
+
+  const findings = readJson(join(out, 'findings.json'))
+  const ds003 = findings.find(finding => finding.rule_id === 'DS-003')
+  assert.ok(ds003)
+  assert.match(ds003.evidence, /synthetic cli failure/)
+
+  const manifest = readJson(join(out, 'manifest.json'))
+  assert.equal(manifest.stages.datasheets, 'found')
+  assert.ok(!manifest.errors.some(error => error.stage === 'datasheets'))
 })
 
 test('CLI 没有 datasheets 目录时整体 complete/exit 0，报告显式未评估', () => {

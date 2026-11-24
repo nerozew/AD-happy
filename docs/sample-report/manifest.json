@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "run": {
-    "id": "20261125-023116-dc86",
-    "startedAt": "2026-11-24T18:31:16.535Z",
+    "id": "20261125-025016-1b58",
+    "startedAt": "2026-11-24T18:50:16.835Z",
     "argv": [
       "--project",
       "tests/fixtures/Student-DCDC-Buck-Converter",
@@ -170,6 +170,7 @@
     "requested": false,
     "autoDetected": true,
     "directory": null,
+    "cacheDir": "d:\\Code_all\\ad-happy\\docs\\sample-report\\datasheets",
     "status": "not_evaluated",
     "pdfs": 0,
     "components": 9,
@@ -197,6 +198,6 @@
   },
   "status": "complete",
   "exitCode": 0,
-  "finishedAt": "2026-11-24T18:31:17.083Z",
-  "durationMs": 525
+  "finishedAt": "2026-11-24T18:50:17.415Z",
+  "durationMs": 558
 }

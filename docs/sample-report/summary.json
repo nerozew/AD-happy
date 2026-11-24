@@ -35,7 +35,7 @@
       }
     ]
   },
-  "generatedAt": "2026-11-25 02:31:16",
+  "generatedAt": "2026-11-25 02:50:16",
   "status": "complete",
   "schematic": {
     "components": 9,
@@ -70,6 +70,7 @@
   "datasheets": {
     "status": "not_evaluated",
     "directory": null,
+    "cacheDir": "d:\\Code_all\\ad-happy\\docs\\sample-report\\datasheets",
     "pdfCount": 0,
     "manifestPresent": false,
     "components": 9,
@@ -161,6 +162,7 @@
     "datasheets": {
       "status": "not_evaluated",
       "directory": null,
+      "cacheDir": "d:\\Code_all\\ad-happy\\docs\\sample-report\\datasheets",
       "exists": false,
       "manifestPresent": false,
       "manifestInvalid": false,

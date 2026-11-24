@@ -1126,15 +1126,23 @@ function runDatasheetStage(state, { bomRows, generatedAt }) {
     }
   }
 
+  // 提取计划与 scout 缓存只写 --out，不写源工程（只读硬规则）。
+  const cacheDir = join(state.outDir, 'datasheets')
+
   if (!directory) {
     const reason = '工程目录中没有 datasheets 目录，未找到可用的 PDF 数据手册'
     const stats = summarizeComponents(bomRows)
-    const coverage = emptyDatasheetsCoverage({ reasons: [reason], ...stats })
+    const coverage = emptyDatasheetsCoverage({
+      reasons: [reason],
+      cacheDir,
+      ...stats,
+    })
     state.manifest.stages.datasheets = 'skipped'
     state.manifest.datasheets = {
       requested,
       autoDetected: true,
       directory: null,
+      cacheDir,
       status: coverage.status,
       pdfs: 0,
       components: coverage.components,
@@ -1156,6 +1164,7 @@ function runDatasheetStage(state, { bomRows, generatedAt }) {
   const result = evaluateDatasheets({
     directory,
     bomRows: Array.isArray(bomRows) ? bomRows : [],
+    cacheDir,
   })
   const coverage = result.coverage
 
@@ -1202,6 +1211,7 @@ function runDatasheetStage(state, { bomRows, generatedAt }) {
     requested,
     autoDetected,
     directory: coverage.directory,
+    cacheDir: coverage.cacheDir,
     status: coverage.status,
     pdfs: coverage.pdfCount,
     components: coverage.components,
@@ -1230,6 +1240,7 @@ function buildDatasheetReport(result, coverage, findings) {
   return {
     status: coverage.status,
     directory: coverage.directory,
+    cacheDir: coverage.cacheDir,
     manifestPresent: coverage.manifestPresent,
     manifestInvalid: coverage.manifestInvalid,
     pdfCount: coverage.pdfCount,
@@ -1254,6 +1265,7 @@ function buildDatasheetSummary(coverage) {
   return {
     status: coverage.status,
     directory: coverage.directory,
+    cacheDir: coverage.cacheDir,
     pdfCount: coverage.pdfCount,
     manifestPresent: coverage.manifestPresent,
     components: coverage.components,

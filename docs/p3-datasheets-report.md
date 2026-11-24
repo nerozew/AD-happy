@@ -51,10 +51,10 @@ python validate_extraction_result.py --result-file <wrapper.json> --task-type <t
 
 ### 2.3 缓存与 schema
 
-- 缓存布局：`<project>/datasheets/<file>.pdf` + `<project>/datasheets/extracted/<MPN>.json`、`<MPN>.plan.json`、`<MPN>.scout.json`。
+- 上游缓存布局：`<project>/datasheets/<file>.pdf`（输入）+ `<project>/datasheets/extracted/<MPN>.json`、`<MPN>.plan.json`、`<MPN>.scout.json`。AD-Happy 不写源工程，plan/scout 缓存放在 `<--out>/datasheets/`（见第 9 节）。
 - `schemas/plan.schema.json`：`plan_version`、`mpn`、`pdf_path`、`pdf_sha256`、`cache_dir`、`scout_ref`、`tasks`、`execution`。
 - `schemas/scout.schema.json`：`mpn`、`metadata`、`categories`、`extraction_pages`（至少 `base`、`pinout`）、`quality_verdict`。
-- MPN 文件名清洗规则：仅保留 `[A-Za-z0-9_-]`，其余替换为 `_`；本模块的 `sanitizeMpn` 与之一致。
+- MPN 文件名清洗规则：`datasheet_lookup.py` 保留 `[A-Za-z0-9_.-]`（含点号），其余替换为 `_`；`plan_extraction.py` 则直接使用**原始 MPN** 写 `<MPN>.scout.json` / `<MPN>.plan.json`。本模块的 `sanitizeMpn` 与 lookup 规则一致，计划路径以原始 MPN 为准并拒绝含路径分隔符/非法文件名字符的 MPN。
 
 ## 3. 实现
 
@@ -118,7 +118,8 @@ datasheetErrorFinding(message) -> finding
 - 新增阶段 `stages.datasheets`；新增产物 `datasheets.json`（仅在找到目录时生成），包含 PDF 扫描、匹配、未匹配 PDF、缺手册元件、逐 MPN 计划状态。
 - `findings.json` 合并 `DS-001` / `DS-002` / `DS-003` / `DS-ERR`，`source` 与 `detector` 均为 `datasheets`。
 - `summary.json` 新增 `datasheets` 概览与 `coverage.datasheets`；`rules.datasheets` 存在。
-- **退出码**：数据手册的 `found` / `partial` / `not_evaluated` 不参与整体 `partial` 聚合；只有 `failed`（扫描失败、上游计划执行失败等）会把整体降级为退出码 3。这与 BOM 的裁定一致。
+- **退出码**：数据手册的 `found` / `partial` / `not_evaluated` 不参与整体 `partial` 聚合；只有目录扫描/IO 异常导致的 `failed`（`DS-ERR`）会把整体降级为退出码 3。提取计划未生成属于 `found` 缺口（`DS-003`），不改变退出码。这与 BOM 的裁定一致。
+- 提取计划与 scout 缓存写在 `<--out>/datasheets/`，不写源工程。
 - `manifest.datasheets.pinVerification` 固定为 `not_evaluated`。
 
 ### 3.3 报告（`scripts/report.mjs`）
@@ -152,6 +153,7 @@ datasheetErrorFinding(message) -> finding
   "coverage": {
     "status": "pass|found|partial|not_evaluated|failed",
     "directory": "...",
+    "cacheDir": "C:/out/datasheets",
     "exists": true,
     "manifestPresent": false,
     "manifestInvalid": false,
@@ -172,7 +174,7 @@ datasheetErrorFinding(message) -> finding
     "checks": {
       "coverage": "found|pass|not_evaluated",
       "pdf_match": "found|pass|not_evaluated",
-      "extraction_plan": "pass|partial|not_evaluated|failed",
+      "extraction_plan": "pass|partial|not_evaluated|found",
       "pin_verification": "not_evaluated"
     },
     "reasons": ["..."],
@@ -199,7 +201,7 @@ datasheetErrorFinding(message) -> finding
 
 总状态聚合（`recomputeDatasheetsStatus`）：
 
-1. 任一 check 为 `failed` → `failed`；
+1. 任一 check 为 `failed`（本实现只会在目录扫描/IO 异常时出现）→ `failed`；
 2. 没有元件 → `not_evaluated`；
 3. 有 finding → `found`；
 4. 任一 check 为 `partial` → `partial`；
@@ -214,12 +216,12 @@ datasheetErrorFinding(message) -> finding
 - 工程目录没有 `datasheets/`，且未传 `--datasheets`：`not_evaluated`，不会产生 `DS-001`（未提供数据手册来源，不做覆盖率判断）。
 - 目录存在但没有 PDF：`DS-001`（IC 仍缺手册），`pdf_match = not_evaluated`。
 - 元件没有 MPN：无法按型号匹配，`reason = "no_mpn"`；若是 IC 则计入 `DS-001`。
-- 有匹配但缓存没有 `<MPN>.scout.json`：`extraction_plan = not_evaluated`，不调用 Python、不产生 `DS-003`。
+- 有匹配但 `<--out>/datasheets/<MPN>.scout.json` 不存在：`extraction_plan = not_evaluated`，不调用 Python、不产生 `DS-003`。
 - 上游 scout 判定 `skip`：计划为空，`status = "skipped"`，`extraction_plan = not_evaluated`，不产生 `DS-003`。
 
 ## 5. 测试与输出
 
-新增 `tests/datasheets.test.mjs`（13 个测试）：
+新增 `tests/datasheets.test.mjs`（第二轮修复后共 18 个测试，新增项见第 9 节）：
 
 - PDF 扫描：大小写扩展名、递归子目录、非 PDF 忽略、manifest 登记、无效 manifest 降级；
 - MPN 匹配：归一化匹配、缺 MPN、缺 PDF、未匹配 PDF；
@@ -228,7 +230,7 @@ datasheetErrorFinding(message) -> finding
 - PDF 未匹配 → `DS-002`；非 IC 缺 PDF 不产生 `DS-001`；
 - 缺 scout → `planExtraction` 返回 `not_evaluated` 且不启动 Python；
 - 真实上游 `plan_extraction.py` + 合成 scout → 生成包含 `base`/`pinout` 两个任务的 plan（上游缺失时 skip）；
-- 上游失败 → `DS-003`，规则状态 `failed`；
+- 上游计划失败 → `DS-003`，规则状态 `found`（覆盖缺口），不是 `failed`；
 - 报告章节渲染：覆盖率、缺手册元件、未匹配 PDF、引脚级核对未评估；
 - CLI `--datasheets` 不存在 → 退出码 2；
 - CLI 自动查找 `datasheets/` → `DS-001`、`rules.datasheets = found`、整体仍 `complete`/退出码 0；
@@ -239,7 +241,7 @@ datasheetErrorFinding(message) -> finding
 命令与结果（最终验证）：
 
 ```text
-node --test tests/*.test.mjs   → 123 passed, 0 failed
+node --test tests/*.test.mjs   → 128 passed, 0 failed
 python -B -m pytest -q         → 71 passed, 1 warning
 ```
 
@@ -257,7 +259,7 @@ node .agents/skills/ad-happy/scripts/analyze.mjs \
 结果：
 
 - 样例工程没有 `datasheets/` 目录，因此 `summary.rules.datasheets = not_evaluated`；
-- `summary.datasheets`：`pdfCount = 0`、`components = 9`、`componentsWithMpn = 8`、`icComponents = 1`、`icsWithoutPdf = 0`（未评估不推断缺口）、`pinVerification = not_evaluated`；
+- `summary.datasheets`：`pdfCount = 0`、`components = 9`、`componentsWithMpn = 8`、`icComponents = 1`、`icsWithoutPdf = 0`（未评估不推断缺口）、`pinVerification = not_evaluated`、`cacheDir = docs/sample-report/datasheets`；
 - 原因：`工程目录中没有 datasheets 目录，未找到可用的 PDF 数据手册`；
 - `report.html` 新增「数据手册」章节，显示本次未评估、PDF 0 份、元件 9 个，并明确「引脚级核对：未评估，需要 AI 或人工依据 PDF 提取」；
 - 整体状态仍为 `complete`、退出码 0；`summary.json` 约 13.6KB，继续满足 <32KB 约束；
@@ -273,9 +275,50 @@ node .agents/skills/ad-happy/scripts/analyze.mjs \
 4. **没有运行 scout / 提取 / 合并**：没有调用 `validate_extraction_result.py`，没有生成 `<MPN>.json` 结构化提取，也没有做质量评分。
 5. **MPN 匹配的保守性**：文件名推断是启发式的；文件名与器件不一致时可能产生 `DS-002` 或错误匹配。`manifest.json` 登记可以消除大部分歧义，但本工具不验证登记内容是否与 PDF 实际内容一致。
 6. **单工程范围**：只扫描当前选中工程根目录下的 `datasheets/`，不跨工程共享缓存，不处理层次化多工程的数据手册分发。
-7. **上游缺失时的行为**：若本机没有 `plan_extraction.py`，匹配到的 PDF 会产生 `DS-003`，`rules.datasheets = failed`，整体退出码 3；这是执行失败，不是覆盖率结论。
+7. **上游缺失时的行为**：若本机没有 `plan_extraction.py`，匹配到的 PDF 会产生 `DS-003`，`rules.datasheets = found`（提取计划缺口），整体仍为 `complete`/退出码 0；只有目录扫描/IO 异常才是 `failed`。
 
 ## 8. 边界与后续建议
 
 - 若后续要让 AI 继续完成引脚核对，推荐流程：本 CLI 产出 `datasheets.json` 与 `DS-*` findings → AI scout 阅读 PDF 写入 `<MPN>.scout.json` → 再次运行 CLI 生成 `<MPN>.plan.json` → AI 按 plan 提取并用 `validate_extraction_result.py` 校验 → 最后由上层把提取结果与符号引脚对照。确定性 CLI 只负责前半段的可复现编排。
 - 若需要更准确的 PDF 内容校验，可在后续引入受控的 PDF 文本提取依赖；在此之前，不应把文件名匹配当成内容验证。
+
+## 9. 评审修复（第二轮）
+
+本轮按控制器裁定修复 3 个 Important 与 1 个相关 Minor。
+
+### 9.1 `DS-003` 不再把整体退出码变成 3
+
+- **原问题**：上游脚本缺失/执行失败 → `planExtraction` 返回 `status: "failed"` → `extraction_plan = "failed"` → `recomputeDatasheetsStatus` 返回 `failed` → `analyze.mjs` 写入 `state.errors` → 整体退出码 3，即使数据手册是自动发现且用户未请求。
+- **修复**：`aggregatePlanStatus` 把计划失败映射为 `found`（覆盖缺口，产出 `DS-003`）；`recomputeDatasheetsStatus` 只在会话内的 check 真的为 `failed` 时返回 `failed`，而目前只有目录扫描/IO 异常（`DS-ERR`）会设置它。`runDatasheetStage` 不再为 `found` 写入 `state.errors`。
+- **结果**：上游缺失或计划失败时，`rules.datasheets = found`，`manifest.stages.datasheets = found`，整体 `complete`/退出码 0；只有目录扫描/IO 异常才 `failed`/退出码 3。
+- **测试**：单测断言 `coverage.status = found`、`checks.extraction_plan = found`；新增 CLI 测试断言 `DS-003`、`summary.status = complete`、退出码 0。
+
+### 9.2 MPN 文件名与上游实际写入规则对齐
+
+- **原问题**：`sanitizeMpn` 使用 `[^A-Za-z0-9_-]` 把点号替换成 `_`，而 `plan_extraction.py` 用原始 MPN 写 `<MPN>.scout.json` / `<MPN>.plan.json`；`datasheet_lookup.py` 的清洗则保留点号。含点 MPN（如 `ABM8G-106-12.000MHZ-T`）永远找不到 scout/plan，甚至可能把上游返回 0 当成 `up-to-date` 的无证据成功。
+- **修复**：
+  - `sanitizeMpn` 改为保留 `[A-Za-z0-9_.-]`，与 `datasheet_lookup.py` 一致。
+  - `planExtraction` 改用**原始 MPN** 作为 scout/plan 文件名（与 `plan_extraction.py` 实际行为一致），并新增 `mpnFileStem` 拒绝空名、`.`/`..`、路径分隔符以及 Windows 非法文件名字符（`/ \ : * ? " < > | NUL`）。
+  - 上游返回 0 但没有 plan 时，只有同时存在 `<MPN>.json` 且其 `source.sha256` 与当前 PDF 一致，才接受 `up-to-date`；否则返回失败并说明「无证据的成功声明」。
+- **测试**：新增含点 MPN 的 plan 路径测试（断言生成的 plan 文件名保留点号）、含 `/`、`\`、`..`、`:` 的 MPN 拒绝测试（断言不启动 Python）。
+
+### 9.3 提取计划缓存改写到 `--out`
+
+- **原问题**：`evaluateDatasheets` 默认 `cacheDir = <datasheets>/extracted`，CLI 也未传 `cacheDir`；存在 scout 时会写入源工程，违反「源工程只读」硬规则。
+- **修复**：CLI 固定传入 `<--out>/datasheets/`；`evaluateDatasheets`/`planExtraction` 的缺省回退改为系统临时目录，绝不默认写源工程。`manifest.datasheets.cacheDir`、`summary.datasheets.cacheDir`、`coverage.datasheets.cacheDir`、`datasheets.json` 与报告都会展示该缓存路径。AI 继续流程为：首次运行建立 `--out` 后，把 `<MPN>.scout.json` 写入 `<--out>/datasheets/`，再次运行即可生成 plan。
+- **测试**：CLI 测试先运行建立输出目录，写入 scout 后用模拟上游生成 plan，断言 plan 位于 `<out>/datasheets/`，且源工程下没有 `extracted/`。
+
+### 9.4 failed/partial 报告文案
+
+- **原问题**：`status = failed` 且缺失列表为空时，报告显示「没有缺失数据手册的元件」，容易被读成通过。
+- **修复**：`failed` 和 `partial` 分别显示「无法判断：数据手册检查执行失败……」和「部分完成：部分输入不足……」，只有确实评估完成且列表为空时才显示「没有缺失数据手册的元件」；PDF 匹配为空时同样区分未评估/失败/部分完成。
+- **测试**：新增 failed 状态报告测试，断言包含「无法判断」且不包含「没有缺失数据手册的元件」。
+
+### 9.5 本轮验证
+
+```text
+node --test tests/*.test.mjs   → 128 passed, 0 failed
+python -B -m pytest -q         → 71 passed, 1 warning
+```
+
+新增/更新了 `tests/datasheets.test.mjs` 的 18 个数据手册测试；重新生成 `docs/sample-report/`（样例无 `datasheets/`，仍为 `rules.datasheets = not_evaluated`，`cacheDir` 指向 `docs/sample-report/datasheets`）。

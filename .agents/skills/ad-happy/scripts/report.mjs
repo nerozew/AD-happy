@@ -336,6 +336,7 @@ function normalizeDatasheets(value) {
   return {
     status: scalarText(value.status) || 'not_evaluated',
     directory: scalarText(value.directory),
+    cacheDir: scalarText(value.cacheDir),
     manifestPresent: value.manifestPresent === true,
     manifestInvalid: value.manifestInvalid === true,
     pdfCount: countValue(value.pdfCount),
@@ -732,6 +733,29 @@ function renderBom({ bom }) {
   ].filter(Boolean).join('\n')
 }
 
+function matchedEmptyText(status) {
+  if (status === 'not_evaluated') {
+    return '未评估：没有可用的数据手册目录，无法判断 PDF 是否与元件匹配。'
+  }
+  if (status === 'failed') {
+    return '无法判断：数据手册检查执行失败，无法判断 PDF 是否与元件匹配。'
+  }
+  if (status === 'partial') {
+    return '部分完成：部分输入不足，无法完整判断 PDF 与元件的匹配情况。'
+  }
+  return '没有 PDF 与工程元件匹配。'
+}
+
+function missingEmptyText(status) {
+  if (status === 'not_evaluated') {
+    return '未评估：没有数据手册目录或输入不足，无法判断哪些元件缺数据手册。'
+  }
+  if (status === 'failed') {
+    return '无法判断：数据手册检查执行失败，无法判断哪些元件缺数据手册。'
+  }
+  return '部分完成：部分输入不足，无法完整判断哪些元件缺数据手册。'
+}
+
 // 「数据手册」：PDF 覆盖、MPN 匹配与提取计划状态。
 // 引脚级核对始终显式标注未评估：本工具不解析 PDF 引脚表。
 function renderDatasheets({ datasheets }) {
@@ -760,6 +784,9 @@ function renderDatasheets({ datasheets }) {
   const rows = [
     ['数据手册目录', datasheets.directory
       ? `<code>${escapeHtml(datasheets.directory)}</code>`
+      : '—'],
+    ['提取计划缓存', datasheets.cacheDir
+      ? `<code>${escapeHtml(datasheets.cacheDir)}</code>`
       : '—'],
     ['PDF 文件数', String(datasheets.pdfCount)],
     ['元件数', String(datasheets.components)],
@@ -828,16 +855,16 @@ function renderDatasheets({ datasheets }) {
           ? `  <p class="note">仅展示前 50 个匹配元件，完整列表见 datasheets.json。</p>`
           : '',
       ].join('\n')
-    : `  <h3>已匹配的数据手册</h3>\n  <p class="empty">${status === 'not_evaluated'
-        ? '未评估：没有可用的数据手册目录，无法判断 PDF 是否与元件匹配。'
-        : '没有 PDF 与工程元件匹配。'}</p>`
+    : `  <h3>已匹配的数据手册</h3>\n  <p class="empty">${matchedEmptyText(status)}</p>`
 
   const missingItems = datasheets.componentsWithoutPdfList
   let missing
-  if (status === 'not_evaluated') {
-    missing = '  <p class="empty">未评估：没有数据手册目录或输入不足，无法判断哪些元件缺数据手册。</p>'
+  if (status === 'not_evaluated' || status === 'failed') {
+    missing = `  <p class="empty">${missingEmptyText(status)}</p>`
   } else if (missingItems.length === 0) {
-    missing = '  <p class="empty">没有缺失数据手册的元件。</p>'
+    missing = status === 'partial'
+      ? '  <p class="empty">部分完成：部分输入不足，无法完整判断哪些元件缺数据手册。</p>'
+      : '  <p class="empty">没有缺失数据手册的元件。</p>'
   } else {
     missing = [
       '  <h3>缺少数据手册的元件</h3>',

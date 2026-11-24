@@ -16,6 +16,7 @@
 // scout 时声称计划已生成。
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { tmpdir } from 'node:os'
 import {
   existsSync,
   mkdirSync,
@@ -241,13 +242,13 @@ export function matchToComponents(pdfs, bomRows) {
  * }} [options]
  * @returns {{
  *   planPath: string|null,
- *   expectedPlanPath: string,
+ *   expectedPlanPath: string|null,
  *   ok: boolean,
  *   status: string,
  *   error: string|null,
  *   exitCode: number|null,
  *   taskCount: number|null,
- *   scoutPath: string
+ *   scoutPath: string|null
  * }}
  */
 export function planExtraction(mpn, pdfPath, cacheDir, options = {}) {
@@ -257,11 +258,32 @@ export function planExtraction(mpn, pdfPath, cacheDir, options = {}) {
   const python = options.python ?? 'python'
   const spawn = typeof options.spawn === 'function' ? options.spawn : spawnSync
   const pdf = resolve(String(pdfPath ?? ''))
-  const cache = resolve(String(cacheDir ?? dirname(pdf)))
+  // 调用方未给缓存目录时使用系统临时目录，绝不默认写入源工程。
+  const cache = resolve(
+    text(cacheDir) || join(tmpdir(), 'ad-happy', 'datasheets-cache'),
+  )
   const name = text(mpn).trim()
-  const sanitized = sanitizeMpn(name)
-  const expectedPlanPath = join(cache, `${sanitized}.plan.json`)
-  const scoutPath = join(cache, `${sanitized}.scout.json`)
+
+  // 上游 plan_extraction.py 直接使用原始 MPN 作为 scout/plan 文件名，
+  // 不做清洗。wrapper 必须检查同一个文件名；含路径分隔符或 Windows
+  // 非法文件名字符的 MPN 无法安全落盘，直接拒绝。
+  const stem = mpnFileStem(name)
+  if (!stem.ok) {
+    return {
+      planPath: null,
+      expectedPlanPath: null,
+      ok: false,
+      status: 'failed',
+      error: stem.error,
+      exitCode: null,
+      taskCount: null,
+      scoutPath: null,
+    }
+  }
+  const expectedPlanPath = join(cache, `${stem.value}.plan.json`)
+  const scoutPath = join(cache, `${stem.value}.scout.json`)
+  // 上游「提取缓存已是最新」时读取的原始提取文件。
+  const extractionPath = join(cache, `${stem.value}.json`)
 
   const failure = (status, error, extra = {}) => ({
     planPath: existsSync(expectedPlanPath) ? expectedPlanPath : null,
@@ -274,7 +296,6 @@ export function planExtraction(mpn, pdfPath, cacheDir, options = {}) {
     scoutPath,
   })
 
-  if (!name) return failure('failed', 'MPN 为空，无法生成提取计划。')
   if (!existsSync(scriptPath)) {
     return failure(
       'failed',
@@ -318,7 +339,7 @@ export function planExtraction(mpn, pdfPath, cacheDir, options = {}) {
   if (!existsSync(scoutPath)) {
     return failure(
       'not_evaluated',
-      `缓存中没有 ${sanitized}.scout.json。上游 plan_extraction.py 需要先由 AI scout `
+      `缓存中没有 ${stem.value}.scout.json。上游 plan_extraction.py 需要先由 AI scout `
       + '阅读 PDF 并写出 scout 结果；本工具不会伪造该步骤，提取计划标记为未评估。',
     )
   }
@@ -364,7 +385,18 @@ export function planExtraction(mpn, pdfPath, cacheDir, options = {}) {
 
   if (exitCode === 0) {
     if (!planExists) {
-      // 上游在「提取缓存已是最新」时会返回 0 而不重写计划。
+      // 上游在「提取缓存已是最新」时会返回 0 而不重写计划。只有确实存在
+      // 与当前 PDF SHA 一致的提取缓存时才接受这种无 plan 的成功。
+      const extraction = readJson(extractionPath)
+      const extractionSha = text(extraction?.source?.sha256)
+      if (!isPlainObject(extraction) || extractionSha !== pdfSha) {
+        return failure(
+          'failed',
+          `上游返回 0，但没有生成 ${expectedPlanPath}，也没有与当前 PDF 一致的提取缓存 `
+          + `${extractionPath}；不把无证据的返回当作计划已生成。`,
+          { exitCode },
+        )
+      }
       return {
         planPath: null,
         expectedPlanPath,
@@ -416,7 +448,7 @@ export function planExtraction(mpn, pdfPath, cacheDir, options = {}) {
  * @param {{
  *   directory: string,
  *   bomRows: object[],
- *   cacheDir?: string,
+ *   cacheDir?: string, // 省略时使用系统临时目录，绝不低于源工程目录
  *   generatedAt?: string,
  *   planOptions?: object
  * }} input
@@ -441,10 +473,12 @@ export function evaluateDatasheets({ directory, bomRows, cacheDir, planOptions }
       reasons: scan.coverage.reasons,
       status: scan.coverage.status === 'failed' ? 'failed' : 'not_evaluated',
       manifestPresent: scan.coverage.manifestPresent,
+      cacheDir: resolve(text(cacheDir) || join(tmpdir(), 'ad-happy', 'datasheets-cache')),
       ...summarizeComponents(rows),
     })
     return {
       directory: scan.directory,
+      cacheDir: coverage.cacheDir,
       pdfs: scan.pdfs,
       matched: [],
       unmatchedPdfs: [],
@@ -458,8 +492,9 @@ export function evaluateDatasheets({ directory, bomRows, cacheDir, planOptions }
   }
 
   const match = matchToComponents(scan.pdfs, rows)
+  // 默认绝不写入源工程：调用方（CLI）应传入 --out 下的缓存目录。
   const cache = resolve(
-    String(cacheDir ?? join(scan.directory, 'extracted')),
+    text(cacheDir) || join(tmpdir(), 'ad-happy', 'datasheets-cache'),
   )
 
   // 同一 MPN 可能被多个位号共用：按 MPN + PDF 去重，只生成一次计划。
@@ -564,6 +599,7 @@ export function evaluateDatasheets({ directory, bomRows, cacheDir, planOptions }
   const coverage = {
     status: 'not_evaluated',
     directory: scan.directory,
+    cacheDir: cache,
     exists: true,
     manifestPresent: scan.coverage.manifestPresent,
     manifestInvalid: scan.coverage.manifestInvalid,
@@ -589,6 +625,7 @@ export function evaluateDatasheets({ directory, bomRows, cacheDir, planOptions }
 
   return {
     directory: scan.directory,
+    cacheDir: cache,
     pdfs: scan.pdfs,
     matched,
     unmatchedPdfs: match.unmatchedPdfs,
@@ -652,6 +689,7 @@ export function emptyDatasheetsCoverage(options = {}) {
   return {
     status: options.status ?? 'not_evaluated',
     directory: options.directory ?? null,
+    cacheDir: options.cacheDir ?? null,
     exists: false,
     manifestPresent: options.manifestPresent === true,
     manifestInvalid: false,
@@ -730,12 +768,34 @@ export function resolveDatasheetsScriptsDir(options = {}, env = process.env) {
 }
 
 /**
- * 上游 MPN 文件名清洗规则：只保留 [A-Za-z0-9_-]，其余字符替换为下划线。
+ * 上游 lookup 缓存的 MPN 文件名清洗规则：保留点号、下划线与连字符
+ * （例如晶振 ABM8G-106-12.000MHZ-T），其余字符替换为下划线。
+ * 与 kicad-happy `datasheet_lookup.py` 的 sanitize_mpn 保持一致。
+ *
+ * 注意：plan_extraction.py 实际用**原始 MPN** 写 scout/plan 文件，
+ * 因此 planExtraction 使用 mpnFileStem 而不是本函数。
+ *
  * @param {string} mpn
  * @returns {string}
  */
 export function sanitizeMpn(mpn) {
-  return text(mpn).trim().replace(/[^A-Za-z0-9_-]/gu, '_')
+  return text(mpn).trim().replace(/[^A-Za-z0-9_.\-]/gu, '_')
+}
+
+// 拒绝无法安全作为文件名的 MPN：路径分隔符、Windows 非法字符、空名、
+// 以及 "."/".." 这类目录引用。
+const UNSAFE_MPN_PATH_CHAR = /[\/\\:*?"<>|\0]/u
+
+function mpnFileStem(mpn) {
+  const name = text(mpn).trim()
+  if (!name) return { ok: false, error: 'MPN 为空，无法生成提取计划。' }
+  if (name === '.' || name === '..' || UNSAFE_MPN_PATH_CHAR.test(name)) {
+    return {
+      ok: false,
+      error: `MPN "${name}" 包含路径分隔符或非法文件名字符，拒绝写入提取计划。`,
+    }
+  }
+  return { ok: true, value: name }
 }
 
 // ---------------------------------------------------------------------------
@@ -851,7 +911,9 @@ function normalizeManifestPath(value) {
 
 function aggregatePlanStatus(plans, hasMatches) {
   if (!hasMatches || plans.length === 0) return 'not_evaluated'
-  if (plans.some(plan => plan.status === 'failed')) return 'failed'
+  // 「提取计划未生成」是覆盖缺口（found，产生 DS-003），不是规则执行失败。
+  // 只有目录扫描/IO 异常才把数据手册规则标记为 failed。
+  if (plans.some(plan => plan.status === 'failed')) return 'found'
   const generated = plans.filter(plan => isPlanGenerated(plan.status)).length
   if (generated === plans.length) return 'pass'
   if (generated === 0) return 'not_evaluated'
