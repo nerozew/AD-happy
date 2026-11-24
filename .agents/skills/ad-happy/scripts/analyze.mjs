@@ -84,6 +84,9 @@ const ARTIFACT_FILES = [
 const SUMMARY_LIMIT = 32 * 1024 // summary.json 必须严格小于 32KB
 const TOP_FINDINGS_LIMIT = 20
 const SUMMARY_TEXT_LIMIT = 400
+// 大文件与 Python 进程都需要硬边界，避免把工具拖死或写满内存。
+const MAX_INPUT_BYTES = 50 * 1024 * 1024
+const PYTHON_TIMEOUT_MS = 120 * 1000
 
 // 输出目录所有权标记：只有带匹配标记的已有目录才允许清理固定产物，
 // 避免 --out 指向用户自己的目录时误删同名文件。
@@ -311,6 +314,7 @@ async function executeStages(state) {
       failDocument(state, selectedSchematic, '原理图', new Error('文件不存在'))
     } else {
       try {
+        checkInputSize(selectedSchematic.path, '原理图')
         schematic = parseSch(selectedSchematic.path)
         selectedSchematic.status = 'parsed'
       } catch (error) {
@@ -327,6 +331,7 @@ async function executeStages(state) {
       failDocument(state, selectedBoard, 'PCB', new Error('文件不存在'))
     } else {
       try {
+        checkInputSize(selectedBoard.path, 'PCB')
         pcbSnapshot = parsePcb(selectedBoard.path)
         selectedBoard.status = 'parsed'
       } catch (error) {
@@ -435,23 +440,29 @@ async function executeStages(state) {
   //    -X utf8 保证 Windows 管道下的 stdout/stderr 是 UTF-8，Node 按 UTF-8 解码。
   const python = spawnSync(
     'python',
-    ['-X', 'utf8', PIPELINE_PY, '--raw', rawPath, '--pcb', pcbPath, '--out', state.outDir],
+    // -B：不向只读的 kicad-happy 目录写 __pycache__；-X utf8：Windows 管道固定 UTF-8。
+    ['-B', '-X', 'utf8', PIPELINE_PY, '--raw', rawPath, '--pcb', pcbPath, '--out', state.outDir],
     {
       cwd: state.outDir,
       encoding: 'utf8',
       windowsHide: true,
       maxBuffer: 4 * 1024 * 1024,
+      timeout: PYTHON_TIMEOUT_MS,
     },
   )
   if (python.error || python.status !== 0) {
     state.manifest.stages.python = 'failed'
     const reason = python.error
-      ? `无法启动 python：${python.error.message}`
+      ? python.error.code === 'ETIMEDOUT'
+        ? `Python 分析阶段超时（${PYTHON_TIMEOUT_MS / 1000} 秒）`
+        : `无法启动 python：${python.error.message}`
       : `退出码 ${python.status}`
     const detail = firstText(python.stderr, python.stdout) || '（无错误输出）'
     state.errors.push({
       stage: 'python',
-      message: 'Python 分析阶段失败',
+      message: python.error?.code === 'ETIMEDOUT'
+        ? 'Python 分析阶段超时'
+        : 'Python 分析阶段失败',
       details: `${reason}：${truncateText(detail, 4000)}`,
     })
     printErrors(state)
@@ -971,6 +982,22 @@ const DOCUMENT_REASONS = {
 
 function documentReason(kind) {
   return DOCUMENT_REASONS[kind] ?? '未参与本次分析'
+}
+
+function checkInputSize(path, label) {
+  let size
+  try {
+    size = statSync(path).size
+  } catch (error) {
+    throw new Error(`无法读取${label}文件大小: ${error?.message ?? error}`)
+  }
+  if (size > MAX_INPUT_BYTES) {
+    const megabytes = (size / (1024 * 1024)).toFixed(1)
+    throw new Error(
+      `${label}文件过大：${megabytes} MB，超过 ${MAX_INPUT_BYTES / (1024 * 1024)} MB 上限；`
+      + '请先在 Altium 中精简文档或拆分工程后重试',
+    )
+  }
 }
 
 function findBoard(boards, wanted) {

@@ -4,10 +4,13 @@ import test from 'node:test'
 import assert from 'node:assert'
 import { execFileSync, spawnSync } from 'node:child_process'
 import {
+  closeSync,
   copyFileSync,
   cpSync,
   existsSync,
+  ftruncateSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   readdirSync,
   writeFileSync,
@@ -228,6 +231,35 @@ test('--project 直接给 .PrjPcb 文件路径也可运行', () => {
   assert.equal(r.status, 0, r.stderr)
   const summary = readJson(outDir, 'summary.json')
   assert.ok(summary.project.projectPath.endsWith('DCDC Buck Converter.PrjPcb'))
+})
+
+test('输入文件超过 50MB 时拒绝解析并给出明确错误', () => {
+  const projectDir = freshOut('ad-happy-large-project-')
+  writeFileSync(
+    join(projectDir, 'Large.PrjPcb'),
+    '[Design]\nVersion=1.0\n\n[Document1]\nDocumentPath=Big.PcbDoc\n',
+    'utf8',
+  )
+  const bigBoard = join(projectDir, 'Big.PcbDoc')
+  const fd = openSync(bigBoard, 'w')
+  try {
+    // 稀疏文件：不实际占用 51MB 磁盘空间，但 stat 大小会超限。
+    ftruncateSync(fd, 51 * 1024 * 1024)
+  } finally {
+    closeSync(fd)
+  }
+
+  const outDir = freshOut()
+  const r = runAnalyze(['--project', projectDir, '--out', outDir])
+  assert.equal(r.status, 3, r.stderr)
+
+  const manifest = readJson(outDir, 'manifest.json')
+  const board = manifest.documents.find(doc => doc.name === 'Big.PcbDoc')
+  assert.equal(board.status, 'failed')
+  assert.match(board.error, /过大|上限/)
+  assert.ok(manifest.errors.some(error => /过大|50 MB/.test(error.message)))
+  const summary = readJson(outDir, 'summary.json')
+  assert.equal(summary.rules.dfm, 'failed')
 })
 
 test('拒绝把输出写进源工程目录', () => {
