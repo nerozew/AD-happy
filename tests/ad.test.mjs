@@ -23,6 +23,7 @@ import {
   runNativeChecks,
 } from '../.agents/skills/ad-happy/scripts/ad/ad.mjs'
 import { parsePcb } from '../.agents/skills/ad-happy/scripts/pcb.mjs'
+import { renderReport } from '../.agents/skills/ad-happy/scripts/report.mjs'
 import { parseSch } from '../.agents/skills/ad-happy/scripts/sch.mjs'
 
 const testsDir = dirname(fileURLToPath(import.meta.url))
@@ -289,6 +290,66 @@ test('runNativeChecks：未匹配到库符号/封装的元件计入 partial 并�
   // 未匹配是覆盖不足，不应产生引脚/焊盘不一致的 finding。
   assert.ok(!result.findings.some(finding => finding.rule_id === 'AD-LIB-001'))
   assert.ok(!result.findings.some(finding => finding.rule_id === 'AD-LIB-002'))
+})
+
+test('runNativeChecks：库文件不存在只报读取失败，不把所有元件算成未匹配', () => {
+  const outDir = freshDir('ad-happy-ad-missing-lib-')
+  const { schematic, pcbSnapshot } = fixtures()
+  const result = runNativeChecks({
+    projectPath,
+    boardPath,
+    libraries: [
+      { path: join(projectDir, 'Missing.SchLib'), kind: 'schlib' },
+      { path: join(projectDir, 'Missing.PcbLib'), kind: 'pcblib' },
+    ],
+    schematic,
+    pcbSnapshot,
+    outDir,
+    env: stubEnv(),
+  })
+
+  const missingSymbol = result.coverage.libraries.find(library => library.kind === 'schlib')
+  const missingFootprint = result.coverage.libraries.find(library => library.kind === 'pcblib')
+  for (const library of [missingSymbol, missingFootprint]) {
+    assert.equal(library.status, 'failed')
+    assert.equal(library.inventory, 'failed')
+    assert.deepEqual(library.unmatchedComponents, [])
+    assert.ok(library.reasons.some(reason => reason.includes('库文件不存在')))
+    assert.ok(!library.reasons.some(reason => reason.includes('未在已成功读取')))
+  }
+  assert.equal(result.coverage.counts.libraries.unmatchedSymbols, 0)
+  assert.equal(result.coverage.counts.libraries.unmatchedFootprints, 0)
+  assert.equal(result.coverage.checks.library.status, 'failed')
+
+  // 读取失败的库不应触发「未匹配/截断」的 partial 警告；状态文案应是失败。
+  const html = renderReport({
+    project: 'test',
+    native: {
+      requested: true,
+      status: result.coverage.status,
+      available: true,
+      checks: result.coverage.checks,
+      erc: result.coverage.erc,
+      drc: result.coverage.drc,
+      libraries: result.coverage.libraries,
+      counts: result.coverage.counts,
+      reasons: result.coverage.reasons,
+      findings: result.findings.length,
+      items: result.findings.map(finding => ({
+        ruleId: finding.rule_id,
+        severity: finding.severity,
+        kind: finding.kind,
+        title: finding.title,
+        description: finding.description,
+        components: finding.components,
+        nets: finding.nets,
+      })),
+      artifacts: result.coverage.artifacts,
+    },
+  })
+  assert.ok(html.includes('Altium 原生检查'))
+  assert.ok(!html.includes('native-library-coverage'), '读取失败不应产生未匹配/截断警告')
+  assert.ok(html.includes('执行失败') || html.includes('失败'), '报告状态应体现失败')
 })
 
 test('runNativeChecks：库工具超时不会挂起，后续调用跳过并标记失败', () => {

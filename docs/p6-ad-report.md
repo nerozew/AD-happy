@@ -15,7 +15,7 @@
 | 可用性探测 | `detectAdAvailability()`：Windows、AD-MCP 服务端、Python `mcp`、`X2.EXE` 进程 |
 | CLI | `--with-ad`；不可用退出码 **2**，不静默退回离线 |
 | 归一化 | `AD-ERC-*` / `AD-DRC-*` / `AD-LIB-*`，`source: "altium-native"`，中文标题/描述 |
-| 测试 | Node **172 passed**；Python **79 passed** |
+| 测试 | Node **173 passed**；Python **79 passed** |
 | 真实链路 | 已用运行中的 Altium Designer 跑通 ERC；DRC 与封装明细由 AD-MCP/AD 侧失败，已如实记录 |
 | 样例报告 | `docs/sample-report/` 已按离线默认重新生成；AD 章节不渲染、`rules.native_* = not_evaluated` |
 
@@ -317,10 +317,10 @@ win32con / win32api / win32process / PIL ..."
 
 ```bash
 node --test tests/*.test.mjs
-# tests 172 / pass 172 / fail 0
+# tests 173 / pass 173 / fail 0
 ```
 
-新增 `tests/ad.test.mjs`（17 条）：
+新增 `tests/ad.test.mjs`（18 条）：
 
 1. `detectAdAvailability` 桩服务器可用；
 2. 服务端缺失 → `server_missing` + 中文原因/前提；
@@ -342,7 +342,9 @@ node --test tests/*.test.mjs
 14. `--with-ad` 不可用：退出 2、中文 stderr、不创建输出目录；
 15. 桥收到非法 JSON → `{ok:false, phase:"request"}`；
 16. 桥服务端入口缺失 → 结构化失败；
-17. `discoverLibraries` 收集 `.SchLib`/`.PcbLib`/`.IntLib` 并去重。
+17. 库文件不存在（`Missing.SchLib`/`Missing.PcbLib`）→ 库 `failed`、
+    `unmatchedComponents` 为空、不产生未匹配警告；
+18. `discoverLibraries` 收集 `.SchLib`/`.PcbLib`/`.IntLib` 并去重。
 
 桩服务器：`tests/fixtures/ad-mcp-stub/server/main.py`，用 FastMCP 实现同名四个
 工具，返回固定结果；`STUB_AD_DRC_FAIL`、`STUB_AD_SLEEP_MS`、
@@ -581,3 +583,44 @@ node .agents/skills/ad-happy/scripts/analyze.mjs \
 - `docs/sample-report/` 已在**不带 `--with-ad`** 下重新生成：`summary.status=complete`、
   `native.requested=false`、`rules.native_*=not_evaluated`、无 `AD-` finding、
   报告不渲染原生章节；`summary.json` 约 20.5KB。
+
+## 13. P6 复审修复记录（Low）
+
+复审确认原 3 项已解决，但指出一个 Low：库读取失败时仍计算「未匹配元件」，
+导致文案与覆盖归类不准确。
+
+### 13.1 修复
+
+- 未匹配统计只使用 `inventory === 'ok'` 的 `.SchLib`/`.PcbLib`：
+  `exists=false`、清单读取失败或清单解析失败的库不再参与
+  「已匹配/未匹配」计算，`unmatchedComponents` 保持为空。
+- 未匹配原因文案改为「未在已成功读取的符号库/封装库中找到匹配」，不再暗示
+  所有库都成功读取；缺失库的原因仍是「库文件不存在」或具体读取错误。
+- 报告 `native-library-coverage` 警告文案补充：「相关库已标记为部分完成；
+  库读取失败的原因见上方库状态，失败库不参与未匹配统计」。读取失败的库单独
+  显示 `failed`，不会被描述成「部分完成」。
+
+### 13.2 测试
+
+新增 `tests/ad.test.mjs` 用例「库文件不存在只报读取失败，不把所有元件算成
+未匹配」：
+
+- 传入不存在的 `Missing.SchLib` / `Missing.PcbLib`；
+- 两个库状态均为 `failed`、`inventory=failed`；
+- `unmatchedComponents` 为空，`unmatchedSymbols=0`、`unmatchedFootprints=0`；
+- reasons 含「库文件不存在」，不含「未在已成功读取」；
+- `checks.library=failed`；
+- 报告渲染后不出现 `native-library-coverage` 警告，状态体现失败。
+
+### 13.3 验证
+
+- `node --test tests/*.test.mjs`：**173 passed / 0 failed**；
+- `python -B -m pytest -q`：**79 passed**；
+- `docs/sample-report/` 已在**不带 `--with-ad`** 下重新生成：
+  `summary.status=complete`、`native.requested=false`、`rules.native_*=not_evaluated`、
+  无 `AD-` finding、报告不渲染原生章节；`summary.json` 约 20.5KB。
+
+### 13.4 范围外 debt
+
+`summarizeLibraryCheck` 不看 mismatches、`aggregateNativeStatus` 的 partial
+优先级、`emptyNativeCoverage` 缺字段，按复审意见记为 debt，本轮不修。

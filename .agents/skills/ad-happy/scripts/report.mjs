@@ -1853,7 +1853,8 @@ function renderNative({ native, findings }) {
       + `库核对只覆盖已匹配且已读取明细的子集：未匹配符号 ${native.counts.libraries.unmatchedSymbols} 个、`
       + `未匹配封装 ${native.counts.libraries.unmatchedFootprints} 个、`
       + `明细被截断的库 ${native.counts.libraries.truncatedLibraries} 个。`
-      + '这些元件/条目不在本次核对范围内，相关库已标记为部分完成，不能读成全部通过。</p>'
+      + '这些元件/条目不在本次核对范围内，相关库已标记为部分完成；'
+      + '库读取失败的原因见上方库状态，失败库不参与未匹配统计。不能读成全部通过。</p>'
     : ''
   const libraryTable = native.libraries.length
     ? [

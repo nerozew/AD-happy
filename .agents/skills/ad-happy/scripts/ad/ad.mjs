@@ -817,9 +817,12 @@ export function runNativeChecks(options = {}) {
     }
   }
 
-  // 5.5 未匹配元件的覆盖：库只核对了匹配到的符号/封装，未匹配的元件
-  //     不在核对范围内，不能把「已匹配子集一致」报告成全部通过。
-  const symbolLibraries = libraryStates.filter(state => state.kind === 'schlib')
+  // 5.5 未匹配元件的覆盖：只有成功读到清单的库才参与「已匹配/未匹配」
+  //     统计；库不存在或清单读取失败时，原因应是库读取失败，不能把所有
+  //     元件都误报成「未匹配到任何库」。
+  const symbolLibraries = libraryStates.filter(
+    state => state.kind === 'schlib' && state.inventory === 'ok',
+  )
   if (symbolLibraries.length > 0 && schematicComponents) {
     const matchedRefs = new Set(
       symbolLibraries.flatMap(state => state.matched.flatMap(match => match.components)),
@@ -832,12 +835,14 @@ export function runNativeChecks(options = {}) {
       for (const state of symbolLibraries) {
         state.unmatchedComponents = [...unmatched]
         state.reasons.push(
-          `原理图元件 ${unmatched.join('、')} 未匹配到任何已提供符号库，未参与核对`,
+          `原理图元件 ${unmatched.join('、')} 未在已成功读取的符号库中找到匹配，未参与核对`,
         )
       }
     }
   }
-  const footprintLibraries = libraryStates.filter(state => state.kind === 'pcblib')
+  const footprintLibraries = libraryStates.filter(
+    state => state.kind === 'pcblib' && state.inventory === 'ok',
+  )
   if (footprintLibraries.length > 0 && pcbComponents) {
     const matchedRefs = new Set(
       footprintLibraries.flatMap(state => state.matched.flatMap(match => match.components)),
@@ -850,7 +855,7 @@ export function runNativeChecks(options = {}) {
       for (const state of footprintLibraries) {
         state.unmatchedComponents = [...unmatched]
         state.reasons.push(
-          `PCB 元件 ${unmatched.join('、')} 未匹配到任何已提供封装库，未参与核对`,
+          `PCB 元件 ${unmatched.join('、')} 未在已成功读取的封装库中找到匹配，未参与核对`,
         )
       }
     }
