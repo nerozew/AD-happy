@@ -445,6 +445,11 @@ async function executeStages(state) {
       coverage,
       findings,
       status: ruleStatus,
+      boards: state.documents.map(document => ({
+        name: document.name,
+        kind: document.kind,
+        selected: document === selectedBoard || document === selectedSchematic,
+      })),
       svgs,
     })
     writeFileSync(reportPath, html, 'utf8')

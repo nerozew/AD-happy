@@ -101,6 +101,20 @@ test('summary 满足 32KB 约束并记录覆盖、计数与全部板卡', () => 
   const html = readFileSync(join(outDir, 'report.html'), 'utf8')
   assert.match(html, /结论/)
   assert.match(html, /未评估/)
+  assert.match(html, /板卡与文档/)
+  for (const name of [
+    'PCB1 (First design).PcbDoc',
+    'PCB2 (Failed design).PcbDoc',
+    'PCB3 (Failed design).PcbDoc',
+    'PCB4 (Final Design).PcbDoc',
+    'PCB4 (Manual routing).PcbDoc',
+    'SCH1_Main.SchDoc',
+    'SCH_Lib.SchLib',
+  ]) {
+    assert.ok(html.includes(name), `报告应列出文档 ${name}`)
+  }
+  assert.match(html, /本次审查/)
+  assert.match(html, /本次解析/)
   assert.ok(!/src=["']https?:/.test(html), '报告不应引用外部资源')
 })
 

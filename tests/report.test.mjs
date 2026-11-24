@@ -24,6 +24,38 @@ test('未评估项单独成节', () => {
   assert.match(html, /decoupling/)
 })
 
+test('boards 列出全部文档并标出本次审查/解析的文档', () => {
+  const html = renderReport({
+    ...data,
+    boards: [
+      { name: 'Main.PcbDoc', kind: 'pcb', selected: true },
+      { name: 'Alt.PcbDoc', kind: 'pcb', selected: false },
+      { name: 'SCH1.SchDoc', kind: 'sch', selected: true },
+      { name: 'SCH2.SchDoc', kind: 'sch', selected: false },
+      { name: 'Lib.PcbLib', kind: 'lib', selected: false },
+      { name: '<script>alert(1)</script>', kind: 'pcb', selected: false },
+    ],
+  })
+
+  assert.match(html, /id="documents"/)
+  assert.match(html, /板卡与文档/)
+  for (const name of ['Main.PcbDoc', 'Alt.PcbDoc', 'SCH1.SchDoc', 'SCH2.SchDoc', 'Lib.PcbLib']) {
+    assert.ok(html.includes(name), `应列出 ${name}`)
+  }
+  assert.match(html, /本次审查/)
+  assert.match(html, /本次解析/)
+  assert.match(html, /仅解析第一份 SchDoc/)
+  assert.match(html, /库文件不做独立解析/)
+  assert.ok(!html.includes('<script>alert(1)</script>'), '文档名必须转义')
+  assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt;'))
+})
+
+test('没有 boards 时不渲染板卡小节（向后兼容）', () => {
+  const html = renderReport(data)
+  assert.ok(!html.includes('id="documents"'))
+  assert.ok(!html.includes('板卡与文档'))
+})
+
 test('没有外部依赖', () => {
   const html = renderReport(data)
   assert.ok(!/src=["']https?:/.test(html))

@@ -59,6 +59,13 @@ const RULE_LABELS = {
   pin_pad: '原理图与 PCB 引脚网络对照',
 }
 
+// 文档类型 → 中文名；未知类型按「其他」展示。
+const DOCUMENT_KIND_LABELS = {
+  pcb: 'PCB',
+  sch: '原理图',
+  lib: '库文件',
+}
+
 // SVG 来自 altiumts 的渲染结果，正常板图不会包含脚本、事件属性或外部引用。
 // 为防注入与外部请求，含这些特征时宁可不内联，也不把可疑内容写进报告。
 // 事件属性要求前面是分隔符（空白、引号、斜杠或标签开头），避免把
@@ -71,6 +78,7 @@ const UNSAFE_SVG_PATTERN = /<\s*(?:script|foreignObject|iframe|object|embed)\b|(
  * @param {object} [data] ReportData：
  *   project、generatedAt、coverage {documents, parsed, notEvaluated}、
  *   findings [{rule_id, severity, title, evidence, ...}]、status {[rule]: 状态}、
+ *   boards [{name, kind, selected}]（可选，列出工程全部文档）、
  *   svgs [{title, svg}]
  * @returns {string} 单文件 HTML
  */
@@ -105,8 +113,18 @@ function normalizeReport(data) {
     coverage: isPlainObject(source.coverage) ? source.coverage : {},
     findings: findings.map(normalizeFinding),
     status: isPlainObject(source.status) ? source.status : {},
+    boards: normalizeDocuments(source.boards),
     svgs: Array.isArray(source.svgs) ? source.svgs : [],
   }
+}
+
+function normalizeDocuments(value) {
+  if (!Array.isArray(value)) return []
+  return value.filter(isPlainObject).map(document => ({
+    name: scalarText(document.name) || '（未命名文档）',
+    kind: scalarText(document.kind) || 'other',
+    selected: document.selected === true,
+  }))
 }
 
 function normalizeFinding(finding) {
@@ -144,6 +162,7 @@ function groupFor(key) {
 function renderBody(report) {
   return [
     renderConclusion(report),
+    renderDocuments(report),
     renderFindings(report),
     renderCoverage(report),
     renderFigures(report),
@@ -196,6 +215,46 @@ function buildVerdict(counts, notEvaluated, failed) {
 
 function stat(kind, value, label) {
   return `<li class="stat ${kind}"><span class="stat-value">${value}</span><span class="stat-label">${escapeHtml(label)}</span></li>`
+}
+
+// 「板卡与文档」：列出工程全部文档并标出本次实际解析的 PCB / 原理图。
+// boards 缺失或为空时整节不渲染，保持与旧调用方的兼容。
+function renderDocuments({ boards }) {
+  if (boards.length === 0) return ''
+
+  const schematics = boards.filter(document => document.kind === 'sch')
+  const selectedSchematic = schematics.find(document => document.selected)
+  const rows = boards.map(document => {
+    const kind = ownLookup(DOCUMENT_KIND_LABELS, document.kind) || '其他'
+    const marker = document.selected
+      ? `<span class="badge badge-pass">${document.kind === 'pcb'
+        ? '本次审查'
+        : document.kind === 'sch' ? '本次解析' : '已选中'}</span>`
+      : '—'
+    return `      <tr${document.selected ? ' class="doc-selected"' : ''}><th scope="row">${escapeHtml(document.name)}</th><td>${escapeHtml(kind)}</td><td>${marker}</td></tr>`
+  }).join('\n')
+
+  const notes = []
+  if (schematics.length > 1) {
+    notes.push(
+      `工程包含 ${schematics.length} 份原理图，本次仅解析第一份 SchDoc`
+      + `${selectedSchematic ? `（${selectedSchematic.name}）` : ''}，其余原理图未参与评估。`,
+    )
+  }
+
+  return [
+    '<section class="panel" id="documents">',
+    '  <h2>板卡与文档</h2>',
+    `  <p class="hint">共 ${boards.length} 个文档；库文件不做独立解析。</p>`,
+    '  <table class="status-table doc-table">',
+    '    <thead><tr><th scope="col">文档</th><th scope="col">类型</th><th scope="col">本次分析</th></tr></thead>',
+    '    <tbody>',
+    rows,
+    '    </tbody>',
+    '  </table>',
+    notes.length ? `  <p class="note">${escapeHtml(notes.join(' '))}</p>` : '',
+    '</section>',
+  ].filter(Boolean).join('\n')
 }
 
 function renderFindings({ findings }) {
