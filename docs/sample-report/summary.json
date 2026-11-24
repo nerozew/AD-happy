@@ -35,7 +35,7 @@
       }
     ]
   },
-  "generatedAt": "2026-11-25 05:21:35",
+  "generatedAt": "2026-11-25 06:14:25",
   "status": "complete",
   "schematic": {
     "components": 9,
@@ -136,6 +136,91 @@
     "artifact": null,
     "reasons": [
       "未启用 --emc：EMC 预合规分析为可选步骤，本次没有运行。"
+    ]
+  },
+  "native": {
+    "requested": false,
+    "status": "not_evaluated",
+    "available": false,
+    "serverPath": null,
+    "python": null,
+    "altium": {
+      "running": null,
+      "processCheck": null
+    },
+    "checks": {
+      "erc": {
+        "status": "not_evaluated",
+        "reason": "未启用 --with-ad：AD 原生检查为可选深度模式，本次没有运行。"
+      },
+      "drc": {
+        "status": "not_evaluated",
+        "reason": "未启用 --with-ad：AD 原生检查为可选深度模式，本次没有运行。"
+      },
+      "symbol_libraries": {
+        "status": "not_evaluated",
+        "reason": "未启用 --with-ad：AD 原生检查为可选深度模式，本次没有运行。"
+      },
+      "footprint_libraries": {
+        "status": "not_evaluated",
+        "reason": "未启用 --with-ad：AD 原生检查为可选深度模式，本次没有运行。"
+      },
+      "library_crosscheck": {
+        "status": "not_evaluated",
+        "reason": "未启用 --with-ad：AD 原生检查为可选深度模式，本次没有运行。"
+      },
+      "library": {
+        "status": "not_evaluated",
+        "reason": "未启用 --with-ad：AD 原生检查为可选深度模式，本次没有运行。"
+      }
+    },
+    "erc": {
+      "status": "not_evaluated",
+      "compiled": false,
+      "total": 0,
+      "fatal": 0,
+      "errors": 0,
+      "warnings": 0,
+      "listed": 0,
+      "unsavedInAltium": 0,
+      "missingOnDisk": 0
+    },
+    "drc": {
+      "status": "not_evaluated",
+      "ran": false,
+      "violationCount": 0,
+      "listed": 0,
+      "complete": null,
+      "board": null
+    },
+    "counts": {
+      "issues": 0,
+      "facts": 0,
+      "erc": {
+        "total": 0,
+        "fatal": 0,
+        "errors": 0,
+        "warnings": 0,
+        "listed": 0
+      },
+      "drc": {
+        "violationCount": 0,
+        "listed": 0
+      },
+      "libraries": {
+        "total": 0,
+        "symbolLibraries": 0,
+        "footprintLibraries": 0,
+        "matchedSymbols": 0,
+        "matchedFootprints": 0,
+        "mismatches": 0,
+        "failed": 0
+      }
+    },
+    "findings": 0,
+    "artifact": null,
+    "reasons": [
+      "未启用 --with-ad：AD 原生检查为可选深度模式，本次没有运行。"
     ]
   },
   "coverage": {
@@ -292,6 +377,66 @@
         "未启用 --emc：EMC 预合规分析为可选步骤，本次没有运行。"
       ]
     },
+    "native": {
+      "requested": false,
+      "status": "not_evaluated",
+      "available": false,
+      "checks": {
+        "erc": {
+          "status": "not_evaluated",
+          "reason": "未启用 --with-ad：AD 原生检查为可选深度模式，本次没有运行。"
+        },
+        "drc": {
+          "status": "not_evaluated",
+          "reason": "未启用 --with-ad：AD 原生检查为可选深度模式，本次没有运行。"
+        },
+        "symbol_libraries": {
+          "status": "not_evaluated",
+          "reason": "未启用 --with-ad：AD 原生检查为可选深度模式，本次没有运行。"
+        },
+        "footprint_libraries": {
+          "status": "not_evaluated",
+          "reason": "未启用 --with-ad：AD 原生检查为可选深度模式，本次没有运行。"
+        },
+        "library_crosscheck": {
+          "status": "not_evaluated",
+          "reason": "未启用 --with-ad：AD 原生检查为可选深度模式，本次没有运行。"
+        },
+        "library": {
+          "status": "not_evaluated",
+          "reason": "未启用 --with-ad：AD 原生检查为可选深度模式，本次没有运行。"
+        }
+      },
+      "counts": {
+        "issues": 0,
+        "facts": 0,
+        "erc": {
+          "total": 0,
+          "fatal": 0,
+          "errors": 0,
+          "warnings": 0,
+          "listed": 0
+        },
+        "drc": {
+          "violationCount": 0,
+          "listed": 0
+        },
+        "libraries": {
+          "total": 0,
+          "symbolLibraries": 0,
+          "footprintLibraries": 0,
+          "matchedSymbols": 0,
+          "matchedFootprints": 0,
+          "mismatches": 0,
+          "failed": 0
+        }
+      },
+      "findings": 0,
+      "artifact": null,
+      "reasons": [
+        "未启用 --with-ad：AD 原生检查为可选深度模式，本次没有运行。"
+      ]
+    },
     "crossCheck": {
       "compared": 22,
       "exact": 22,
@@ -310,7 +455,7 @@
       "pass": 6,
       "found": 6,
       "partial": 0,
-      "not_evaluated": 4,
+      "not_evaluated": 7,
       "failed": 0
     }
   },
@@ -330,7 +475,10 @@
     "bom": "found",
     "datasheets": "not_evaluated",
     "spice": "not_evaluated",
-    "emc": "not_evaluated"
+    "emc": "not_evaluated",
+    "native_erc": "not_evaluated",
+    "native_drc": "not_evaluated",
+    "native_library": "not_evaluated"
   },
   "findings": [
     {

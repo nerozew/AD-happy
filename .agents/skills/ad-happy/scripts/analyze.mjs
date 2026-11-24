@@ -40,6 +40,14 @@ import {
 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
+  NATIVE_RULES,
+  detectAdAvailability,
+  discoverLibraries,
+  emptyNativeCoverage,
+  nativeFailureFinding,
+  runNativeChecks,
+} from './ad/ad.mjs'
+import {
   bomErrorFinding,
   buildBom,
   dedupeBomFindings,
@@ -76,7 +84,7 @@ import {
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const PIPELINE_PY = join(SCRIPT_DIR, 'pipeline.py')
 
-const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>] [--project-file <PrjPcb 文件名>] [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>] [--bom <CSV>] [--datasheets <目录>] [--spice] [--emc] [--svg]
+const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--out <输出目录>] [--project-file <PrjPcb 文件名>] [--board <PcbDoc 文件名>] [--gerber <Gerber 目录>] [--bom <CSV>] [--datasheets <目录>] [--spice] [--emc] [--with-ad] [--svg]
 
   --project        包含 .PrjPcb 的工程目录，或 .PrjPcb 文件路径
   --out            输出目录；默认 %LOCALAPPDATA%\\ad-happy\\runs\\<run-id>
@@ -93,6 +101,9 @@ const USAGE = `用法: node analyze.mjs --project <工程目录或 .PrjPcb> [--o
   --emc            运行 EMC 预合规分析（可选，默认关闭）。复用 kicad-happy
                    的 EMC 规则；缺少铺铜/层切换等数据时相关类别标记未评估，
                    不改变退出码
+  --with-ad        深度模式：通过本机 AD-MCP 调用 Altium 原生 ERC/DRC 与
+                   库符号/封装原语。需要 Altium Designer 已运行且 AD-MCP 可用；
+                   不可用时退出码 2，不会静默退回离线结果
   --svg            尝试把选中板卡渲染为 SVG 内联到报告；失败只降级，不中止分析`
 
 // 三组规则的完整键；即使某一侧输入缺失，报告也能展示全部规则状态。
@@ -118,6 +129,7 @@ const ALL_RULES = [
   'datasheets',
   'spice',
   'emc',
+  ...NATIVE_RULES,
 ]
 // 这些规则依赖原理图网表（decoupling 还依赖可解析电容值）；引脚未全部
 // 入网时，空结果不能视为通过。
@@ -144,15 +156,17 @@ const ARTIFACT_FILES = [
   'datasheets.json',
   'spice.json',
   'emc.json',
+  'ad.json',
   'capability_mode.json',
   'summary.json',
   'report.html',
 ]
 
 // 本次运行会重建的目录产物；spice/ 里是上一次的测试台与日志，
-// emc-input/ 里是上一次的适配输入与上游原始输出，不能留到下一次运行
-// 被误认成本次结果。datasheets/ 是跨运行缓存，不在清理范围内。
-const ARTIFACT_DIRS = ['spice', 'emc-input']
+// emc-input/ 里是上一次的适配输入与上游原始输出，ad/ 里是 MCP 请求、
+// 原始结果与 AD-MCP 的 per-run home，不能留到下一次运行被误认成本次结果。
+// datasheets/ 是跨运行缓存，不在清理范围内。
+const ARTIFACT_DIRS = ['spice', 'emc-input', 'ad']
 
 const SUMMARY_LIMIT = 32 * 1024 // summary.json 必须严格小于 32KB
 const TOP_FINDINGS_LIMIT = 20
@@ -292,6 +306,25 @@ async function main() {
     options.datasheets = datasheetsPath
   }
 
+  // 深度模式：先确认 AD-MCP 与 Altium 可用，再创建输出目录。用户明确
+  // 要求原生检查时，不可用必须是退出码 2，不能静默退回离线结果。
+  let adAvailability = null
+  if (options.withAd) {
+    adAvailability = detectAdAvailability()
+    if (!adAvailability.available) {
+      console.error('深度模式（--with-ad）不可用，未执行分析。')
+      console.error(`原因：${adAvailability.reason}`)
+      for (const prerequisite of adAvailability.prerequisites ?? []) {
+        console.error(`需要：${prerequisite}`)
+      }
+      if (adAvailability.installCommand) {
+        console.error(`安装命令：${adAvailability.installCommand}`)
+      }
+      console.error('如果只需要离线结果，请去掉 --with-ad 重新运行。')
+      return 2
+    }
+  }
+
   const outDir = resolve(options.out ?? defaultOutDir(runId))
   if (isInside(projectDir, outDir)) {
     // 源工程只读：此处不创建任何目录/文件。
@@ -311,7 +344,7 @@ async function main() {
       // --bom 可能指向上一次运行生成的 bom.csv：先读后清会失败，因此保留输入文件。
       new Set(options.bom ? [resolve(options.bom)] : []),
     )
-    state = createState({ runId, startedAt, outDir, projectDir, options })
+    state = createState({ runId, startedAt, outDir, projectDir, options, adAvailability })
     for (const name of cleanupFailures) {
       state.warnings.push(`无法清理旧产物 ${name}，输出目录中可能残留上次运行的文件`)
     }
@@ -694,6 +727,19 @@ async function executeStages(state) {
   })
   const emcFindings = emcStage.findings
 
+  // 9.8 AD 原生检查（可选，深度模式）。只有显式 --with-ad 才调用 AD-MCP；
+  //     不可用时 main 已以退出码 2 结束。工具失败/超时保持 failed，
+  //     不把未返回的检查当作通过。
+  const nativeStage = runNativeStage(state, {
+    projectPath: discovery.projectPath,
+    boardPath: selectedBoard?.path ?? '',
+    libraries: discoverLibraries(state.projectDir, state.documents),
+    schematic,
+    pcbSnapshot,
+    generatedAt,
+  })
+  const nativeFindings = nativeStage.findings
+
   const findings = [
     ...state.syntheticFindings,
     ...pipelineSummary.findings.filter(isPlainObject),
@@ -702,6 +748,7 @@ async function executeStages(state) {
     ...datasheetStage.findings,
     ...spiceFindings,
     ...emcFindings,
+    ...nativeFindings,
   ]
   // Python 只写规则层 findings；解析/连通性失败的 DET-ERR、Gerber、BOM 与
   // 数据手册结果由 Node 补充，保证 findings.json 是完整交付物
@@ -713,6 +760,7 @@ async function executeStages(state) {
     || datasheetStage.findings.length > 0
     || spiceFindings.length > 0
     || emcFindings.length > 0
+    || nativeFindings.length > 0
   ) {
     writeJson(join(state.outDir, 'findings.json'), findings)
   }
@@ -745,6 +793,11 @@ async function executeStages(state) {
   coverage.datasheets = datasheetStage.coverage
   coverage.spice = spiceStage.coverage
   coverage.emc = emcStage.coverage
+  coverage.native = nativeStage.coverage
+  // 深度模式的三个规则状态来自实际工具结果；离线时保持 not_evaluated。
+  ruleStatus.native_erc = nativeStage.coverage.checks.erc.status
+  ruleStatus.native_drc = nativeStage.coverage.checks.drc.status
+  ruleStatus.native_library = nativeStage.coverage.checks.library.status
   const missingInputs = []
   if (!selectedBoard) missingInputs.push('pcb')
   if (!selectedSchematic) missingInputs.push('schematic')
@@ -780,6 +833,7 @@ async function executeStages(state) {
       datasheets: datasheetStage.report,
       spice: spiceStage.report,
       emc: emcStage.report,
+      native: nativeStage.report,
       svgs,
     })
     writeFileSync(reportPath, html, 'utf8')
@@ -828,6 +882,7 @@ async function executeStages(state) {
     datasheets: datasheetStage.summary,
     spice: spiceStage.summary,
     emc: emcStage.summary,
+    native: nativeStage.summary,
     severityGroup: reportModule.severityGroup,
   })
   try {
@@ -1832,6 +1887,264 @@ function compactEmcCoverage(emc) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// AD 原生检查 / native
+// ---------------------------------------------------------------------------
+
+function runNativeStage(state, {
+  projectPath,
+  boardPath,
+  libraries,
+  schematic,
+  pcbSnapshot,
+  generatedAt,
+}) {
+  const requested = state.options.withAd === true
+
+  // 未显式请求：只记录「可选、未运行」，不产生 AD finding，也不探测 AD。
+  if (!requested) {
+    const coverage = emptyNativeCoverage({
+      requested: false,
+      available: false,
+      reasons: ['未启用 --with-ad：AD 原生检查为可选深度模式，本次没有运行。'],
+    })
+    state.manifest.stages.native = 'skipped'
+    state.manifest.native = buildNativeManifest({
+      requested: false,
+      availability: null,
+      coverage,
+    })
+    return {
+      findings: [],
+      coverage,
+      report: buildNativeReport(coverage, []),
+      summary: buildNativeSummary(coverage),
+    }
+  }
+
+  const availability = state.adAvailability ?? detectAdAvailability()
+  let result
+  try {
+    result = runNativeChecks({
+      projectPath,
+      boardPath,
+      libraries,
+      schematic,
+      pcbSnapshot,
+      outDir: state.outDir,
+      availability,
+      env: process.env,
+    })
+  } catch (error) {
+    const message = `AD 原生检查阶段异常：${error?.message ?? error}`
+    const coverage = emptyNativeCoverage({
+      requested: true,
+      available: availability.available === true,
+      reasons: [message],
+    })
+    coverage.status = 'failed'
+    coverage.serverPath = availability.serverPath ?? null
+    coverage.python = availability.python ?? null
+    coverage.findings = 1
+    result = {
+      findings: [nativeFailureFinding(message)],
+      coverage,
+      bridge: null,
+    }
+  }
+
+  const coverage = result.coverage
+  const findings = Array.isArray(result.findings) ? result.findings : []
+  state.manifest.stages.native = coverage.status
+  state.manifest.native = buildNativeManifest({
+    requested: true,
+    availability,
+    coverage,
+  })
+
+  // ad.json 是本次原生检查的可审计产物：可用性、覆盖、逐库结果、
+  // 归一化 finding 与桥接原始返回都在里面。
+  try {
+    writeJson(join(state.outDir, 'ad.json'), {
+      schemaVersion: 1,
+      generatedAt,
+      requested: true,
+      availability,
+      coverage,
+      findings,
+      bridge: result.bridge ?? null,
+    })
+    state.artifacts.ad = 'ad.json'
+  } catch (error) {
+    const message = `AD 原生检查结果写入失败：${error?.message ?? error}`
+    coverage.reasons = [...(coverage.reasons ?? []), message]
+    if (isPlainObject(coverage.artifacts)) coverage.artifacts.index = null
+    state.warnings.push(message)
+  }
+
+  if (coverage.status === 'failed') {
+    state.errors.push({
+      stage: 'native',
+      message: 'AD 原生检查失败',
+      details: coverage.reasons.join('；') || '（无错误输出）',
+    })
+  } else if (coverage.status === 'partial') {
+    state.warnings.push(
+      `AD 原生检查部分完成：${coverage.reasons.slice(0, 4).join('；') || '部分检查未完成'}`,
+    )
+  } else if (coverage.status === 'not_evaluated') {
+    state.warnings.push(
+      `AD 原生检查未评估：${coverage.reasons.slice(0, 4).join('；') || '输入不足'}`,
+    )
+  }
+
+  return {
+    findings,
+    coverage,
+    report: buildNativeReport(coverage, findings),
+    summary: buildNativeSummary(coverage),
+  }
+}
+
+function buildNativeManifest({ requested, availability, coverage }) {
+  return {
+    requested,
+    status: coverage.status,
+    available: coverage.available === true,
+    serverPath: coverage.serverPath ?? availability?.serverPath ?? null,
+    python: coverage.python ?? availability?.python ?? null,
+    altium: coverage.altium ?? null,
+    checks: coverage.checks,
+    erc: {
+      status: coverage.erc?.status,
+      compiled: coverage.erc?.compiled === true,
+      total: coverage.erc?.total ?? 0,
+      fatal: coverage.erc?.fatal ?? 0,
+      errors: coverage.erc?.errors ?? 0,
+      warnings: coverage.erc?.warnings ?? 0,
+    },
+    drc: {
+      status: coverage.drc?.status,
+      ran: coverage.drc?.ran === true,
+      violationCount: coverage.drc?.violationCount ?? 0,
+      listed: coverage.drc?.listed ?? 0,
+      complete: coverage.drc?.complete ?? null,
+    },
+    libraries: coverage.counts?.libraries ?? null,
+    counts: coverage.counts,
+    findings: coverage.findings ?? 0,
+    artifacts: coverage.artifacts ?? null,
+    reasons: coverage.reasons ?? [],
+  }
+}
+
+function buildNativeReport(coverage, findings) {
+  return {
+    requested: coverage.requested === true,
+    status: coverage.status,
+    available: coverage.available === true,
+    serverPath: coverage.serverPath ?? null,
+    python: coverage.python ?? null,
+    altium: coverage.altium ?? null,
+    checks: coverage.checks,
+    erc: coverage.erc,
+    drc: coverage.drc,
+    libraries: coverage.libraries ?? [],
+    counts: coverage.counts,
+    reasons: coverage.reasons ?? [],
+    findings: findings.filter(finding => finding.kind !== 'fact').length,
+    facts: findings.filter(finding => finding.kind === 'fact').length,
+    items: findings.map(finding => ({
+      ruleId: finding.rule_id,
+      source: finding.source,
+      severity: finding.severity,
+      kind: finding.kind,
+      title: finding.title,
+      description: finding.description,
+      components: finding.components,
+      nets: finding.nets,
+    })),
+    artifacts: coverage.artifacts ?? null,
+  }
+}
+
+function buildNativeSummary(coverage) {
+  return {
+    requested: coverage.requested === true,
+    status: coverage.status,
+    available: coverage.available === true,
+    serverPath: coverage.serverPath ?? null,
+    python: coverage.python ?? null,
+    altium: coverage.altium ?? null,
+    checks: coverage.checks,
+    erc: {
+      status: coverage.erc?.status,
+      compiled: coverage.erc?.compiled === true,
+      total: coverage.erc?.total ?? 0,
+      fatal: coverage.erc?.fatal ?? 0,
+      errors: coverage.erc?.errors ?? 0,
+      warnings: coverage.erc?.warnings ?? 0,
+      listed: coverage.erc?.listed ?? 0,
+      unsavedInAltium: coverage.erc?.unsavedInAltium ?? 0,
+      missingOnDisk: coverage.erc?.missingOnDisk ?? 0,
+    },
+    drc: {
+      status: coverage.drc?.status,
+      ran: coverage.drc?.ran === true,
+      violationCount: coverage.drc?.violationCount ?? 0,
+      listed: coverage.drc?.listed ?? 0,
+      complete: coverage.drc?.complete ?? null,
+      board: coverage.drc?.board ?? null,
+    },
+    counts: coverage.counts ?? {},
+    findings: coverage.findings ?? 0,
+    artifact: coverage.artifacts?.index ?? null,
+    reasons: (coverage.reasons ?? []).slice(0, 8).map(reason => truncateText(reason, 240)),
+  }
+}
+
+// summary.json 的 coverage.native 只保留状态与计数；逐库明细在顶层 native
+// 与 ad.json 中，避免在 32KB 限额内重复占位。
+function compactNativeCoverage(native) {
+  if (!isPlainObject(native)) return null
+  const checks = isPlainObject(native.checks) ? native.checks : {}
+  return {
+    requested: native.requested === true,
+    status: scalarText(native.status) || 'not_evaluated',
+    available: native.available === true,
+    checks: Object.fromEntries(
+      Object.entries(checks).map(([key, value]) => [
+        key,
+        isPlainObject(value) ? {
+          status: scalarText(value.status) || 'not_evaluated',
+          reason: truncateText(scalarText(value.reason), 200),
+        } : { status: scalarText(value) || 'not_evaluated' },
+      ]),
+    ),
+    counts: isPlainObject(native.counts) ? native.counts : {},
+    findings: numberOrZero(native.findings),
+    artifact: native.artifacts?.index ?? null,
+    reasons: Array.isArray(native.reasons)
+      ? native.reasons.slice(0, 5).map(reason => truncateText(reason, 240))
+      : [],
+  }
+}
+
+function nativeCompletionLine(native) {
+  if (!native.requested) return 'AD 原生：未启用（--with-ad 可选）'
+  if (!native.available) {
+    return `AD 原生：不可用（${native.reasons?.[0] ?? 'AD-MCP 不可用'}）`
+  }
+  const erc = native.erc ?? {}
+  const drc = native.drc ?? {}
+  const libs = native.counts?.libraries ?? {}
+  return `AD 原生：${native.status}；ERC ${erc.total ?? 0} 条`
+    + `（错误 ${erc.errors ?? 0} / 警告 ${erc.warnings ?? 0}）`
+    + `；DRC ${drc.ran ? `${drc.violationCount ?? 0} 条` : '未运行'}`
+    + `；库 ${libs.matchedSymbols ?? 0} 符号 / ${libs.matchedFootprints ?? 0} 封装，`
+    + `不一致 ${libs.mismatches ?? 0}`
+}
+
 // summary.json 只保留前 50 个子电路的概览；完整测试台与结果在 spice.json。
 const SPICE_SUMMARY_CIRCUIT_LIMIT = 50
 const SPICE_SUMMARY_CANDIDATE_LIMIT = 20
@@ -1913,6 +2226,7 @@ function buildSummary(state, context) {
     datasheets,
     spice,
     emc,
+    native,
     severityGroup,
   } = context
 
@@ -1960,6 +2274,7 @@ function buildSummary(state, context) {
     datasheets: datasheets ?? null,
     spice: spice ?? null,
     emc: emc ?? null,
+    native: native ?? null,
     coverage: {
       ...coverage,
       // summary.json 有 32KB 硬上限：BOM 明细列表必须截断，只保留计数与样本；
@@ -1970,6 +2285,8 @@ function buildSummary(state, context) {
       spice: compactSpiceCoverage(coverage.spice),
       // EMC 覆盖在 coverage 中只保留状态与计数；类别/规则明细在顶层 emc。
       emc: compactEmcCoverage(emc),
+      // AD 原生覆盖同样只保留状态、计数与原因；逐库明细在 native 与 ad.json。
+      native: compactNativeCoverage(coverage.native),
       crossCheck: summarizeCrossCoverage(crossCoverage),
     },
     counts: {
@@ -2192,7 +2509,7 @@ async function renderSvg(state, pcbSnapshot, selectedBoard) {
 // manifest
 // ---------------------------------------------------------------------------
 
-function createState({ runId, startedAt, outDir, projectDir, options }) {
+function createState({ runId, startedAt, outDir, projectDir, options, adAvailability }) {
   const state = {
     runId,
     startedAt,
@@ -2200,6 +2517,7 @@ function createState({ runId, startedAt, outDir, projectDir, options }) {
     outDir,
     projectDir,
     options,
+    adAvailability,
     errors: [],
     warnings: [],
     documents: [],
@@ -2236,6 +2554,7 @@ function createState({ runId, startedAt, outDir, projectDir, options }) {
         datasheets: 'skipped',
         spice: 'skipped',
         emc: 'skipped',
+        native: 'skipped',
         report: 'skipped',
       },
       documents: [],
@@ -2246,6 +2565,7 @@ function createState({ runId, startedAt, outDir, projectDir, options }) {
       datasheets: null,
       spice: null,
       emc: null,
+      native: null,
       svg: null,
       artifacts: null,
       status: 'running',
@@ -2457,6 +2777,9 @@ function printCompletion(state, summary, reportPath, exitCode) {
   if (summary.emc?.requested) {
     console.log(emcCompletionLine(summary.emc))
   }
+  if (summary.native) {
+    console.log(nativeCompletionLine(summary.native))
+  }
   if (reportPath) console.log(`报告：${reportPath}`)
   console.log(
     `版本：Node ${env.node ?? '?'} / altiumts ${env.altiumts ?? '?'} / Python ${env.python ?? '?'}`,
@@ -2481,6 +2804,7 @@ function parseArgs(argv) {
     datasheets: null,
     spice: false,
     emc: false,
+    withAd: false,
     svg: false,
     help: false,
   }
@@ -2538,6 +2862,9 @@ function parseArgs(argv) {
         break
       case '--emc':
         options.emc = true
+        break
+      case '--with-ad':
+        options.withAd = true
         break
       case '--svg':
         options.svg = true

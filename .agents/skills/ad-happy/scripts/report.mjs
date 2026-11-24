@@ -64,6 +64,9 @@ const RULE_LABELS = {
   datasheets: '数据手册覆盖与提取计划检查',
   spice: 'SPICE 仿真检查',
   emc: 'EMC 预合规检查',
+  native_erc: 'AD 原生 ERC',
+  native_drc: 'AD 原生 DRC',
+  native_library: 'AD 库与引脚/焊盘核对',
 }
 
 // 分析来源 → 报告展示名。目前只有 Gerber 复用层需要额外标注来源。
@@ -73,6 +76,7 @@ const SOURCE_LABELS = {
   datasheets: '数据手册检查',
   spice: 'SPICE 仿真',
   emc: 'EMC 预合规分析',
+  'altium-native': 'Altium 原生检查',
 }
 
 // 仿真结果状态 → 中文展示与徽标类别。
@@ -209,6 +213,7 @@ function normalizeReport(data) {
     datasheets: normalizeDatasheets(source.datasheets),
     spice: normalizeSpice(source.spice),
     emc: normalizeEmc(source.emc),
+    native: normalizeNative(source.native),
     svgs: Array.isArray(source.svgs) ? source.svgs : [],
   }
 }
@@ -559,6 +564,146 @@ function normalizeEmc(value) {
   }
 }
 
+function normalizeNative(value) {
+  if (!isPlainObject(value)) return null
+  const checks = isPlainObject(value.checks) ? value.checks : {}
+  const normalizedChecks = {}
+  for (const [key, entry] of Object.entries(checks)) {
+    if (isPlainObject(entry)) {
+      normalizedChecks[key] = {
+        status: scalarText(entry.status) || 'not_evaluated',
+        reason: scalarText(entry.reason),
+      }
+    } else {
+      const status = scalarText(entry)
+      if (status) normalizedChecks[key] = { status, reason: '' }
+    }
+  }
+  const erc = isPlainObject(value.erc) ? value.erc : {}
+  const drc = isPlainObject(value.drc) ? value.drc : {}
+  const counts = isPlainObject(value.counts) ? value.counts : {}
+  const libraryCounts = isPlainObject(counts.libraries) ? counts.libraries : {}
+  const artifacts = isPlainObject(value.artifacts) ? value.artifacts : {}
+  return {
+    requested: value.requested === true,
+    status: scalarText(value.status) || 'not_evaluated',
+    available: value.available === true,
+    serverPath: scalarText(value.serverPath),
+    python: scalarText(value.python),
+    altium: isPlainObject(value.altium)
+      ? {
+        running: value.altium.running === true
+          ? true
+          : value.altium.running === false ? false : null,
+        processCheck: scalarText(value.altium.processCheck),
+      }
+      : null,
+    checks: normalizedChecks,
+    erc: {
+      status: scalarText(erc.status) || 'not_evaluated',
+      compiled: erc.compiled === true,
+      total: countValue(erc.total),
+      fatal: countValue(erc.fatal),
+      errors: countValue(erc.errors),
+      warnings: countValue(erc.warnings),
+      listed: countValue(erc.listed),
+      unsavedInAltium: countValue(erc.unsavedInAltium),
+      missingOnDisk: countValue(erc.missingOnDisk),
+      types: isPlainObject(erc.types) ? erc.types : {},
+      reasons: stringList(erc.reasons),
+    },
+    drc: {
+      status: scalarText(drc.status) || 'not_evaluated',
+      ran: drc.ran === true,
+      violationCount: countValue(drc.violationCount),
+      listed: countValue(drc.listed),
+      complete: drc.complete === false ? false : drc.complete === true ? true : null,
+      board: scalarText(drc.board),
+      byRule: isPlainObject(drc.byRule) ? drc.byRule : {},
+      report: isPlainObject(drc.report)
+        ? { path: scalarText(drc.report.path), stopped: drc.report.stopped === true }
+        : null,
+      reasons: stringList(drc.reasons),
+    },
+    libraries: Array.isArray(value.libraries)
+      ? value.libraries.filter(isPlainObject).map(library => ({
+        path: scalarText(library.path),
+        name: scalarText(library.name),
+        kind: scalarText(library.kind) || 'unknown',
+        status: scalarText(library.status) || 'not_evaluated',
+        inventory: scalarText(library.inventory) || 'not_evaluated',
+        symbolCount: countValue(library.symbolCount),
+        footprintCount: countValue(library.footprintCount),
+        matched: Array.isArray(library.matched)
+          ? library.matched.filter(isPlainObject).map(entry => ({
+            name: scalarText(entry.name),
+            components: stringList(entry.components),
+          }))
+          : [],
+        dumped: countValue(library.dumped),
+        mismatches: Array.isArray(library.mismatches)
+          ? library.mismatches.filter(isPlainObject).map(entry => ({
+            name: scalarText(entry.name),
+            kind: scalarText(entry.kind),
+            components: stringList(entry.components),
+            missingPins: stringList(entry.missingPins),
+            missingPads: stringList(entry.missingPads),
+          }))
+          : [],
+        failedDumps: Array.isArray(library.failedDumps)
+          ? library.failedDumps.filter(isPlainObject).map(entry => ({
+            name: scalarText(entry.name),
+            error: scalarText(entry.error),
+          }))
+          : [],
+        incompleteDumps: Array.isArray(library.incompleteDumps)
+          ? library.incompleteDumps.filter(isPlainObject).map(entry => ({
+            name: scalarText(entry.name),
+            error: scalarText(entry.error),
+          }))
+          : [],
+        reasons: stringList(library.reasons),
+      }))
+      : [],
+    counts: {
+      issues: countValue(counts.issues),
+      facts: countValue(counts.facts),
+      libraries: {
+        total: countValue(libraryCounts.total),
+        symbolLibraries: countValue(libraryCounts.symbolLibraries),
+        footprintLibraries: countValue(libraryCounts.footprintLibraries),
+        matchedSymbols: countValue(libraryCounts.matchedSymbols),
+        matchedFootprints: countValue(libraryCounts.matchedFootprints),
+        mismatches: countValue(libraryCounts.mismatches),
+        failed: countValue(libraryCounts.failed),
+      },
+    },
+    reasons: stringList(value.reasons),
+    findings: countValue(value.findings),
+    facts: countValue(value.facts),
+    items: Array.isArray(value.items)
+      ? value.items.filter(isPlainObject).map(item => ({
+        ruleId: scalarText(item.ruleId),
+        source: scalarText(item.source),
+        severity: scalarText(item.severity),
+        kind: scalarText(item.kind) === 'fact' ? 'fact' : 'issue',
+        title: scalarText(item.title),
+        description: scalarText(item.description),
+        components: stringList(item.components),
+        nets: stringList(item.nets),
+      }))
+      : [],
+    artifacts: {
+      index: scalarText(artifacts.index),
+      inventoryRequest: scalarText(artifacts.inventoryRequest),
+      inventoryResult: scalarText(artifacts.inventoryResult),
+      dumpsRequest: scalarText(artifacts.dumpsRequest),
+      dumpsResult: scalarText(artifacts.dumpsResult),
+      altiumHome: scalarText(artifacts.altiumHome),
+    },
+  }
+}
+
 function stringList(value) {
   if (!Array.isArray(value)) return []
   return value.map(scalarText).filter(Boolean)
@@ -608,6 +753,7 @@ function renderBody(report) {
     renderManufacturing(report),
     renderSpice(report),
     renderEmc(report),
+    renderNative(report),
     renderFindings(report),
     renderFacts(report),
     renderCoverage(report),
@@ -1586,6 +1732,239 @@ function renderEmc({ emc, findings }) {
   ].filter(Boolean).join('\n')
 }
 
+function renderNative({ native, findings }) {
+  if (!native || !native.requested) return ''
+  const warning = native.status !== 'pass' && native.status !== 'found'
+  const statusText = nativeStatusText(native)
+  const checkOrder = [
+    'erc',
+    'drc',
+    'symbol_libraries',
+    'footprint_libraries',
+    'library_crosscheck',
+    'library',
+  ]
+  const checkRows = checkOrder
+    .filter(key => native.checks[key])
+    .map(key => {
+      const check = native.checks[key]
+      const label = ownLookup(NATIVE_CHECK_LABELS, key) || key
+      return `      <tr><th scope="row"><span class="rule-name">${escapeHtml(label)}</span><code>${escapeHtml(key)}</code></th><td>${statusBadgeHtml(check.status)}</td><td><span class="detail">${escapeHtml(check.reason || '—')}</span></td></tr>`
+    })
+    .join('\n')
+  const checkTable = checkRows
+    ? [
+        '  <h3>检查项</h3>',
+        '  <table class="status-table" id="native-checks">',
+        '    <thead><tr><th scope="col">检查项</th><th scope="col">状态</th><th scope="col">说明</th></tr></thead>',
+        '    <tbody>',
+        checkRows,
+        '    </tbody>',
+        '  </table>',
+      ].join('\n')
+    : ''
+
+  const ercTypes = Object.entries(native.erc.types)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([type, count]) => `${type}（${count}）`)
+    .join('、')
+  const ercRows = [
+    ['是否编译', native.erc.compiled ? '是' : '否'],
+    ['违规总数', String(native.erc.total)],
+    ['致命 / 错误 / 警告', `${native.erc.fatal} / ${native.erc.errors} / ${native.erc.warnings}`],
+    ['列出明细', String(native.erc.listed)],
+    ['类型分布', ercTypes || '—'],
+    ['Altium 中有未保存修改的文档', native.erc.unsavedInAltium > 0 ? `${native.erc.unsavedInAltium} 份` : '0'],
+    ['磁盘上缺失的文档', native.erc.missingOnDisk > 0 ? `${native.erc.missingOnDisk} 份` : '0'],
+  ]
+  const ercTable = [
+    '  <h3>Altium ERC</h3>',
+    '  <table class="status-table" id="native-erc">',
+    '    <thead><tr><th scope="col">项目</th><th scope="col">值</th></tr></thead>',
+    '    <tbody>',
+    ...ercRows.map(([label, value]) => `      <tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`),
+    '    </tbody>',
+    '  </table>',
+  ].join('\n')
+
+  const drcByRule = Object.entries(native.drc.byRule)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+    .slice(0, 8)
+    .map(([rule, count]) => `${rule || '未命名'}（${count}）`)
+    .join('、')
+  const drcRows = [
+    ['实际运行', native.drc.ran ? '是' : '否'],
+    ['违规总数', String(native.drc.violationCount)],
+    ['列出明细', String(native.drc.listed)],
+    ['结果完整', native.drc.complete === null ? '未知' : native.drc.complete ? '是' : '否（达到 AD 违规上限）'],
+    ['按规则计数', drcByRule || '—'],
+    ['检查板卡', native.drc.board || '—'],
+    ['AD 报告', native.drc.report?.path || '—'],
+  ]
+  const drcTable = [
+    '  <h3>Altium DRC</h3>',
+    '  <table class="status-table" id="native-drc">',
+    '    <thead><tr><th scope="col">项目</th><th scope="col">值</th></tr></thead>',
+    '    <tbody>',
+    ...drcRows.map(([label, value]) => `      <tr><th scope="row">${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`),
+    '    </tbody>',
+    '  </table>',
+  ].join('\n')
+
+  const libraryRows = native.libraries.map(library => {
+    const kindLabel = ownLookup(NATIVE_LIBRARY_KIND_LABELS, library.kind) || library.kind
+    const matched = library.matched.length
+      ? library.matched.map(entry => (
+        entry.components.length
+          ? `${entry.name}（${entry.components.join('、')}）`
+          : entry.name
+      )).join('；')
+      : '—'
+    const problems = [
+      ...library.mismatches.map(entry => {
+        const missing = [
+          entry.missingPins.length ? `缺引脚 ${entry.missingPins.join('、')}` : '',
+          entry.missingPads.length ? `缺焊盘 ${entry.missingPads.join('、')}` : '',
+        ].filter(Boolean).join('，')
+        return `${entry.name}：${missing}`
+      }),
+      ...library.failedDumps.map(entry => `${entry.name}：明细读取失败（${entry.error}）`),
+      ...library.incompleteDumps.map(entry => `${entry.name}：明细不可用（${entry.error}）`),
+      ...library.reasons,
+    ].filter(Boolean)
+    return `      <tr><th scope="row"><span class="rule-name">${escapeHtml(library.name)}</span><code>${escapeHtml(kindLabel)}</code></th><td>${statusBadgeHtml(library.status)}</td><td>${escapeHtml(String(library.inventory))}</td><td>${escapeHtml(matched)}</td><td>${library.dumped}/${library.matched.length}</td><td><span class="detail">${escapeHtml(problems.slice(0, 4).join('；') || '—')}</span></td></tr>`
+  }).join('\n')
+  const libraryTable = native.libraries.length
+    ? [
+        '  <h3>库覆盖与核对</h3>',
+        '  <table class="status-table" id="native-libraries">',
+        '    <thead><tr><th scope="col">库</th><th scope="col">状态</th><th scope="col">清单</th><th scope="col">匹配元件</th><th scope="col">已读明细</th><th scope="col">问题与原因</th></tr></thead>',
+        '    <tbody>',
+        libraryRows,
+        '    </tbody>',
+        '  </table>',
+      ].join('\n')
+    : '  <h3>库覆盖与核对</h3>\n  <p class="empty">没有可用的 .SchLib / .PcbLib 路径，库核对未评估。</p>'
+
+  const nativeFindings = findings
+    .filter(finding => finding.source === 'altium-native' || finding.ruleId.startsWith('AD-'))
+  const issues = nativeFindings.filter(finding => finding.kind !== 'fact')
+  const facts = nativeFindings.filter(finding => finding.kind === 'fact')
+  const findingRows = nativeFindings.map(finding => {
+    const group = groupFor(finding.groupKey)
+    const location = [
+      finding.components ? `元件：${finding.components}` : '',
+      finding.nets ? `网络：${finding.nets}` : '',
+    ].filter(Boolean).join('；')
+    return `      <tr><th scope="row"><code>${escapeHtml(finding.ruleId)}</code><span class="rule-name">${escapeHtml(finding.title)}</span></th><td><span class="badge badge-${finding.groupKey}">${escapeHtml(group.label)}</span></td><td>${escapeHtml(finding.kind === 'fact' ? '实测事实' : '问题')}</td><td><span class="detail">${escapeHtml(finding.evidence || '')}${location ? `<br>${escapeHtml(location)}` : ''}</span></td></tr>`
+  }).join('\n')
+  const findingsTable = nativeFindings.length
+    ? [
+        '  <h3>原生检查发现</h3>',
+        `  <p class="hint">问题 ${issues.length} 条，实测事实 ${facts.length} 条。完整清单见 findings.json 与 ad.json。</p>`,
+        '  <table class="status-table" id="native-findings">',
+        '    <thead><tr><th scope="col">规则 / 标题</th><th scope="col">级别</th><th scope="col">类型</th><th scope="col">说明</th></tr></thead>',
+        '    <tbody>',
+        findingRows,
+        '    </tbody>',
+        '  </table>',
+      ].join('\n')
+    : '  <h3>原生检查发现</h3>\n  <p class="empty">本次 AD 原生检查没有产生 finding。</p>'
+
+  const reasons = native.reasons.length
+    ? [
+        '  <h3>说明与限制</h3>',
+        '  <ul class="status-list" id="native-reasons">',
+        ...native.reasons.map(reason => `    <li><span class="detail">${escapeHtml(reason)}</span></li>`),
+        '  </ul>',
+      ].join('\n')
+    : ''
+
+  const artifactRows = [
+    ['归一化结果', native.artifacts.index],
+    ['清单请求', native.artifacts.inventoryRequest],
+    ['清单结果', native.artifacts.inventoryResult],
+    ['明细请求', native.artifacts.dumpsRequest],
+    ['明细结果', native.artifacts.dumpsResult],
+    ['AD-MCP home', native.artifacts.altiumHome],
+  ].filter(([, path]) => path)
+  const artifactTable = artifactRows.length
+    ? [
+        '  <h3>产物</h3>',
+        '  <table class="status-table" id="native-artifacts">',
+        '    <thead><tr><th scope="col">产物</th><th scope="col">路径</th></tr></thead>',
+        '    <tbody>',
+        ...artifactRows.map(([label, path]) => `      <tr><th scope="row">${escapeHtml(label)}</th><td><code>${escapeHtml(path)}</code></td></tr>`),
+        '    </tbody>',
+        '  </table>',
+      ].join('\n')
+    : ''
+
+  return [
+    '<section class="panel" id="native">',
+    '  <h2>Altium 原生检查</h2>',
+    '  <p class="hint">来源：本机 AD-MCP 调用 Altium Designer 的原生 ERC/DRC 与库原语。'
+      + '仅当显式传入 --with-ad 时运行；工具失败、超时或未运行时标记为失败/未评估，绝不伪造结论。</p>',
+    `  <p class="note${warning ? ' note-warn' : ''}" id="native-status">${escapeHtml(statusText)}</p>`,
+    '  <dl class="coverage-grid">',
+    `    <div><dt>状态</dt><dd>${statusBadgeHtml(native.status)}</dd></div>`,
+    `    <div><dt>可用</dt><dd>${native.available ? '是' : '否'}</dd></div>`,
+    `    <div><dt>AD-MCP</dt><dd>${native.serverPath ? `<code>${escapeHtml(native.serverPath)}</code>` : '—'}</dd></div>`,
+    `    <div><dt>Python</dt><dd>${native.python ? `<code>${escapeHtml(native.python)}</code>` : '—'}</dd></div>`,
+    `    <div><dt>Altium 运行</dt><dd>${native.altium?.running === true ? '是' : native.altium?.running === false ? '否' : '未知'}</dd></div>`,
+    `    <div><dt>ERC 状态</dt><dd>${statusBadgeHtml(native.erc.status)}</dd></div>`,
+    `    <div><dt>DRC 状态</dt><dd>${statusBadgeHtml(native.drc.status)}</dd></div>`,
+    `    <div><dt>库核对状态</dt><dd>${statusBadgeHtml(native.checks.library?.status ?? 'not_evaluated')}</dd></div>`,
+    '  </dl>',
+    checkTable,
+    ercTable,
+    drcTable,
+    libraryTable,
+    findingsTable,
+    reasons,
+    artifactTable,
+    '</section>',
+  ].filter(Boolean).join('\n')
+}
+
+const NATIVE_CHECK_LABELS = {
+  erc: 'Altium ERC',
+  drc: 'Altium DRC',
+  symbol_libraries: '符号库清单',
+  footprint_libraries: '封装库清单',
+  library_crosscheck: '引脚/焊盘核对',
+  library: '库检查汇总',
+}
+
+const NATIVE_LIBRARY_KIND_LABELS = {
+  schlib: '符号库',
+  pcblib: '封装库',
+  intlib: '集成库',
+  unknown: '库',
+}
+
+function nativeStatusText(native) {
+  if (!native.available) {
+    return `AD 原生检查不可用：${native.reasons.join('；') || 'AD-MCP 或 Altium 不在线。'}`
+  }
+  if (native.status === 'failed') {
+    return `AD 原生检查执行失败：${native.reasons.join('；') || '工具没有正常完成。'}`
+  }
+  if (native.status === 'not_evaluated') {
+    return `AD 原生检查未评估：${native.reasons.join('；') || '输入不足。'}`
+  }
+  if (native.status === 'partial') {
+    return `AD 原生检查部分完成：ERC ${native.erc.status}，DRC ${native.drc.status}，`
+      + `库 ${native.checks.library?.status ?? 'not_evaluated'}。未完成项不代表通过。`
+  }
+  if (native.status === 'found') {
+    return `AD 原生检查发现问题：ERC ${native.erc.total} 条违规，DRC ${native.drc.violationCount} 条违规，`
+      + `库不一致 ${native.counts.libraries.mismatches} 处。`
+  }
+  return `AD 原生检查完成，未发现 ERC/DRC 违规或库不一致。`
+}
+
 function renderFindings({ findings }) {
   const issues = findings.filter(finding => finding.kind !== 'fact')
   const counts = countFindings(issues)
@@ -1698,6 +2077,9 @@ function renderCoverage({ coverage, status, overview }) {
     // 避免被读成「数据不足但尝试过」。
     if (key === 'emc' && coverage.emc?.requested === false) {
       return '未启用 --emc（可选步骤），本次没有运行。'
+    }
+    if (key.startsWith('native_') && coverage.native?.requested === false) {
+      return '未启用 --with-ad（可选深度模式），本次没有运行；这不等于通过。'
     }
     return detail
   }

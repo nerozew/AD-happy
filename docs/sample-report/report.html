@@ -295,14 +295,14 @@
     <p class="kicker">AD-Happy 设计审查报告</p>
     <h1>DCDC Buck Converter</h1>
     <dl class="meta">
-      <div><dt>生成时间</dt><dd>2026-11-25 05:21:35</dd></div>
+      <div><dt>生成时间</dt><dd>2026-11-25 06:14:25</dd></div>
     </dl>
   </header>
   <main>
 <section class="panel" id="conclusion">
   <h2>结论</h2>
-  <p class="verdict">未发现必须修复的问题，有 1 项建议修复；有 4 条规则未评估，不能据此认为全部通过。</p>
-  <ul class="stat-grid"><li class="stat must_fix"><span class="stat-value">0</span><span class="stat-label">必须修复</span></li><li class="stat should_fix"><span class="stat-value">1</span><span class="stat-label">建议修复</span></li><li class="stat nice_to_have"><span class="stat-value">2</span><span class="stat-label">可优化</span></li><li class="stat facts"><span class="stat-value">8</span><span class="stat-label">实测事实</span></li><li class="stat partial"><span class="stat-value">0</span><span class="stat-label">部分完成规则</span></li><li class="stat na"><span class="stat-value">4</span><span class="stat-label">未评估规则</span></li><li class="stat failed"><span class="stat-value">0</span><span class="stat-label">失败规则</span></li></ul>
+  <p class="verdict">未发现必须修复的问题，有 1 项建议修复；有 7 条规则未评估，不能据此认为全部通过。</p>
+  <ul class="stat-grid"><li class="stat must_fix"><span class="stat-value">0</span><span class="stat-label">必须修复</span></li><li class="stat should_fix"><span class="stat-value">1</span><span class="stat-label">建议修复</span></li><li class="stat nice_to_have"><span class="stat-value">2</span><span class="stat-label">可优化</span></li><li class="stat facts"><span class="stat-value">8</span><span class="stat-label">实测事实</span></li><li class="stat partial"><span class="stat-value">0</span><span class="stat-label">部分完成规则</span></li><li class="stat na"><span class="stat-value">7</span><span class="stat-label">未评估规则</span></li><li class="stat failed"><span class="stat-value">0</span><span class="stat-label">失败规则</span></li></ul>
   <p class="note">「未评估」表示输入数据不足，本次没有得出通过或失败的结论；「部分完成」表示规则已运行但部分子检查被跳过。两者都不等同于「通过」。</p>
 </section>
 <section class="panel" id="overview">
@@ -607,6 +607,9 @@
       <li><code>datasheets</code><span class="rule-name">数据手册覆盖与提取计划检查</span><span class="badge badge-not_evaluated">未评估</span><span class="detail">规则所需输入不足，本次没有结论；此状态不等于「通过」。</span></li>
       <li><code>decoupling</code><span class="rule-name">去耦电容检查</span><span class="badge badge-not_evaluated">未评估</span><span class="detail">规则所需输入不足，本次没有结论；此状态不等于「通过」。</span></li>
       <li><code>emc</code><span class="rule-name">EMC 预合规检查</span><span class="badge badge-not_evaluated">未评估</span><span class="detail">未启用 --emc（可选步骤），本次没有运行。</span></li>
+      <li><code>native_drc</code><span class="rule-name">AD 原生 DRC</span><span class="badge badge-not_evaluated">未评估</span><span class="detail">未启用 --with-ad（可选深度模式），本次没有运行；这不等于通过。</span></li>
+      <li><code>native_erc</code><span class="rule-name">AD 原生 ERC</span><span class="badge badge-not_evaluated">未评估</span><span class="detail">未启用 --with-ad（可选深度模式），本次没有运行；这不等于通过。</span></li>
+      <li><code>native_library</code><span class="rule-name">AD 库与引脚/焊盘核对</span><span class="badge badge-not_evaluated">未评估</span><span class="detail">未启用 --with-ad（可选深度模式），本次没有运行；这不等于通过。</span></li>
       <li><code>spice</code><span class="rule-name">SPICE 仿真检查</span><span class="badge badge-not_evaluated">未评估</span><span class="detail">规则所需输入不足，本次没有结论；此状态不等于「通过」。</span></li>
       </ul>
   </div>
@@ -632,6 +635,9 @@
       <tr><th scope="row"><span class="rule-name">DFM 制造规则检查</span><code>dfm</code></th><td><span class="badge badge-pass">通过</span></td></tr>
       <tr><th scope="row"><span class="rule-name">EMC 预合规检查</span><code>emc</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
       <tr><th scope="row"><span class="rule-name">制造文件（Gerber/钻孔）检查</span><code>gerber</code></th><td><span class="badge badge-pass">通过</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">AD 原生 DRC</span><code>native_drc</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">AD 原生 ERC</span><code>native_erc</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
+      <tr><th scope="row"><span class="rule-name">AD 库与引脚/焊盘核对</span><code>native_library</code></th><td><span class="badge badge-not_evaluated">未评估</span></td></tr>
       <tr><th scope="row"><span class="rule-name">焊盘间距检查</span><code>pad_distance</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
       <tr><th scope="row"><span class="rule-name">原理图与 PCB 引脚网络对照</span><code>pin_pad</code></th><td><span class="badge badge-pass">通过</span></td></tr>
       <tr><th scope="row"><span class="rule-name">稳压器识别</span><code>power_regulator</code></th><td><span class="badge badge-found">发现问题</span></td></tr>
