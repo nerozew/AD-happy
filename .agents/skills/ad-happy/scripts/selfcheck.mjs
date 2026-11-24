@@ -37,17 +37,22 @@ export function runSelfCheck(env = {}) {
 function readAltiumtsVersion(errors) {
   const pkgPath = join(SKILL_ROOT, 'node_modules', 'altiumts', 'package.json')
   if (!existsSync(pkgPath)) {
-    errors.push(`未安装 altiumts@${REQUIRED_ALTIMTS_VERSION}，请运行 npm install`)
+    errors.push(
+      `未安装 altiumts@${REQUIRED_ALTIMTS_VERSION}，请在 ${SKILL_ROOT} 执行 npm install`,
+    )
     return ''
   }
   try {
     const { version } = JSON.parse(readFileSync(pkgPath, 'utf8'))
     if (version !== REQUIRED_ALTIMTS_VERSION) {
-      errors.push(`altiumts 版本应为 ${REQUIRED_ALTIMTS_VERSION}，当前 ${version}`)
+      errors.push(
+        `altiumts 版本应为 ${REQUIRED_ALTIMTS_VERSION}，当前 ${version}；`
+        + `请在 ${SKILL_ROOT} 重新执行 npm install`,
+      )
     }
     return version ?? ''
   } catch (e) {
-    errors.push(`无法读取 altiumts 版本: ${e.message}`)
+    errors.push(`无法读取 altiumts 版本（${pkgPath}）: ${e.message}`)
     return ''
   }
 }

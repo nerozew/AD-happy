@@ -9,6 +9,13 @@ description: 审查 Altium Designer 工程（.PrjPcb/.SchDoc/.PcbDoc）：用户
 
 `<skill>` 指本文件所在目录的绝对路径（通常为 `<仓库>/.agents/skills/ad-happy`）。下文命令中的占位符必须替换为绝对路径。
 
+## 前置条件
+
+- Node ≥ 20、Python ≥ 3.10 已安装并在 `PATH` 中。
+- 首次使用前，在本技能目录（`.agents/skills/ad-happy`）执行 `npm install`，安装锁定版本 `altiumts@0.0.95`。
+- kicad-happy 的 scripts 目录（包含 `kicad_types.py`、`finding_schema.py`）。默认路径为 `D:/Tools/kicad-happy/skills/kicad/scripts`；若安装在其他位置，设置环境变量 `KICAD_HAPPY_SCRIPTS` 指向该目录。该目录只读，不要修改。
+- 运行 `node "<skill>/scripts/selfcheck.mjs"` 可检查以上依赖；报错信息会给出缺失项与技能目录绝对路径。
+
 ## 步骤
 
 ### 1. 确认工程路径
