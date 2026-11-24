@@ -52,6 +52,17 @@ FAILED = "failed"
 
 RULES = ("dfm", "pad_distance", "current_capacity", "decoupling_placement")
 
+# 这些检测器输出的是「实测事实」，不是设计问题：不参与问题计数，
+# 在报告中单独成节。
+FACT_DETECTORS = frozenset({
+    "pad_distance",
+    "current_capacity",
+    "decoupling_placement",
+})
+
+# 焊盘间距只把绕行比 ≥ 1.5 的焊盘对列为异常；其余按网络聚合。
+PAD_DISTANCE_ANOMALY_RATIO = 1.5
+
 # 与 analyze_decoupling_placement 内部的过滤条件保持一致。
 _CAP_RE = re.compile(r"^C\d")
 _IC_RE = re.compile(r"^(U|IC)\d")
@@ -61,7 +72,7 @@ _IC_RE = re.compile(r"^(U|IC)\d")
 _MAKE_FINDING_KEYS = frozenset({
     "detector", "rule_id", "category", "summary", "description",
     "severity", "confidence", "evidence_source", "components", "nets",
-    "pins", "recommendation", "report_context", "finding_id",
+    "pins", "recommendation", "report_context", "finding_id", "kind",
 })
 
 
@@ -227,16 +238,16 @@ def _dfm_skipped_checks(data):
 
 def _pad_distance(data):
     if not data["tracks"]["segments"]:
-        return [], NOT_EVALUATED
+        return [], NOT_EVALUATED, []
     if not _pad_nets(data["footprints"]):
-        return [], NOT_EVALUATED
+        return [], NOT_EVALUATED, []
     result = analyze_pad_to_pad_distances(
         data["footprints"], data["tracks"], data["vias"], data["net_names"],
     )
     # 没有成对结果、且存在只有铺铜的焊盘网络时，说明漏检可能来自缺失的
     # 铺铜数据，而不是设计真的没有可测路径。
     empty_status = _coverage_status(data)
-    return list(result.items()), empty_status
+    return _aggregate_pad_distances(result.items()), empty_status, []
 
 
 def _current_capacity(data):
@@ -506,6 +517,59 @@ def _pad_nets_without_tracks(footprints, tracks):
 # finding 统一化
 # ---------------------------------------------------------------------------
 
+def _aggregate_pad_distances(items):
+    """把逐焊盘对的结果按网络聚合，避免几十条事实挤占问题清单。
+
+    每个网络保留：焊盘对数量、走线距离范围、最大绕行比与代表焊盘对；
+    另列出绕行比 ≥ 1.5 的异常焊盘对。
+    """
+    by_net: dict[str, list[tuple[str, dict]]] = {}
+    for key, entry in items:
+        net = str(entry.get("net") or "")
+        by_net.setdefault(net, []).append((key, entry))
+
+    aggregated = []
+    for net in sorted(by_net):
+        pairs = by_net[net]
+        representative_key, representative = max(
+            pairs,
+            key=lambda pair: _number(pair[1].get("ratio")),
+        )
+        routed_values = [
+            _number(entry.get("routed_distance_mm"))
+            for _, entry in pairs
+        ]
+        anomalies = [
+            {
+                "pair": key,
+                "routed_distance_mm": _number(entry.get("routed_distance_mm")),
+                "euclidean_distance_mm": _number(entry.get("euclidean_distance_mm")),
+                "ratio": _number(entry.get("ratio")),
+            }
+            for key, entry in pairs
+            if _number(entry.get("ratio")) >= PAD_DISTANCE_ANOMALY_RATIO
+        ]
+        aggregated.append({
+            "net": net,
+            "pairs": [key for key, _ in pairs],
+            "pair_count": len(pairs),
+            "representative_pair": representative_key,
+            "representative": representative,
+            "routed_distance_mm": _number(
+                representative.get("routed_distance_mm")
+            ),
+            "euclidean_distance_mm": _number(
+                representative.get("euclidean_distance_mm")
+            ),
+            "ratio": _number(representative.get("ratio")),
+            "min_routed_distance_mm": min(routed_values) if routed_values else 0.0,
+            "max_routed_distance_mm": max(routed_values) if routed_values else 0.0,
+            "max_ratio": _number(representative.get("ratio")),
+            "anomalies": anomalies,
+        })
+    return aggregated
+
+
 def _normalize_finding(item, detector):
     """把已带 finding 字段的检测器输出整成 finding_schema 形状。"""
     report_context = item.get("report_context") or {}
@@ -514,6 +578,9 @@ def _normalize_finding(item, detector):
         for key, value in item.items()
         if key not in _MAKE_FINDING_KEYS
     }
+    kind = item.get("kind") or (
+        "fact" if detector in FACT_DETECTORS else "issue"
+    )
     confidence = item.get("confidence")
     if confidence not in VALID_CONFIDENCES:
         # 与 Task 7 一致：缺失时退到保守的 heuristic，不冒充确定性结论。
@@ -538,46 +605,77 @@ def _normalize_finding(item, detector):
         impact=report_context.get("impact"),
         standard_ref=report_context.get("standard_ref"),
         source="pcb",
+        kind=kind,
         **extra,
     )
 
 
-def _pad_distance_finding(item, detector):
-    """把 analyze_pad_to_pad_distances 的 (键, 事实) 转成 info finding。"""
-    key, entry = item
+def _pad_distance_finding(entry, detector):
+    """把按网络聚合的焊盘间距结果转成一条实测事实。"""
     net = str(entry.get("net") or "")
-    routed = _number(entry.get("routed_distance_mm"))
-    euclidean = _number(entry.get("euclidean_distance_mm"))
-    ratio = _number(entry.get("ratio"))
-    ref_a, pad_a = _split_pad_key(key, 0)
-    ref_b, pad_b = _split_pad_key(key, 1)
-    extra = {name: value for name, value in entry.items() if name != "net"}
+    pairs = [str(pair) for pair in entry.get("pairs") or []]
+    components = sorted({
+        reference
+        for key in pairs
+        for reference in [_split_pad_key(key, 0)[0], _split_pad_key(key, 1)[0]]
+        if reference
+    })
+    pins = [
+        f"{reference}.{pad}"
+        for key in pairs
+        for reference, pad in (
+            _split_pad_key(key, 0),
+            _split_pad_key(key, 1),
+        )
+        if reference
+    ]
+    anomalies = entry.get("anomalies") or []
+    anomaly_text = ""
+    if anomalies:
+        details = "；".join(
+            f"{item['pair']} 绕行比 {item['ratio']}"
+            for item in anomalies
+        )
+        anomaly_text = f"其中绕行比偏大的焊盘对：{details}。"
+    summary = (
+        f"网络 {net}：{entry.get('pair_count', len(pairs))} 对焊盘间实测走线距离 "
+        f"{entry.get('min_routed_distance_mm')}–{entry.get('max_routed_distance_mm')} mm，"
+        f"最大绕行比 {entry.get('max_ratio')}"
+        f"（代表焊盘对 {entry.get('representative_pair')}）。"
+    )
+    description = (
+        f"同一网络 {net!r} 上共测量 {entry.get('pair_count', len(pairs))} 对焊盘的"
+        f"实际走线距离（非直线距离）。代表焊盘对 "
+        f"{entry.get('representative_pair')} 的走线距离为 "
+        f"{entry.get('routed_distance_mm')} mm，直线距离为 "
+        f"{entry.get('euclidean_distance_mm')} mm，绕行比 {entry.get('ratio')}。"
+        f"{anomaly_text}这是实测事实，不是违规。"
+    )
+    extra = {
+        name: value
+        for name, value in entry.items()
+        if name not in ("net", "pairs", "representative")
+    }
     return make_finding(
         detector=detector,
         rule_id="PD-DET",
         category="pad_distance",
-        # 用焊盘对作稳定标识，避免同类事实在 finding_id 里互相撞号。
-        detection_id=key,
-        summary=(
-            f"{key} on {net}: routed {routed} mm "
-            f"(Euclidean {euclidean} mm, ratio {ratio})"
-        ),
-        description=(
-            f"Pad pair {key} on net {net!r} has {routed} mm of routed "
-            f"copper against {euclidean} mm straight-line distance "
-            f"(ratio {ratio}). Measured fact, not a violation."
-        ),
+        # 按网络聚合后每个网络一条，detection_id 用网络名保证稳定。
+        detection_id=f"pad-distance-{net}",
+        summary=summary,
+        description=description,
         severity="info",
         confidence="deterministic",
         evidence_source="topology",
-        components=sorted({ref for ref in (ref_a, ref_b) if ref}),
+        components=components,
         nets=[net] if net else [],
-        pins=[pin for pin in (f"{ref_a}.{pad_a}", f"{ref_b}.{pad_b}") if pin != "."],
+        pins=pins,
         recommendation="",
         report_section="Pad Distances",
         impact="",
         standard_ref="",
         source="pcb",
+        kind="fact",
         **extra,
     )
 
@@ -603,12 +701,12 @@ def _decoupling_finding(entry, detector):
         category="decoupling",
         detection_id=f"decoupling-{ic}",
         summary=(
-            f"{ic}: {len(nearby)} nearby decoupling cap(s), "
-            f"closest {closest} mm"
+            f"{ic}：10 mm 内有 {len(nearby)} 个去耦电容，"
+            f"最近距离 {closest} mm。"
         ),
         description=(
-            f"IC {ic} has {len(nearby)} capacitor(s) within 10 mm on "
-            f"shared non-ground nets; the closest is {closest} mm away."
+            f"IC {ic} 在共享非地网络的 10 mm 范围内有 {len(nearby)} 个电容，"
+            f"最近的一个距离 {closest} mm。这是实测摆放事实，不是违规。"
         ),
         severity="info",
         confidence="deterministic",
@@ -621,6 +719,7 @@ def _decoupling_finding(entry, detector):
         impact="",
         standard_ref="",
         source="pcb",
+        kind="fact",
         nearby_caps=nearby,
         closest_cap_mm=closest,
         **extra,
@@ -653,6 +752,7 @@ def _failure_finding(rule, exc):
         ),
         recommendation="检查 kicad-happy 版本与 PcbSnapshot 字段是否匹配。",
         source="pcb",
+        kind="issue",
     )
 
 

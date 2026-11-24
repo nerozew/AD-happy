@@ -659,9 +659,17 @@ function buildSummary(state, context) {
   } = context
 
   const severityCounts = { must_fix: 0, should_fix: 0, nice_to_have: 0 }
+  let factCount = 0
   for (const finding of findings) {
-    severityCounts[severityGroup(finding.severity)] += 1
+    if (findingKind(finding) === 'fact') {
+      factCount += 1
+    } else {
+      severityCounts[severityGroup(finding.severity)] += 1
+    }
   }
+  const issueCount = severityCounts.must_fix
+    + severityCounts.should_fix
+    + severityCounts.nice_to_have
   const ruleCounts = Object.assign(Object.create(null), {
     pass: 0,
     found: 0,
@@ -673,7 +681,7 @@ function buildSummary(state, context) {
     ruleCounts[value] = (ruleCounts[value] ?? 0) + 1
   }
 
-  const { top, omitted } = selectTopFindings(findings, severityGroup)
+  const { top, omitted } = selectTopFindings(findings, severityGroup, status)
 
   return {
     schemaVersion: 1,
@@ -698,7 +706,9 @@ function buildSummary(state, context) {
       must_fix: severityCounts.must_fix,
       should_fix: severityCounts.should_fix,
       nice_to_have: severityCounts.nice_to_have,
-      total: findings.length,
+      // total 只统计问题；实测事实单独计数，不挤占问题数量。
+      total: issueCount,
+      facts: factCount,
       rules: ruleCounts,
     },
     rules: status,
@@ -708,26 +718,79 @@ function buildSummary(state, context) {
   }
 }
 
-function selectTopFindings(findings, severityGroup, limit = TOP_FINDINGS_LIMIT) {
+function selectTopFindings(findings, severityGroup, status, limit = TOP_FINDINGS_LIMIT) {
   const ranked = findings.map((finding, index) => ({
     finding,
     index,
     group: severityGroup(finding.severity),
+    kind: findingKind(finding),
+    ruleKey: statusKeyForFinding(finding),
   }))
-  ranked.sort((a, b) => (
-    GROUP_RANK[a.group] - GROUP_RANK[b.group]
-    || compareText(scalarText(a.finding.rule_id), scalarText(b.finding.rule_id))
-    || a.index - b.index
-  ))
-  const top = ranked
+  ranked.sort(compareRankedFindings)
+
+  const selected = []
+  const seen = new Set()
+  const take = (entry) => {
+    if (seen.has(entry.index)) return false
+    seen.add(entry.index)
+    selected.push(entry)
+    return true
+  }
+
+  // 第一轮：每个 found 规则至少保留一条。优先非事实项，保证识别结果
+  // 不会被大量实测事实挤出 top-N。
+  const foundRules = Object.entries(status ?? {})
+    .filter(([, value]) => value === 'found')
+    .map(([rule]) => rule)
+  for (const rule of foundRules) {
+    const preferred = ranked.find(entry => (
+      entry.ruleKey === rule && entry.kind !== 'fact'
+    ))
+    const fallback = ranked.find(entry => entry.ruleKey === rule)
+    const entry = preferred ?? fallback
+    if (entry) take(entry)
+  }
+
+  // 第二轮：其余问题按严重度/规则 ID 排序补齐；第三轮才轮到事实。
+  for (const entry of ranked) {
+    if (selected.length >= limit) break
+    if (entry.kind !== 'fact') take(entry)
+  }
+  for (const entry of ranked) {
+    if (selected.length >= limit) break
+    take(entry)
+  }
+
+  const top = selected
     .slice(0, limit)
     .map(entry => summarizeFinding(entry.finding, entry.group))
   return { top, omitted: Math.max(findings.length - top.length, 0) }
 }
 
+function compareRankedFindings(a, b) {
+  // 问题优先于事实，其次按严重度、规则 ID 与输入顺序稳定排序。
+  if (a.kind !== b.kind) return a.kind === 'fact' ? 1 : -1
+  return GROUP_RANK[a.group] - GROUP_RANK[b.group]
+    || compareText(scalarText(a.finding.rule_id), scalarText(b.finding.rule_id))
+    || a.index - b.index
+}
+
+function findingKind(finding) {
+  return scalarText(finding.kind) === 'fact' ? 'fact' : 'issue'
+}
+
+// pipeline 的 status 以规则名为键；跨域检查的 finding detector 是 crosscheck，
+// 对应状态键 pin_pad。
+function statusKeyForFinding(finding) {
+  const detector = scalarText(finding.detector)
+  return detector === 'crosscheck' ? 'pin_pad' : detector
+}
+
 function summarizeFinding(finding, group) {
   const entry = {
     rule_id: scalarText(finding.rule_id),
+    detector: scalarText(finding.detector),
+    kind: findingKind(finding),
     severity: scalarText(finding.severity),
     group,
     title: truncateText(

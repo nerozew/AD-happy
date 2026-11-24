@@ -199,6 +199,30 @@ test('DFM 被跳过的子检查在覆盖节列出', () => {
   assert.match(html, /过孔缺少外径/)
 })
 
+test('实测事实单独成节且不计入问题计数', () => {
+  const html = renderReport({
+    ...data,
+    findings: [
+      { rule_id: 'XP-001', severity: 'must_fix', title: '网络不一致', evidence: '证据' },
+      {
+        rule_id: 'PD-DET',
+        severity: 'info',
+        kind: 'fact',
+        summary: '网络 FB：3 对焊盘间实测走线距离 2.16–5.44 mm',
+        evidence: '实测事实',
+      },
+    ],
+  })
+  assert.match(html, /id="facts"/)
+  assert.match(html, /实测事实/)
+  assert.match(html, /不计入问题计数/)
+  const facts = html.slice(html.indexOf('id="facts"'), html.indexOf('id="coverage"'))
+  assert.match(facts, /PD-DET/)
+  const issues = html.slice(html.indexOf('id="findings"'), html.indexOf('id="facts"'))
+  assert.ok(!issues.includes('PD-DET'), '实测事实不应出现在问题清单')
+  assert.match(issues, /XP-001/)
+})
+
 test('部分完成的规则显示「部分完成」且不计入通过', () => {
   const html = renderReport({
     ...data,

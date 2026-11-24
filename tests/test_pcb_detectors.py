@@ -67,8 +67,16 @@ def test_expected_status_on_fixture():
 def test_expected_findings_on_fixture():
     r = run_pcb(PCB)
     counts = Counter(finding["detector"] for finding in r["findings"])
-    # DFM 0 违规；焊盘间距 4 对事实；去耦摆放 1 条 info。
-    assert counts == Counter({"pad_distance": 4, "decoupling_placement": 1})
+    # DFM 0 违规；焊盘间距按网络聚合为 2 条事实；去耦摆放 1 条 info。
+    assert counts == Counter({"pad_distance": 2, "decoupling_placement": 1})
+
+
+def test_facts_are_separated_from_issues():
+    r = run_pcb(PCB)
+    for finding in r["findings"]:
+        assert finding["kind"] in {"fact", "issue"}
+        if finding["detector"] in {"pad_distance", "decoupling_placement"}:
+            assert finding["kind"] == "fact"
 
 
 def test_pad_distance_keeps_measured_facts():
@@ -77,6 +85,11 @@ def test_pad_distance_keeps_measured_facts():
     assert {"routed_distance_mm", "euclidean_distance_mm", "ratio"} <= set(finding)
     assert finding["severity"] == "info"
     assert finding["nets"]
+    # 每个网络一条：FB 有 3 对、NetC1_1 有 1 对，聚合后仍保留代表值。
+    assert finding["pair_count"] >= 1
+    assert finding["min_routed_distance_mm"] <= finding["max_routed_distance_mm"]
+    assert finding["max_ratio"] >= 1.0
+    assert isinstance(finding["anomalies"], list)
 
 
 def test_dfm_sees_millimetres(monkeypatch):

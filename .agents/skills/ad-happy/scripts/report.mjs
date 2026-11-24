@@ -187,6 +187,7 @@ function normalizeFinding(finding) {
   const description = scalarText(finding.description)
   return {
     ruleId: scalarText(finding.rule_id) || '（无规则 ID）',
+    kind: scalarText(finding.kind) === 'fact' ? 'fact' : 'issue',
     groupKey: severityGroup(finding.severity),
     title: scalarText(finding.title) || scalarText(finding.summary) || '（无标题）',
     // 兼容原始 finding：没有 evidence 时用 description 作为证据展示。
@@ -220,13 +221,16 @@ function renderBody(report) {
     renderOverview(report),
     renderDocuments(report),
     renderFindings(report),
+    renderFacts(report),
     renderCoverage(report),
     renderFigures(report),
   ].filter(Boolean).join('\n')
 }
 
 function renderConclusion({ findings, status, overview }) {
-  const counts = countFindings(findings)
+  const issues = findings.filter(finding => finding.kind !== 'fact')
+  const facts = findings.filter(finding => finding.kind === 'fact')
+  const counts = countFindings(issues)
   const notEvaluated = countStatus(status, 'not_evaluated')
   const partial = countStatus(status, 'partial')
   const failed = countStatus(status, 'failed')
@@ -234,6 +238,7 @@ function renderConclusion({ findings, status, overview }) {
     stat('must_fix', counts.must_fix, '必须修复'),
     stat('should_fix', counts.should_fix, '建议修复'),
     stat('nice_to_have', counts.nice_to_have, '可优化'),
+    stat('facts', facts.length, '实测事实'),
     stat('partial', partial, '部分完成规则'),
     stat('na', notEvaluated, '未评估规则'),
     stat('failed', failed, '失败规则'),
@@ -373,15 +378,36 @@ function renderDocuments({ boards }) {
 }
 
 function renderFindings({ findings }) {
-  const counts = countFindings(findings)
+  const issues = findings.filter(finding => finding.kind !== 'fact')
+  const counts = countFindings(issues)
   const groups = SEVERITY_GROUPS
-    .map(group => renderGroup(group, findings.filter(f => f.groupKey === group.key), counts[group.key]))
+    .map(group => renderGroup(group, issues.filter(f => f.groupKey === group.key), counts[group.key]))
     .join('\n')
   return [
     '<section class="panel" id="findings">',
     '  <h2>问题清单</h2>',
-    `  <p class="hint">共 ${findings.length} 条；按严重度分组，组内按规则 ID 排序。</p>`,
+    `  <p class="hint">共 ${issues.length} 条问题；按严重度分组，组内按规则 ID 排序。实测事实单独列在下一节，不计入问题数量。</p>`,
     groups,
+    '</section>',
+  ].join('\n')
+}
+
+// 「实测事实」：焊盘间距、载流、去耦摆放等测量结果，不参与问题计数。
+function renderFacts({ findings }) {
+  const facts = findings
+    .filter(finding => finding.kind === 'fact')
+    .map((finding, index) => ({ finding, index }))
+    .sort((a, b) => compareText(a.finding.ruleId, b.finding.ruleId) || a.index - b.index)
+    .map(entry => renderFindingItem(entry.finding, {
+      badgeLabel: '实测事实',
+      badgeClass: 'fact',
+    }))
+  if (facts.length === 0) return ''
+  return [
+    '<section class="panel" id="facts">',
+    '  <h2>实测事实</h2>',
+    `  <p class="hint">共 ${facts.length} 条测量结果，不计入问题计数；完整数据见 findings.json。</p>`,
+    facts.join('\n'),
     '</section>',
   ].join('\n')
 }
@@ -404,11 +430,13 @@ function renderGroup(group, findings, count) {
   ].join('\n')
 }
 
-function renderFindingItem(finding) {
+function renderFindingItem(finding, options = {}) {
   const group = groupFor(finding.groupKey)
+  const badgeLabel = options.badgeLabel ?? group.label
+  const badgeClass = options.badgeClass ?? group.key
   const lines = [
     '      <article class="finding">',
-    `        <div class="finding-meta"><code class="rule-id">${escapeHtml(finding.ruleId)}</code><span class="badge badge-${group.key}">${escapeHtml(group.label)}</span></div>`,
+    `        <div class="finding-meta"><code class="rule-id">${escapeHtml(finding.ruleId)}</code><span class="badge badge-${badgeClass}">${escapeHtml(badgeLabel)}</span></div>`,
     `        <h4 class="finding-title">${escapeHtml(finding.title)}</h4>`,
   ]
   if (finding.evidence) {

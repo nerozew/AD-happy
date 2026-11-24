@@ -361,6 +361,7 @@ def _mismatch_finding(ref, pin_number, sch_net, pcb_net, *, match_mode, pad_numb
         ),
         report_section="跨域一致性",
         source="crosscheck",
+        kind="issue",
         match_mode=match_mode,
         schematic_net=sch_net,
         pcb_net=pcb_net,
@@ -419,6 +420,7 @@ def _name_mismatch_finding(
         ),
         report_section="跨域一致性",
         source="crosscheck",
+        kind="issue",
         match_mode="name",
         schematic_net=sch_net,
         pcb_net=pcb_net,
@@ -447,6 +449,7 @@ def _failure_finding(exc):
         ),
         recommendation="检查 PcbSnapshot 与 AnalysisContext.pin_net 的字段是否匹配。",
         source="crosscheck",
+        kind="issue",
     )
 
 

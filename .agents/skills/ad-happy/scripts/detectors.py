@@ -44,7 +44,7 @@ FAILED = "failed"
 _MAKE_FINDING_KEYS = frozenset({
     "detector", "rule_id", "category", "summary", "description",
     "severity", "confidence", "evidence_source", "components", "nets",
-    "pins", "recommendation", "report_context", "finding_id",
+    "pins", "recommendation", "report_context", "finding_id", "kind",
 })
 
 
@@ -191,6 +191,8 @@ def _normalize_finding(item, detector):
         impact=report_context.get("impact"),
         standard_ref=report_context.get("standard_ref"),
         source="schematic",
+        # 原理图检测器的输出都是问题（或待核查项），不是「实测事实」。
+        kind="issue",
         **extra,
     )
 
@@ -212,6 +214,7 @@ def _failure_finding(rule, exc):
         ),
         recommendation="检查 kicad-happy 版本与 AnalysisContext 字段是否匹配。",
         source="schematic",
+        kind="issue",
     )
 
 
@@ -241,6 +244,7 @@ def _unconnected_pin_finding(pin):
             "marker if it is intentionally floating."
         ),
         source="schematic",
+        kind="issue",
     )
 
 
@@ -275,4 +279,5 @@ def _multi_driver_finding(entry):
             "others to separate nets or add arbitration."
         ),
         source="schematic",
+        kind="issue",
     )

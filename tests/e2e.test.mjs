@@ -94,9 +94,24 @@ test('summary 满足 32KB 约束并记录覆盖、计数与全部板卡', () => 
 
   const findings = readJson(outDir, 'findings.json')
   assert.ok(Array.isArray(findings) && findings.length > 0)
-  assert.equal(summary.counts.total, findings.length)
+  const factCount = findings.filter(finding => finding.kind === 'fact').length
+  assert.ok(factCount > 0, '默认运行应包含实测事实')
+  // 实测事实不计入问题计数。
+  assert.equal(summary.counts.facts, factCount)
+  assert.equal(summary.counts.total, findings.length - factCount)
   assert.ok(summary.findings.length > 0)
   assert.ok(summary.findings.length <= findings.length)
+  // 每个 found 规则至少有一条进入 summary top-N。
+  const statusRuleFor = finding => (
+    finding.detector === 'crosscheck' ? 'pin_pad' : finding.detector
+  )
+  for (const [rule, value] of Object.entries(summary.rules)) {
+    if (value !== 'found') continue
+    assert.ok(
+      summary.findings.some(finding => statusRuleFor(finding) === rule),
+      `summary top-N 应包含 found 规则 ${rule} 的至少一条结果`,
+    )
+  }
 
   const manifest = readJson(outDir, 'manifest.json')
   assert.equal(manifest.status, 'complete')

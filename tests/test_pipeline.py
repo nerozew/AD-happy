@@ -59,7 +59,8 @@ def test_pipeline_writes_findings_and_pipeline_summary(tmp_path):
 
     assert set(summary) == {"findings", "status", "coverage"}
     assert summary["findings"] == findings
-    assert len(findings) == 7
+    # 2 条原理图发现 + 2 条焊盘间距事实（按网络聚合）+ 1 条去耦摆放事实。
+    assert len(findings) == 5
     assert set(summary["status"]) == ALL_RULES
     assert set(summary["status"].values()) <= STATUSES
     assert summary["status"]["pin_pad"] == "pass"
