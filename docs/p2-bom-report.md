@@ -6,7 +6,7 @@
 
 P2 已完成：新增 `scripts/bom.mjs`，从已解析的工程数据构建 BOM，执行 4 项 `BM-` 检查，生成 `bom.csv` / `procurement.csv`，支持 `--bom` 导入 Altium BOM CSV 做差异比对，并把结果合并进 `findings.json`、`summary.json` 与中文报告「物料」章节。
 
-- Node 测试：`node --test tests/*.test.mjs` → **107 通过 / 0 失败**（其中新增 21 条 BOM 测试）。
+- Node 测试：`node --test tests/*.test.mjs` → **110 通过 / 0 失败**（其中新增 24 条 BOM 测试）。
 - Python 测试：`python -B -m pytest -q` → **71 通过**。
 - 样例报告已重新生成：`docs/sample-report/`；`summary.rules.bom = found`，报告含「物料」章节、`BM-001` 与 `procurement.csv` 路径。
 - 未修改 kicad-happy；未改变既有规则逻辑与阈值；无网络调用；未编造分销渠道。
@@ -28,7 +28,7 @@ P2 已完成：新增 `scripts/bom.mjs`，从已解析的工程数据构建 BOM�
 | `Value` | 6 | `22µF`、`10 kOhms` |
 | 其余（Capacitance、Tolerance、Package / Case 等） | 若干 | — |
 
-因此 `sch.mjs` 的元件对象新增 `parameters`（`Record<string, string>`，即元件直属参数的原样映射，同名参数保留第一条），并自动进入 `snapshot.json` 与 `raw.json`。BOM 层从这些参数中读取型号，不在解析层猜测。
+因此 `sch.mjs` 的元件对象新增 `parameters`（`Record<string, string>`，即元件直属参数的原样映射，同名参数保留第一条），并自动进入 `snapshot.json` 与 `raw.json`。BOM 层从这些参数中读取型号，不在解析层猜测。型号参数名归一化后会去掉结尾序号再匹配，因此 `Manufacturer Part Number 1`、`MFR Part Number 1`、`MPN1` 等真实工程常见命名也能识别；PCB 侧读取显式型号字段时使用同一规则。
 
 **关键实测结论：样板并非“完全没有 MPN”。** 8 个元件带 `Part Number`；只有 `IC1` 没有该参数，`Comment` 仅为 `TPS561208DDCR`。本实现不把 `Comment` 冒充 MPN，因此 `IC1` 产生 `BM-001`。这满足“至少一条 MPN 缺口”的验收，同时如实反映工程数据，而不是假设全部缺失。
 
@@ -131,17 +131,21 @@ P2 已完成：新增 `scripts/bom.mjs`，从已解析的工程数据构建 BOM�
 1. 任一项为 `failed` → `failed`；
 2. 没有 BOM 行 → `not_evaluated`；
 3. 所有检查都 `not_evaluated` → `not_evaluated`；
-4. 任一项 `not_evaluated`，或存在无位号元件 → `partial`；
-5. 任一项 `found` → `found`；
-6. 否则 `pass`。
+4. 有 `found` 且同时存在 `not_evaluated` 或有无位号元件 → `partial`；
+5. 有 `found` 且没有缺口 → `found`；
+6. 没有 `found`、但关键检查（通常是缺 MPN）为 `not_evaluated` → `not_evaluated`；
+7. 仅有无位号元件导致覆盖缺口 → `partial`；
+8. 否则 `pass`。
 
-`rules.bom` 使用同一状态。`found` 不会让整体运行退出码变为 3；`failed` / `partial` 按既有逻辑处理。显式 `--bom` 但工程没有可核对元件时，加入 `missingInputs`，退出码 3。
+`rules.bom` 使用同一状态。`found` 不会让整体运行退出码变为 3。
+
+**整体聚合规则（评审后调整）**：BOM 的 `partial` / `not_evaluated` 不参与 `overallStatus` 与退出码计算；只有 BOM `failed` 参与。理由：用户没有显式要求 BOM 检查时，缺 MPN 属于物料数据不足，不是本次分析失败。工程没有 MPN 数据时，整次运行保持 `complete` / 退出码 0，报告与 `rules.bom` 照常标 `not_evaluated` 并说明缺什么。显式 `--bom` 但工程没有可核对元件时同样只标 `not_evaluated`，不会单独把运行降级。
 
 ## 5. CSV 导入映射
 
 `importBomCsv(text)`：
 
-- 去掉 UTF-8 BOM；自动识别 `,` / `;` / Tab 分隔符（扫描前 30 行中含 `designator` / `位号` 的表头行）。
+- 去掉 UTF-8 BOM；自动识别 `,` / `;` / Tab 分隔符：对前 30 行逐行尝试三种分隔符，用 `mapColumn` 能映射出最多已知列的那个胜出（因此 `Reference`/`Refs` 等别名同样可用于探测，不再只认字面量 `designator`/`位号`）。
 - 表头大小写不敏感；归一化时去掉空格、下划线、点、斜杠与中英文括号。
 - 在前 30 行内查找表头行，允许 Altium 导出文件带标题行。
 - 位号单元格可包含多个位号（逗号、分号、中文标点、空白分隔），逐位号展开。
@@ -189,7 +193,7 @@ P2 已完成：新增 `scripts/bom.mjs`，从已解析的工程数据构建 BOM�
 - `summary.json` 新增：
   - `rules.bom`；
   - `bom`（状态、元件数、缺 MPN/封装数、重复位号数、两侧不一致数、两个 CSV 路径、导入差异计数）；
-  - `coverage.bom`（完整 coverage，含逐项检查状态与原因）。
+  - `coverage.bom`（完整 coverage 的 summary 版本：检查状态与原因；位号列表截断到 50 条并保留 `totals` 计数，避免大工程把 32KB 上限撑破）。
 - `manifest.json` 新增 `stages.bom` 与 `bom`（请求路径、状态、findings 数、行数、缺 MPN/封装、重复/不一致数、产物名）。
 - 旧产物清理列表加入 `bom.csv` / `procurement.csv`。
 - 终端摘要新增一行物料统计。
@@ -209,31 +213,34 @@ P2 已完成：新增 `scripts/bom.mjs`，从已解析的工程数据构建 BOM�
 
 ## 9. 测试与输出
 
-新增 `tests/bom.test.mjs`（21 条）：
+新增 `tests/bom.test.mjs`（24 条）：
 
 - 样板工程 9 行、8 行有 MPN、`IC1` 产生 `BM-001`、状态 `found`；
 - 合成缺 MPN 夹具产生 `BM-001` + `found`，断言不是 `pass`；
-- 完全没有 MPN 数据 → `checks.missing_mpn = not_evaluated`，不产生 `BM-001`，整体 `partial`；
+- 完全没有 MPN 数据 → `checks.missing_mpn = not_evaluated`，不产生 `BM-001`，`rules.bom = not_evaluated`；整次运行仍 `complete` / 退出码 0；
+- 带序号的型号参数（`Manufacturer Part Number 1`、`MFR Part Number 1`、`MPN1`）可识别；
 - 空工程 / 无元件 → `not_evaluated`，所有检查未评估；
 - 重复位号 `BM-003` 与数量合并；
 - 原理图↔PCB 双向不一致 `BM-004`；
 - 缺封装 `BM-002`；
 - `exportProcurement` 固定中文列、建议渠道为空、无分销商编造；
 - `exportBom` 附加参数与逗号转义；
-- CSV 导入：英文表头大小写不敏感、`Supplier Part Number` 回退、多位号单元格；中文表头（含 BOM 前缀）；分号分隔；无 Designator 列报错；
+- CSV 导入：英文表头大小写不敏感、`Supplier Part Number` 回退、多位号单元格；中文表头（含 BOM 前缀）；分号分隔；`Reference` 别名 + 分号分隔；无 Designator 列报错；
 - `diffBom` 缺件/多件、工程为空 `not_evaluated`；
 - 报告「物料」章节与 `not_evaluated` 文案；
 - 端到端：生成两个 CSV、`summary.rules.bom = found`、`BM-001`、manifest/snapshot 新字段、报告含「物料」；
 - 端到端 `--bom`：中文表头 BOM 回读无差异；删除 `IC1` 行后产生 `BM-005`；
 - 端到端 `--bom` 指向同一输出目录上一次生成的 `bom.csv` 时不会被产物清理误删；
 - 端到端 `--bom` 格式无效 → `rules.bom = failed` + `BM-ERR`；
+- 端到端无 MPN 工程 → 整体 `complete` / 退出码 0，`rules.bom = not_evaluated`，报告不写通过；
+- 端到端导入 3000 个工程外位号 → `summary.json` 仍 <32KB，BOM 列表被截断但总数保留；
 - 端到端 `--bom` 文件不存在 → 退出码 2；
 - 端到端无元件工程 → `rules.bom = not_evaluated`，报告不写通过。
 
 命令与结果：
 
 ```text
-node --test tests/*.test.mjs   → 107 passed, 0 failed
+node --test tests/*.test.mjs   → 110 passed, 0 failed
 python -B -m pytest -q         → 71 passed
 ```
 
@@ -261,10 +268,10 @@ node .agents/skills/ad-happy/scripts/analyze.mjs \
 以下情况不会给出「通过」，而是显式 `not_evaluated` / `partial`：
 
 1. **工程没有任何带位号的元件**：四项检查全部 `not_evaluated`，`reasons` 写「没有可检查的元件」。样例空工程已验证。
-2. **工程完全没有 MPN 参数**：`checks.missing_mpn = not_evaluated`，不产生 `BM-001`；其余检查正常评估，整体为 `partial`。原因：无法区分“元件本来不需要型号”与“型号数据未填写”。
-3. **只解析到一侧（原理图或 PCB）**：`checks.schematic_pcb_match = not_evaluated`，整体 `partial`。不会把“另一侧为空”当成全部不一致。
+2. **工程完全没有 MPN 参数**：`checks.missing_mpn = not_evaluated`，不产生 `BM-001`；`rules.bom = not_evaluated`，报告说明缺少型号数据。整次运行仍为 `complete` / 退出码 0（BOM 数据不足不参与整体聚合）。
+3. **只解析到一侧（原理图或 PCB）**：`checks.schematic_pcb_match = not_evaluated`。若同时没有其他问题，`rules.bom = not_evaluated`；若还有缺封装等问题，则为 `partial`。不会把“另一侧为空”当成全部不一致。
 4. **PCB-only 工程**：PcbDoc 通常没有显式 MPN 字段，`missing_mpn` 为 `not_evaluated`；封装、重复位号仍可检查。
-5. **`--bom` 但工程没有可核对元件**：`imported_diff = not_evaluated`，并加入 `missingInputs`，退出码 3。
+5. **`--bom` 但工程没有可核对元件**：`imported_diff = not_evaluated`，`rules.bom = not_evaluated`；该状态本身不会把整体运行降级为 `partial`。
 6. **导入 BOM 缺列**：`coverage.imported.missingColumns` 说明缺失列；相关字段按空处理，但检查本身仍执行。
 
 ## 12. 未做 / 边界
@@ -280,3 +287,43 @@ node .agents/skills/ad-happy/scripts/analyze.mjs \
 - 新增：`.agents/skills/ad-happy/scripts/bom.mjs`、`tests/bom.test.mjs`、`docs/p2-bom-report.md`
 - 修改：`.agents/skills/ad-happy/scripts/analyze.mjs`、`sch.mjs`、`pcb.mjs`、`report.mjs`、`SKILL.md`、`README.md`
 - 重新生成：`docs/sample-report/*`（含新增 `bom.csv`、`procurement.csv`）
+
+## 14. 评审修复（第二轮）
+
+针对 P2 评审的 3 个 Important 与 1 个相关 Minor，已修复并补测试：
+
+### 14.1 Important 1：带序号的工程侧 MPN 参数
+
+- `selectMpn` 在归一化后去掉结尾数字再匹配别名；`Manufacturer Part Number 1`、`MFR Part Number 1`、`MPN1`、`Part Number 1` 均可识别。
+- `pcb.mjs` 的 `readComponentMpn` 使用同一规则。
+- 依据：真实 Altium 工程大量使用带序号的参数名；此前会把“有 MPN”误判为“没有 MPN 数据”。
+- 测试：「工程参数支持带序号的型号别名」验证 3 种命名均取得 MPN，`missing_mpn = pass`、`status = pass`。
+
+### 14.2 Important 2：分隔符探测与表头别名
+
+- `detectDelimiter` 不再依赖字面量 `designator` / `位号`，而是对每个候选分隔符实际拆分并用 `mapColumn` 统计可映射列数，取最高分。
+- `Reference;Comment;Footprint;Quantity` + 分号分隔现在可正确导入。
+- 测试：「CSV 导入：分号分隔与缺少 Designator 列」新增 `Reference` + 分号用例。
+
+### 14.3 Important 3：BOM 状态不再改变整体运行状态
+
+- `overallStatus` 的 partial 聚合排除 `bom`；只有 `rules.bom = failed` 参与失败聚合。
+- 移除了“显式 `--bom` 且 `not_evaluated` 加入 `missingInputs`”的逻辑。
+- `recomputeBomStatus` 调整：没有 `found`、但关键检查为 `not_evaluated` 时返回 `not_evaluated`（而不是 `partial`），与控制器裁定一致。
+- 结果：原理图与 PCB 均解析成功、但完全没有 MPN 的工程 → `summary.status = complete`、退出码 0、`rules.bom = not_evaluated`，报告照常说明缺什么。
+- 测试：端到端「无 MPN 工程整体 complete/exit 0，rules.bom=not_evaluated」。夹具在测试运行时复制样板，并把 SchDoc 中所有等长的 `Part Number` 替换为 `Xart Number`，保留元件/值/封装/引脚，只移除型号数据。
+
+### 14.4 Minor：summary 中的无界 BOM 列表
+
+- 新增 `compactBomCoverage`：`duplicateDesignators` / `schematicOnly` / `pcbOnly` / `imported.missingFromBom` / `imported.extraInBom` / `imported.duplicateDesignators` 截断到 50 条，完整数量写入 `totals`；`reasons` 最多 50 条、每条 300 字符。
+- 报告与 `findings.json` 仍保留完整/半完整明细；summary 只保留样本与计数。
+- 测试：端到端导入 3000 个工程外位号 → `summary.json` <32KB、运行退出码 0、`coverage.bom.imported.extraInBom.length <= 50`、`totals.extraInBom = 3000`、`summary.bom.imported.extraInBom = 3000`。
+
+### 14.5 修复后的验证
+
+```text
+node --test tests/*.test.mjs   → 110 passed, 0 failed
+python -B -m pytest -q         → 71 passed
+```
+
+`docs/sample-report/` 已重新生成：`summary.status = complete`、`summary.rules.bom = found`、`summary.json` 约 12KB，报告含「物料」、`BM-001` 与 `procurement.csv`。

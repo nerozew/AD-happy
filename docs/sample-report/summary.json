@@ -35,7 +35,7 @@
       }
     ]
   },
-  "generatedAt": "2026-11-25 01:36:47",
+  "generatedAt": "2026-11-25 01:59:57",
   "status": "complete",
   "schematic": {
     "components": 9,
@@ -130,7 +130,12 @@
       },
       "reasons": [],
       "findings": 1,
-      "imported": null
+      "imported": null,
+      "totals": {
+        "duplicateDesignators": 0,
+        "schematicOnly": 0,
+        "pcbOnly": 0
+      }
     },
     "crossCheck": {
       "compared": 22,

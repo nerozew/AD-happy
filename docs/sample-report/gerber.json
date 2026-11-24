@@ -347,7 +347,7 @@
       "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.GTS": "a5eabd35789317a0ba9863236e1c1f0429afd335485a56e7ef37489b18044d68",
       "d:\\Code_all\\ad-happy\\tests\\fixtures\\gerber-basic\\board.TXT": "c9d8f10a6e1330b2b5a0ab4e627236f456750e00d8ab7a3b49d525ecb7601da2"
     },
-    "run_id": "20261124T173647Z-dd002a",
+    "run_id": "20261124T175957Z-1ba95a",
     "config_hash": null,
     "upstream_artifacts": {}
   },
@@ -358,6 +358,6 @@
   },
   "capability_mode_ref": {
     "source": "analysis/capability_mode.json",
-    "run_id": "20261124T173647Z-dd002a"
+    "run_id": "20261124T175957Z-1ba95a"
   }
 }

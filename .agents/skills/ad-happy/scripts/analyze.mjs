@@ -646,10 +646,6 @@ async function executeStages(state) {
   if (state.options.gerber !== null && ruleStatus.gerber === 'not_evaluated') {
     missingInputs.push('gerber')
   }
-  // 显式导入了 --bom 却没有可评估的工程元件时，同样属于部分完成。
-  if (state.options.bom !== null && ruleStatus.bom === 'not_evaluated') {
-    missingInputs.push('bom')
-  }
   const manufacturing = buildManufacturing(gerberStage.coverage, gerberFindings)
 
   // 10. 可选 SVG。失败只降级为不传并记录原因，绝不让整个分析失败。
@@ -690,7 +686,11 @@ async function executeStages(state) {
   }
 
   const ruleFailure = Object.values(ruleStatus).includes('failed')
-  const rulePartial = Object.values(ruleStatus).includes('partial')
+  // BOM 的 partial/not_evaluated 只表示「物料数据不足」，不是分析失败；
+  // 用户没有要求 BOM 检查时不应因此把整次运行降级为 partial。
+  // BOM 真正的执行失败（failed）仍参与聚合。
+  const rulePartial = Object.entries(ruleStatus)
+    .some(([rule, value]) => rule !== 'bom' && value === 'partial')
   const partial = state.errors.length > 0
     || missingInputs.length > 0
     || ruleFailure
@@ -1123,6 +1123,9 @@ function buildSummary(state, context) {
     bom: bom ?? null,
     coverage: {
       ...coverage,
+      // summary.json 有 32KB 硬上限：BOM 明细列表必须截断，只保留计数与样本；
+      // 完整列表在 report.html / findings.json 中。
+      bom: compactBomCoverage(coverage.bom),
       crossCheck: summarizeCrossCoverage(crossCoverage),
     },
     counts: {
@@ -1248,6 +1251,44 @@ function summarizeCrossCoverage(coverage) {
     byNetName: numberOrZero(source.by_net_name),
     netAliases: Array.isArray(source.net_aliases) ? source.net_aliases.length : 0,
     skipped: Array.isArray(source.skipped) ? source.skipped.length : 0,
+  }
+}
+
+// summary.json 的 BOM 覆盖只保留前 50 个位号作为样本，并记录完整数量。
+const BOM_SUMMARY_LIST_LIMIT = 50
+
+function compactBomCoverage(coverage) {
+  if (!isPlainObject(coverage)) return coverage ?? null
+  const cap = value => (Array.isArray(value)
+    ? value.slice(0, BOM_SUMMARY_LIST_LIMIT)
+    : [])
+  const total = value => (Array.isArray(value) ? value.length : 0)
+  const imported = isPlainObject(coverage.imported)
+    ? {
+        ...coverage.imported,
+        missingFromBom: cap(coverage.imported.missingFromBom),
+        extraInBom: cap(coverage.imported.extraInBom),
+        duplicateDesignators: cap(coverage.imported.duplicateDesignators),
+        totals: {
+          missingFromBom: total(coverage.imported.missingFromBom),
+          extraInBom: total(coverage.imported.extraInBom),
+          duplicateDesignators: total(coverage.imported.duplicateDesignators),
+        },
+      }
+    : null
+  return {
+    ...coverage,
+    duplicateDesignators: cap(coverage.duplicateDesignators),
+    schematicOnly: cap(coverage.schematicOnly),
+    pcbOnly: cap(coverage.pcbOnly),
+    reasons: cap(coverage.reasons)
+      .map(reason => truncateText(reason, 300)),
+    totals: {
+      duplicateDesignators: total(coverage.duplicateDesignators),
+      schematicOnly: total(coverage.schematicOnly),
+      pcbOnly: total(coverage.pcbOnly),
+    },
+    imported,
   }
 }
 

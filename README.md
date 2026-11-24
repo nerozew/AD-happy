@@ -48,7 +48,7 @@ node .agents/skills/ad-happy/scripts/analyze.mjs --project "<工程目录或 .Pr
 - 不解析 `.SchLib` / `.PcbLib` / `.IntLib`；层次原理图、总线、装配变体与自动修复不在首版范围。
 - 网表匹配率不足（引脚未全部入网）时，依赖网表的原理图规则标记为 `not_evaluated`，不会当作通过。
 - Gerber 分析复用 kicad-happy 的 `analyze_gerbers.py`：只解析 `.drl` 与 Excellon `.txt` 钻孔文件；检测到 `.xln`/`.nc` 时会注明未纳入评估。没有 Gerber/钻孔输入时制造文件检查为 `not_evaluated`。
-- BOM 检查从 Altium 元件参数（`Part Number`/`MPN`/`Manufacturer Part Number` 等）读取 MPN；工程完全没有型号数据时，缺 MPN 检查标记为 `not_evaluated`，不会给出「全部通过」。采购清单不联网、不推断分销商库存。
+- BOM 检查从 Altium 元件参数（`Part Number`/`MPN`/`Manufacturer Part Number` 等，支持带序号命名）读取 MPN；工程完全没有型号数据时，缺 MPN 检查标记为 `not_evaluated`，不会给出「全部通过」，也不会因此把整次运行判为部分完成。采购清单不联网、不推断分销商库存。
 - 上游 kicad-happy 检测器的 finding 文案已由适配层翻译成中文；原文保留在 `findings.json` 的 `source_text` 中，个别无法安全翻译的文本以「（检测器原文）」标注。
 
 ## 许可

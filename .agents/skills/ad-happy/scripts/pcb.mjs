@@ -91,7 +91,11 @@ const MPN_COMPONENT_FIELDS = new Set([
 
 function readComponentMpn(record) {
   for (const item of record.items ?? []) {
-    const key = String(item?.key ?? '').toLowerCase().replace(/[^a-z0-9]/gu, '')
+    // 与原理图侧一致：去掉结尾序号（MPN1、Manufacturer Part Number 1）。
+    const key = String(item?.key ?? '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/gu, '')
+      .replace(/\d+$/u, '')
     if (!MPN_COMPONENT_FIELDS.has(key)) continue
     const text = String(item?.value ?? '').trim()
     if (text) return text

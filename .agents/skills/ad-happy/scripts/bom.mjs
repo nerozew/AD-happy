@@ -221,10 +221,14 @@ export function recomputeBomStatus(coverage) {
   if (!(coverage?.rows > 0)) return 'not_evaluated'
   if (checks.length === 0) return 'not_evaluated'
   if (checks.every(value => value === 'not_evaluated')) return 'not_evaluated'
-  if (checks.includes('not_evaluated') || (coverage.componentsWithoutReference ?? 0) > 0) {
-    return 'partial'
-  }
-  if (checks.includes('found')) return 'found'
+  const hasFound = checks.includes('found')
+  const hasGap = checks.includes('not_evaluated')
+  const hasUnreferenced = (coverage.componentsWithoutReference ?? 0) > 0
+  if (hasFound) return hasGap || hasUnreferenced ? 'partial' : 'found'
+  // 没有发现问题、但关键检查（通常是缺 MPN）因数据不足无法评估时，
+  // 整体状态用 not_evaluated 表达「无法下结论」，而不是 partial。
+  if (hasGap) return 'not_evaluated'
+  if (hasUnreferenced) return 'partial'
   return 'pass'
 }
 
@@ -506,7 +510,9 @@ function selectMpn(parameters) {
   let best = ''
   let bestRank = Number.POSITIVE_INFINITY
   for (const [name, value] of Object.entries(parameters)) {
-    const normalized = normalizeKey(name)
+    // 真实工程常用带序号的参数名（Manufacturer Part Number 1、MPN1 等）；
+    // 归一化后去掉结尾数字再匹配别名。
+    const normalized = normalizeKey(name).replace(/\d+$/u, '')
     const rank = MPN_PARAMETER_NAMES.indexOf(normalized)
     if (rank === -1) continue
     if (rank < bestRank && value) {
@@ -746,18 +752,20 @@ function mapColumn(header) {
 function detectDelimiter(content) {
   const lines = content.split(/\r?\n/u).slice(0, 30)
   for (const line of lines) {
-    const lower = line.toLowerCase()
-    if (!lower.includes('designator') && !line.includes('位号')) continue
+    if (!line.trim()) continue
     let best = ','
-    let bestCount = 0
+    let bestScore = 0
+    // 不靠字面量 "designator" / "位号" 判断表头：Ref/Reference 等别名也要覆盖。
+    // 对每个候选分隔符实际拆一次，能映射出最多已知列的胜出。
     for (const candidate of [',', ';', '\t']) {
-      const count = line.split(candidate).length - 1
-      if (count > bestCount) {
+      const cells = parseCsv(line, candidate)[0] ?? []
+      const score = cells.filter(cell => mapColumn(cell) !== '').length
+      if (score > bestScore) {
         best = candidate
-        bestCount = count
+        bestScore = score
       }
     }
-    if (bestCount > 0) return best
+    if (bestScore > 0) return best
   }
   return ','
 }

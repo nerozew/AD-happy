@@ -4,9 +4,11 @@ import test from 'node:test'
 import assert from 'node:assert'
 import { spawnSync } from 'node:child_process'
 import {
+  copyFileSync,
   existsSync,
   mkdtempSync,
   readFileSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -41,6 +43,26 @@ function runAnalyze(args) {
     cwd: repoRoot,
     encoding: 'utf8',
   })
+}
+
+// 复制样板工程，并把 SchDoc 中所有 "Part Number" 等长替换为 "Xart Number"。
+// 这样 9 个元件仍有值/封装/引脚，但工程完全没有 MPN 参数，用于验证
+// 「数据不足不等于分析失败」的聚合逻辑。
+function createNoMpnProject() {
+  const dir = freshOut('ad-happy-bom-nompn-')
+  copyFileSync(
+    join(root, 'DCDC Buck Converter.PrjPcb'),
+    join(dir, 'DCDC Buck Converter.PrjPcb'),
+  )
+  const source = readFileSync(join(root, 'SCH1_Main.SchDoc'))
+  const patched = source.toString('latin1').split('Part Number').join('Xart Number')
+  assert.equal(Buffer.byteLength(patched, 'latin1'), source.length, '等长替换不得改变文件大小')
+  writeFileSync(join(dir, 'SCH1_Main.SchDoc'), Buffer.from(patched, 'latin1'))
+  copyFileSync(
+    join(root, 'PCB4 (Manual routing).PcbDoc'),
+    join(dir, 'PCB4 (Manual routing).PcbDoc'),
+  )
+  return dir
 }
 
 function component(reference, overrides = {}) {
@@ -126,9 +148,40 @@ test('完全没有 MPN 数据时缺 MPN 检查为 not_evaluated，不得算通�
 
   assert.equal(result.coverage.checks.missing_mpn, 'not_evaluated')
   assert.notEqual(result.coverage.status, 'pass')
-  assert.equal(result.coverage.status, 'partial')
+  assert.equal(result.coverage.status, 'not_evaluated')
   assert.ok(!result.findings.some(item => item.rule_id === 'BM-001'))
   assert.ok(result.coverage.reasons.some(reason => reason.includes('型号')))
+})
+
+test('工程参数支持带序号的型号别名（Manufacturer Part Number 1 / MFR Part Number 1 / MPN1）', () => {
+  const result = buildBom(
+    {
+      schematic: {
+        components: [
+          component('U1', {
+            parameters: { 'Manufacturer Part Number 1': 'STM32-ABC', 'Manufacturer 1': 'ST' },
+          }),
+          component('U2', { parameters: { 'MFR Part Number 1': 'LDO-123' } }),
+          component('U3', { parameters: { MPN1: 'MCU-456' } }),
+        ],
+      },
+    },
+    {
+      components: [
+        { reference: 'U1', footprint: 'PKG' },
+        { reference: 'U2', footprint: 'PKG' },
+        { reference: 'U3', footprint: 'PKG' },
+      ],
+    },
+  )
+
+  const byRef = new Map(result.rows.map(row => [row.reference, row]))
+  assert.equal(byRef.get('U1').mpn, 'STM32-ABC')
+  assert.equal(byRef.get('U2').mpn, 'LDO-123')
+  assert.equal(byRef.get('U3').mpn, 'MCU-456')
+  assert.equal(result.coverage.checks.missing_mpn, 'pass')
+  assert.equal(result.coverage.status, 'pass')
+  assert.ok(!result.findings.some(item => item.rule_id === 'BM-001'))
 })
 
 test('空工程 / 没有元件的工程返回 not_evaluated', () => {
@@ -291,6 +344,13 @@ test('CSV 导入：分号分隔与缺少 Designator 列时报错', () => {
   assert.equal(imported.rows.length, 1)
   assert.equal(imported.rows[0].value, '0.1uF')
   assert.equal(imported.coverage.delimiter, ';')
+
+  // Reference 是 Designator 的别名；分隔符探测不能只认字面量 designator/位号。
+  const referenceAlias = importBomCsv('Reference;Comment;Footprint;Quantity\nC2;22uF;0805;1\n')
+  assert.equal(referenceAlias.rows.length, 1)
+  assert.equal(referenceAlias.rows[0].reference, 'C2')
+  assert.equal(referenceAlias.rows[0].footprint, '0805')
+  assert.equal(referenceAlias.coverage.delimiter, ';')
 
   assert.throws(
     () => importBomCsv('foo,bar\n1,2\n'),
@@ -524,6 +584,65 @@ test('端到端 --bom 指向不存在的文件时退出码 2', () => {
   const r = runAnalyze(['--project', root, '--out', out, '--bom', join(out, 'nope.csv')])
   assert.equal(r.status, 2)
   assert.match(r.stderr, /BOM 文件/)
+})
+
+test('端到端：无 MPN 工程整体 complete/exit 0，rules.bom=not_evaluated', () => {
+  const projectDir = createNoMpnProject()
+  const out = freshOut()
+  const r = runAnalyze(['--project', projectDir, '--out', out])
+  assert.equal(r.status, 0, r.stderr)
+
+  const summary = readJson(out, 'summary.json')
+  assert.equal(summary.status, 'complete')
+  assert.equal(summary.rules.bom, 'not_evaluated')
+  assert.equal(summary.bom.status, 'not_evaluated')
+  assert.equal(summary.bom.rowsMissingMpn, 9, '9 个元件都没有型号数据')
+  assert.equal(summary.coverage.bom.checks.missing_mpn, 'not_evaluated')
+  assert.equal(summary.coverage.bom.checks.missing_footprint, 'pass')
+  assert.equal(summary.coverage.bom.checks.schematic_pcb_match, 'pass')
+
+  const manifest = readJson(out, 'manifest.json')
+  assert.equal(manifest.status, 'complete')
+  assert.equal(manifest.exitCode, 0)
+  assert.equal(manifest.stages.bom, 'not_evaluated')
+
+  const html = readFileSync(join(out, 'report.html'), 'utf8')
+  assert.match(html, /物料/)
+  assert.match(html, /未评估/)
+  assert.match(html, /没有可用的制造商型号/)
+})
+
+test('端到端：大量导入差异被截断，summary 仍小于 32KB', () => {
+  const projectRows = [
+    'C1', 'C2', 'C3', 'IC1', 'J1', 'J2', 'L1', 'R1', 'R2',
+  ]
+  const lines = ['Designator,Comment,Footprint,Quantity']
+  for (const reference of projectRows) lines.push(`${reference},,PKG,1`)
+  for (let index = 0; index < 3000; index += 1) {
+    lines.push(`X${String(index).padStart(4, '0')},Extra,0603,1`)
+  }
+  const csvPath = join(freshOut('ad-happy-bom-huge-'), 'huge.csv')
+  writeFileSync(csvPath, `${lines.join('\n')}\n`, 'utf8')
+
+  const out = freshOut()
+  const r = runAnalyze(['--project', root, '--out', out, '--bom', csvPath])
+  assert.equal(r.status, 0, r.stderr)
+
+  const summaryText = readFileSync(join(out, 'summary.json'), 'utf8')
+  assert.ok(Buffer.byteLength(summaryText, 'utf8') < 32 * 1024, 'summary 必须 <32KB')
+  const summary = JSON.parse(summaryText)
+  assert.equal(summary.rules.bom, 'found')
+  assert.equal(summary.bom.imported.extraInBom, 3000)
+  assert.ok(summary.coverage.bom.imported.extraInBom.length <= 50, 'summary 中列表必须截断')
+  assert.equal(summary.coverage.bom.imported.totals.extraInBom, 3000)
+  assert.ok(statSync(join(out, 'summary.json')).size < 32 * 1024)
+
+  const findings = readJson(out, 'findings.json')
+  const extraFinding = findings.find(
+    finding => finding.rule_id === 'BM-005' && finding.title.includes('多出'),
+  )
+  assert.ok(extraFinding)
+  assert.ok(extraFinding.components.length <= 50, 'finding 组件列表也要有上限')
 })
 
 test('端到端：没有元件的工程 rules.bom=not_evaluated，报告不得写通过', () => {
