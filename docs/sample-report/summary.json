@@ -35,7 +35,7 @@
       }
     ]
   },
-  "generatedAt": "2026-11-25 04:49:44",
+  "generatedAt": "2026-11-25 05:21:35",
   "status": "complete",
   "schematic": {
     "components": 9,
@@ -118,6 +118,7 @@
     "status": "not_evaluated",
     "standard": "fcc-class-b",
     "available": false,
+    "netlistComplete": null,
     "script": null,
     "categories": [],
     "counts": {
@@ -127,8 +128,6 @@
       "issues": 0,
       "facts": 0
     },
-    "evaluatedRules": [],
-    "partiallyEvaluatedRules": [],
     "notEvaluatedRules": [],
     "suppressedFindings": [],
     "unsupportedRules": [],
@@ -277,6 +276,7 @@
       "status": "not_evaluated",
       "standard": "fcc-class-b",
       "available": false,
+      "netlistComplete": null,
       "counts": {
         "evaluated": 0,
         "partial": 0,

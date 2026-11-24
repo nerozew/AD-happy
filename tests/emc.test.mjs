@@ -35,8 +35,10 @@ const NOT_EVALUATED_RULES = [
   'CK-004', 'EE-001',
   'BE-001', 'BE-002',
   'XT-001', 'RP-001',
-  'PD-003', 'PD-004',
+  'PD-001', 'PD-002', 'PD-003', 'PD-004',
   'SU-002', 'SU-003',
+  'SW-002',
+  'DP-001', 'DP-002',
 ]
 
 function freshDir(prefix = 'ad-happy-emc-') {
@@ -70,16 +72,24 @@ function generateAnalysis() {
   }
 }
 
-function writeEmcInputs(run) {
+function writeInputFiles(inputs, outDir, { raw = null } = {}) {
+  const emcDir = join(outDir, 'emc-input')
+  mkdirSync(emcDir, { recursive: true })
+  writeFileSync(join(emcDir, 'schematic.json'), `${JSON.stringify(inputs.schematicJson, null, 2)}\n`, 'utf8')
+  writeFileSync(join(emcDir, 'pcb.json'), `${JSON.stringify(inputs.pcbJson, null, 2)}\n`, 'utf8')
+  if (raw) writeFileSync(join(emcDir, 'raw.json'), `${JSON.stringify(raw, null, 2)}\n`, 'utf8')
+  return emcDir
+}
+
+function writeEmcInputs(run, overrides = {}) {
   const inputs = buildEmcInputs(run.snapshot, run.pcb, run.pipeline, {
     nets: run.raw.nets,
     netlistComplete: true,
   })
-  const emcDir = join(run.outDir, 'emc-input')
-  mkdirSync(emcDir, { recursive: true })
-  writeFileSync(join(emcDir, 'schematic.json'), `${JSON.stringify(inputs.schematicJson, null, 2)}\n`, 'utf8')
-  writeFileSync(join(emcDir, 'pcb.json'), `${JSON.stringify(inputs.pcbJson, null, 2)}\n`, 'utf8')
-  copyFileSync(join(run.outDir, 'raw.json'), join(emcDir, 'raw.json'))
+  if (overrides.schematicJson) {
+    Object.assign(inputs.schematicJson, overrides.schematicJson)
+  }
+  const emcDir = writeInputFiles(inputs, run.outDir, { raw: run.raw })
   return { inputs, emcDir }
 }
 
@@ -144,6 +154,13 @@ test('buildEmcInputs 生成上游 EMC 实际读取的字段', () => {
   assert.equal(ground.status, 'partial')
   assert.ok(ground.notEvaluatedRules.some(entry => entry.rule === 'GP-002'))
   assert.ok(ground.notEvaluatedRules.every(entry => entry.reason.length > 0))
+
+  // 尚未运行 emc_prepare.py 时，ADC/运放/RF/晶振检测器都没有状态，
+  // ML-001 不能因为「有稳压器 + 有 PCB」就被标为 evaluated。
+  const inductor = inputs.coverage.categories.find(category => category.key === 'inductor_leakage')
+  assert.ok(inductor, '缺少电感漏磁类别')
+  assert.equal(inductor.status, 'not_evaluated')
+  assert.ok(inductor.notEvaluatedRules.some(entry => entry.rule === 'ML-001'))
 })
 
 test('runEmc 实际调用上游；缺少铺铜/层切换的类别未评估，不产生假 finding', () => {
@@ -187,7 +204,7 @@ test('runEmc 实际调用上游；缺少铺铜/层切换的类别未评估，不
     result.coverage.suppressedFindings.some(entry => entry.rule === 'GP-002'),
     'GP-002 兜底结果应被排除并记录',
   )
-  for (const key of ['ground_plane', 'board_edge', 'crosstalk', 'return_path']) {
+  for (const key of ['ground_plane', 'board_edge', 'crosstalk', 'return_path', 'pdn']) {
     const category = result.coverage.categories.find(entry => entry.key === key)
     assert.ok(category, `缺少类别 ${key}`)
     assert.ok(
@@ -196,6 +213,159 @@ test('runEmc 实际调用上游；缺少铺铜/层切换的类别未评估，不
     )
     assert.ok(category.reasons.length > 0, `${key} 缺少未评估原因`)
   }
+
+  // ML-001 的敏感器件集合来自晶振/ADC/运放/RF 四个检测器；它们必须实际
+  // 运行过，否则 ML-001 不能标 evaluated。
+  for (const detector of ['crystals', 'adc_circuits', 'opamp_circuits', 'rf_chains']) {
+    assert.equal(
+      result.coverage.detectors?.[detector]?.status,
+      'ok',
+      `${detector} 检测器状态应为 ok`,
+    )
+  }
+  const inductorCategory = result.coverage.categories.find(entry => entry.key === 'inductor_leakage')
+  assert.equal(inductorCategory.status, 'evaluated')
+})
+
+test('ML-001：ADC/运放/RF 检测器实际运行，运放靠近开关电感时产生 finding', () => {
+  const run = generateAnalysis()
+  const raw = structuredClone(run.raw)
+  const pcb = structuredClone(run.pcb)
+  const snapshot = structuredClone(run.snapshot)
+
+  // 把 L1 改成未屏蔽电感，并在其 2 mm 处放一个运放 U2。
+  const l1 = pcb.components.find(component => component.reference === 'L1')
+  assert.ok(l1, '夹具缺少 L1')
+  l1.footprint = 'IND 5x5'
+  l1.value = '4.7uH'
+  l1.description = 'UNSHIELDED POWER INDUCTOR'
+  const u2 = {
+    recordIndex: 999,
+    reference: 'U2',
+    comment: 'OPA333AIDBVR',
+    footprint: 'SOT23-5',
+    parameters: { Comment: 'OPA333AIDBVR' },
+    x: 0,
+    y: 0,
+    pins: [],
+  }
+  raw.schematic.components.push(structuredClone(u2))
+  snapshot.schematic.components.push(structuredClone(u2))
+  pcb.components.push({
+    reference: 'U2',
+    value: 'OPA333AIDBVR',
+    footprint: 'SOT23-5',
+    mpn: '',
+    description: 'OPAMP',
+    x: l1.x + 2,
+    y: l1.y,
+    angle: 0,
+    layer: 'TOP',
+  })
+
+  const inputs = buildEmcInputs(snapshot, pcb, run.pipeline, {
+    nets: raw.nets,
+    netlistComplete: true,
+  })
+  const outDir = freshDir('ad-happy-emc-ml001-')
+  const emcDir = writeInputFiles(inputs, outDir, { raw })
+  const result = runEmc(emcDir, outDir)
+
+  for (const detector of ['crystals', 'adc_circuits', 'opamp_circuits', 'rf_chains']) {
+    assert.equal(result.coverage.detectors?.[detector]?.status, 'ok', `${detector} 未运行`)
+  }
+  const mlCategory = result.coverage.categories.find(entry => entry.key === 'inductor_leakage')
+  assert.equal(mlCategory.status, 'evaluated')
+
+  const finding = result.findings.find(entry => entry.rule_id === 'EM-ML-001')
+  assert.ok(finding, '运放靠近开关电感时缺少 EM-ML-001')
+  assert.ok(finding.components.includes('L1'))
+  assert.ok(finding.components.includes('U2'))
+  assert.ok(finding.description.includes('L1'))
+  assert.ok(finding.description.includes('U2'))
+})
+
+test('晶振检测器失败时 CK/VS/SH/ML 降级为 not_evaluated', () => {
+  const run = generateAnalysis()
+  const inputs = buildEmcInputs(run.snapshot, run.pcb, run.pipeline, {
+    nets: run.raw.nets,
+    netlistComplete: true,
+  })
+  inputs.schematicJson._ad_happy = {
+    source: 'test',
+    netlistComplete: true,
+    detectors: {
+      detect_power_regulators: { status: 'ok', count: 1 },
+      detect_protection_devices: { status: 'ok', count: 0 },
+      detect_lc_filters: { status: 'ok', count: 0, input_filters: 0 },
+      detect_differential_pairs: { status: 'ok', count: 0 },
+      detect_crystal_circuits: { status: 'failed', count: 0, reason: 'stub crystal failure' },
+      detect_adc_circuits: { status: 'ok', count: 0 },
+      detect_opamp_circuits: { status: 'ok', count: 0 },
+      detect_rf_chains: { status: 'ok', count: 0 },
+    },
+  }
+  const outDir = freshDir('ad-happy-emc-xtal-')
+  const emcDir = writeInputFiles(inputs, outDir)
+  const result = runEmc(emcDir, outDir)
+
+  for (const rule of ['CK-001', 'CK-002', 'VS-001', 'SH-001', 'ML-001']) {
+    assert.ok(
+      result.coverage.notEvaluatedRules.some(entry => entry.rule === rule),
+      `${rule} 应因晶振检测器失败而 not_evaluated`,
+    )
+    assert.ok(
+      !result.findings.some(finding => finding.source_rule_id === rule),
+      `${rule} 不应保留上游结果`,
+    )
+  }
+})
+
+test('网表不完整时所有依赖原理图检测器的规则降级', () => {
+  const run = generateAnalysis()
+  const inputs = buildEmcInputs(run.snapshot, run.pcb, run.pipeline, {
+    nets: run.raw.nets,
+    netlistComplete: false,
+  })
+  inputs.schematicJson._ad_happy = {
+    source: 'test',
+    netlistComplete: false,
+    detectors: {
+      detect_power_regulators: { status: 'ok', count: 1 },
+      detect_protection_devices: { status: 'ok', count: 0 },
+      detect_lc_filters: { status: 'ok', count: 0, input_filters: 0 },
+      detect_differential_pairs: { status: 'ok', count: 0 },
+      detect_crystal_circuits: { status: 'ok', count: 0 },
+      detect_adc_circuits: { status: 'ok', count: 0 },
+      detect_opamp_circuits: { status: 'ok', count: 0 },
+      detect_rf_chains: { status: 'ok', count: 0 },
+    },
+  }
+  const outDir = freshDir('ad-happy-emc-netlist-')
+  const emcDir = writeInputFiles(inputs, outDir)
+  const result = runEmc(emcDir, outDir)
+
+  assert.equal(result.coverage.netlist.complete, false)
+  const downgraded = [
+    'SW-001', 'SW-003', 'EE-002',
+    'TH-001', 'TH-002',
+    'IO-001', 'ES-001', 'ES-002',
+    'EF-001', 'EF-002', 'ML-001',
+    'CK-001', 'CK-002',
+    'DP-003', 'DP-004',
+  ]
+  for (const rule of downgraded) {
+    assert.ok(
+      result.coverage.notEvaluatedRules.some(entry => entry.rule === rule),
+      `${rule} 应因网表不完整而 not_evaluated`,
+    )
+    assert.ok(
+      !result.findings.some(finding => finding.source_rule_id === rule),
+      `${rule} 不应保留上游结果`,
+    )
+  }
+  // IO-002 只依赖 PCB 焊盘网络，不受原理图网表完整性影响。
+  assert.ok(result.coverage.evaluatedRules.includes('IO-002'))
 })
 
 test('CLI --emc：合并 EM finding，产物只写输出目录，退出码与默认一致', () => {
@@ -217,6 +387,7 @@ test('CLI --emc：合并 EM finding，产物只写输出目录，退出码与默
   assert.equal(summary.emc.requested, true)
   assert.notEqual(summary.emc.status, 'failed')
   assert.notEqual(summary.rules.emc, 'failed')
+  assert.equal(summary.emc.netlistComplete, true)
   assert.ok(summary.emc.counts.evaluated > 0, '没有评估任何 EMC 规则')
 
   const findings = readJson(join(emcDir, 'findings.json'))
@@ -241,6 +412,7 @@ test('CLI --emc：合并 EM finding，产物只写输出目录，退出码与默
   assert.ok(report.includes('id="emc"'))
   assert.ok(report.includes('EMC 预合规'))
   assert.ok(report.includes('FCC Part 15 Class B'))
+  assert.ok(report.includes('网表完整性'))
   assert.ok(report.includes('未评估原因'))
   assert.ok(report.includes('EMC 预合规检查'), '规则状态表缺少 emc 行')
 })

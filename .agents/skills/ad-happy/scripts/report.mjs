@@ -504,6 +504,9 @@ function normalizeEmc(value) {
     status: scalarText(value.status) || 'not_evaluated',
     standard: scalarText(value.standard) || 'fcc-class-b',
     available: value.available === true,
+    netlistComplete: value.netlistComplete === true
+      ? true
+      : value.netlistComplete === false ? false : null,
     script: scalarText(value.script),
     categories: Array.isArray(value.categories)
       ? value.categories.filter(isPlainObject).map(category => ({
@@ -1568,6 +1571,7 @@ function renderEmc({ emc, findings }) {
     `    <div><dt>状态</dt><dd>${statusBadgeHtml(emc.status)}</dd></div>`,
     `    <div><dt>适用标准</dt><dd>${escapeHtml(standard)}</dd></div>`,
     `    <div><dt>上游可用</dt><dd>${emc.available ? '是' : '否'}</dd></div>`,
+    `    <div><dt>网表完整性</dt><dd>${emc.netlistComplete === true ? '完整' : emc.netlistComplete === false ? '不完整（相关规则已降级）' : '未知'}</dd></div>`,
     `    <div><dt>已评估规则</dt><dd>${emc.counts.evaluated}</dd></div>`,
     `    <div><dt>部分评估规则</dt><dd>${emc.counts.partial}</dd></div>`,
     `    <div><dt>未评估规则</dt><dd>${emc.counts.notEvaluated}</dd></div>`,

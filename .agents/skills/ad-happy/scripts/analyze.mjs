@@ -1720,6 +1720,7 @@ function buildEmcManifest({ requested, coverage }) {
     status: coverage.status,
     standard: coverage.standard,
     available: coverage.available === true,
+    netlistComplete: coverage.netlist?.complete ?? null,
     script: coverage.upstream?.script ?? null,
     categories: {
       total: categories.length,
@@ -1747,6 +1748,7 @@ function buildEmcReport(coverage, findings) {
     status: coverage.status,
     standard: coverage.standard,
     available: coverage.available === true,
+    netlistComplete: coverage.netlist?.complete ?? null,
     script: coverage.upstream?.script ?? null,
     upstream: coverage.upstream ?? null,
     detectors: coverage.detectors ?? null,
@@ -1781,7 +1783,9 @@ function buildEmcSummary(coverage) {
     status: coverage.status,
     standard: coverage.standard,
     available: coverage.available === true,
+    netlistComplete: coverage.netlist?.complete ?? null,
     script: coverage.upstream?.script ?? null,
+    // 32KB 限制下不在顶层重复类别内的规则列表；逐规则原因保留前 2 条。
     categories: categories.map(category => ({
       key: category.key,
       label: category.label,
@@ -1789,19 +1793,16 @@ function buildEmcSummary(coverage) {
       evaluatedRules: category.evaluatedRules ?? [],
       partiallyEvaluatedRules: category.partiallyEvaluatedRules ?? [],
       notEvaluatedRules: (category.notEvaluatedRules ?? []).map(entry => entry.rule),
+      reasons: (category.reasons ?? []).slice(0, 2).map(reason => truncateText(reason, 200)),
     })),
     counts: coverage.counts ?? {},
-    evaluatedRules: coverage.evaluatedRules ?? [],
-    partiallyEvaluatedRules: coverage.partiallyEvaluatedRules ?? [],
-    notEvaluatedRules: (coverage.notEvaluatedRules ?? [])
-      .slice(0, 40)
-      .map(entry => ({ rule: entry.rule, reason: truncateText(entry.reason, 240) })),
+    notEvaluatedRules: (coverage.notEvaluatedRules ?? []).map(entry => entry.rule),
     suppressedFindings: coverage.suppressedFindings ?? [],
     unsupportedRules: coverage.unsupportedRules ?? [],
     findings: coverage.findings ?? 0,
     facts: coverage.facts ?? 0,
     artifact: coverage.artifacts?.index ?? null,
-    reasons: (coverage.reasons ?? []).slice(0, 10).map(reason => truncateText(reason, 300)),
+    reasons: (coverage.reasons ?? []).slice(0, 8).map(reason => truncateText(reason, 240)),
   }
 }
 
@@ -1814,6 +1815,7 @@ function compactEmcCoverage(emc) {
     status: scalarText(emc.status) || 'not_evaluated',
     standard: scalarText(emc.standard),
     available: emc.available === true,
+    netlistComplete: emc.netlistComplete ?? null,
     counts: isPlainObject(emc.counts) ? emc.counts : {},
     categories: Array.isArray(emc.categories)
       ? emc.categories.map(category => ({

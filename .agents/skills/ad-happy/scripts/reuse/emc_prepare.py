@@ -33,10 +33,15 @@ if str(AD_HAPPY_SCRIPTS) not in sys.path:
 from adapter import to_context  # noqa: E402  依赖 kicad-happy 路径
 from netlist_queries import NetlistQueries  # noqa: E402
 from analyze_schematic import analyze_design_rules  # noqa: E402
+from domain_detectors import (  # noqa: E402
+    detect_adc_circuits,
+    detect_rf_chains,
+)
 from signal_detectors import (  # noqa: E402
     detect_crystal_circuits,
     detect_decoupling,
     detect_lc_filters,
+    detect_opamp_circuits,
     detect_power_regulators,
     detect_protection_devices,
     detect_rc_filters,
@@ -147,6 +152,26 @@ def prepare(raw_path: str, schematic_path: str) -> dict:
     if warning:
         warnings.append(warning)
 
+    opamps, meta, warning = _run_detector(
+        "opamp_circuits",
+        pins_ready,
+        "缺少引脚-网络拓扑",
+        lambda: detect_opamp_circuits(ctx),
+    )
+    detector_meta["opamp_circuits"] = meta
+    if warning:
+        warnings.append(warning)
+
+    rf_chains, meta, warning = _run_detector(
+        "rf_chains",
+        base_ready,
+        "缺少元件数据",
+        lambda: detect_rf_chains(ctx),
+    )
+    detector_meta["rf_chains"] = meta
+    if warning:
+        warnings.append(warning)
+
     lc_filters, meta, warning = _run_detector(
         "lc_filters",
         nets_ready and values_ready,
@@ -194,6 +219,26 @@ def prepare(raw_path: str, schematic_path: str) -> dict:
     if warning:
         warnings.append(warning)
 
+    adc_circuits, meta, warning = _run_detector(
+        "adc_circuits",
+        nets_ready and pins_ready,
+        "缺少网表或引脚-网络拓扑",
+        lambda: detect_adc_circuits(ctx, rc_filters, protection),
+    )
+    # ML-001 读取 ADC finding 的 `ic.ref`/`reference`；上游检测器使用 `ref`。
+    # 这里补齐别名，不改变检测结果本身。
+    for entry in adc_circuits:
+        if not isinstance(entry, dict):
+            continue
+        ref = entry.get("ref")
+        if ref and not entry.get("reference"):
+            entry["reference"] = ref
+        if ref and not entry.get("ic"):
+            entry["ic"] = {"ref": ref}
+    detector_meta["adc_circuits"] = meta
+    if warning:
+        warnings.append(warning)
+
     decoupling, meta, warning = _run_detector(
         "decoupling",
         nets_ready and _has_parsed(ctx, "capacitor"),
@@ -225,6 +270,9 @@ def prepare(raw_path: str, schematic_path: str) -> dict:
     collected.extend(regulators)
     collected.extend(crystals)
     collected.extend(protection)
+    collected.extend(opamps)
+    collected.extend(rf_chains)
+    collected.extend(adc_circuits)
     collected.extend(kept_lc)
     collected.extend(rc_filters)
     collected.extend(decoupling)

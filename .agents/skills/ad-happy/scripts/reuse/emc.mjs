@@ -315,6 +315,7 @@ export function emptyEmcCoverage({
     status,
     standard,
     available: false,
+    netlist: null,
     categories: [],
     evaluatedRules: [],
     partiallyEvaluatedRules: [],
@@ -992,6 +993,10 @@ function assessCoverage({
   const protectionInfo = detectors.protection_devices ?? { status: 'not_evaluated', count: 0 }
   const lcInfo = detectors.lc_filters ?? { status: 'not_evaluated', count: 0, input_filters: 0 }
   const diffInfo = detectors.differential_pairs ?? { status: 'not_evaluated', count: 0 }
+  const crystalInfo = detectors.crystals ?? { status: 'not_evaluated', count: 0 }
+  const adcInfo = detectors.adc_circuits ?? { status: 'not_evaluated', count: 0 }
+  const opampInfo = detectors.opamp_circuits ?? { status: 'not_evaluated', count: 0 }
+  const rfInfo = detectors.rf_chains ?? { status: 'not_evaluated', count: 0 }
   const data = {
     hasPcb: footprints.length > 0 || tracks.length > 0,
     hasSchematic: Array.isArray(schematicJson?.components) && schematicJson.components.length > 0,
@@ -1009,6 +1014,10 @@ function assessCoverage({
     hasInputLcFilter: numberOrZero(lcInfo.input_filters) > 0,
     differentialPairs: diffInfo.status === 'ok',
     hasDifferentialPairs: numberOrZero(diffInfo.count) > 0,
+    crystals: crystalInfo.status === 'ok',
+    adcCircuits: adcInfo.status === 'ok',
+    opampCircuits: opampInfo.status === 'ok',
+    rfChains: rfInfo.status === 'ok',
     netlistComplete: netlistComplete !== false,
   }
   const rules = evaluateRuleAvailability(data)
@@ -1104,6 +1113,7 @@ function assessCoverage({
     status,
     standard,
     available: Boolean(upstream),
+    netlist: { complete: netlistComplete !== false },
     categories: [...categoryMap.values()],
     evaluatedRules,
     partiallyEvaluatedRules,
@@ -1142,12 +1152,15 @@ function evaluateRuleAvailability(data) {
   const rules = new Map()
   const set = (rule, status, reason = '') => rules.set(rule, { status, reason })
   const reasonPcb = '缺少可用的 PCB 快照'
-  const reasonNetlist = '原理图网表或稳压器识别未完成，不能据此下结论'
+  const reasonNetlist = '原理图网表匹配不完整，依赖网表的规则无法下结论'
   const reasonZones = '离线解析未捕获铺铜/区域填充形状（zones），无法评估该规则'
   const reasonEdges = '离线解析未捕获板框线段几何，只有包围盒尺寸'
-  const reasonDielectric = '离线解析未捕获叠层介质厚度与介电常数（εr）'
+  const reasonDielectric = '离线解析未捕获叠层介质厚度与介电常数（εr）；上游会用默认 εr=4.4 做近似'
   const reasonLayerTransitions = '未计算信号换层与过孔层对（layer_transitions）'
   const reasonProximity = '未计算走线邻近度（trace_proximity，需上游 --proximity 等价数据）'
+  const reasonCrystals = '晶振检测器未成功运行，依赖晶振频率的规则无法下结论'
+  const reasonSensitive = '敏感器件（晶振/ADC/运放/RF）检测未全部成功，无法评估电感漏磁'
+  const netlistOk = data.netlistComplete === true
 
   set('GP-001', STATUS_NOT_EVALUATED, '缺少回流路径连续性数据（需铺铜实形与上游 --full 级分析）')
   set('GP-002', STATUS_NOT_EVALUATED, reasonZones)
@@ -1179,26 +1192,32 @@ function evaluateRuleAvailability(data) {
     set('IO-001', STATUS_NOT_EVALUATED, data.hasPcb ? '板上没有连接器，规则无适用对象' : reasonPcb)
     set('IO-002', STATUS_NOT_EVALUATED, data.hasPcb ? '板上没有连接器，规则无适用对象' : reasonPcb)
   } else {
-    set('IO-001', data.protectionDevices ? STATUS_EVALUATED : STATUS_NOT_EVALUATED,
-      data.protectionDevices ? '' : '原理图保护器件识别未完成，无法判断连接器是否有 ESD/TVS 保护')
+    set('IO-001',
+      data.protectionDevices && netlistOk ? STATUS_EVALUATED : STATUS_NOT_EVALUATED,
+      !data.protectionDevices
+        ? '原理图保护器件识别未完成，无法判断连接器是否有 ESD/TVS 保护'
+        : netlistOk ? '' : reasonNetlist)
+    // IO-002 只依赖 PCB 焊盘网络，不受原理图网表完整性影响。
     set('IO-002', STATUS_EVALUATED)
   }
 
-  if (!data.powerRegulators) {
-    for (const rule of ['SW-001', 'SW-002', 'SW-003']) set(rule, STATUS_NOT_EVALUATED, reasonNetlist)
-  } else if (!data.hasRegulators) {
-    set('SW-001', STATUS_EVALUATED)
-    set('SW-002', STATUS_EVALUATED)
-    set('SW-003', STATUS_EVALUATED)
-  } else {
-    set('SW-001', STATUS_EVALUATED)
-    set('SW-002', STATUS_PARTIAL, '只统计了走线铜面积（宽×长）；铺铜区域缺失，未计入 zone 面积')
-    set('SW-003', STATUS_EVALUATED)
+  for (const rule of ['SW-001', 'SW-003']) {
+    if (!data.powerRegulators) set(rule, STATUS_NOT_EVALUATED, reasonNetlist)
+    else if (!netlistOk) set(rule, STATUS_NOT_EVALUATED, reasonNetlist)
+    else set(rule, STATUS_EVALUATED)
   }
+  // SW-002 同时依赖走线铜面积与 zones 面积；缺少 zones 时无法完整评估。
+  set('SW-002', STATUS_NOT_EVALUATED, reasonZones)
 
   if (!data.hasPcb || !data.hasNetLengths) {
     set('CK-001', STATUS_NOT_EVALUATED, data.hasPcb ? '没有可用的网络走线长度数据' : reasonPcb)
     set('CK-002', STATUS_NOT_EVALUATED, data.hasPcb ? '没有可用的网络走线长度数据' : reasonPcb)
+  } else if (!data.crystals) {
+    set('CK-001', STATUS_NOT_EVALUATED, reasonCrystals)
+    set('CK-002', STATUS_NOT_EVALUATED, reasonCrystals)
+  } else if (!netlistOk) {
+    set('CK-001', STATUS_NOT_EVALUATED, reasonNetlist)
+    set('CK-002', STATUS_NOT_EVALUATED, reasonNetlist)
   } else {
     set('CK-001', STATUS_EVALUATED)
     set('CK-002', STATUS_EVALUATED)
@@ -1210,7 +1229,10 @@ function evaluateRuleAvailability(data) {
   }
   set('CK-004', STATUS_NOT_EVALUATED, reasonZones)
 
-  set('VS-001', data.hasPcb ? STATUS_EVALUATED : STATUS_NOT_EVALUATED, data.hasPcb ? '' : reasonPcb)
+  if (!data.hasPcb) set('VS-001', STATUS_NOT_EVALUATED, reasonPcb)
+  else if (!data.crystals) set('VS-001', STATUS_NOT_EVALUATED, reasonCrystals)
+  else if (!netlistOk) set('VS-001', STATUS_NOT_EVALUATED, reasonNetlist)
+  else set('VS-001', STATUS_EVALUATED)
   if (!data.hasPcb || data.copperLayers < 2) {
     set('SU-001', STATUS_NOT_EVALUATED, data.hasPcb ? '铜层数量不足或层叠未知' : reasonPcb)
   } else {
@@ -1218,21 +1240,24 @@ function evaluateRuleAvailability(data) {
   }
   set('SU-002', STATUS_NOT_EVALUATED, reasonDielectric)
   set('SU-003', STATUS_NOT_EVALUATED, reasonDielectric)
-  set('EE-001', STATUS_NOT_EVALUATED, `${reasonDielectric}；上游默认 εr=4.4 会给出近似谐振频率`)
-  set('EE-002', data.powerRegulators ? STATUS_EVALUATED : STATUS_NOT_EVALUATED,
-    data.powerRegulators ? '' : reasonNetlist)
+  set('EE-001', STATUS_NOT_EVALUATED, `${reasonDielectric}；未用默认值替代近似`)
+  set('EE-002',
+    data.powerRegulators && netlistOk ? STATUS_EVALUATED : STATUS_NOT_EVALUATED,
+    data.powerRegulators ? (netlistOk ? '' : reasonNetlist) : reasonNetlist)
 
   if (!data.differentialPairs) {
     for (const rule of ['DP-001', 'DP-002', 'DP-003', 'DP-004']) {
       set(rule, STATUS_NOT_EVALUATED, '原理图差分对识别未完成')
     }
-  } else if (!data.netlistComplete) {
+  } else if (!netlistOk) {
     for (const rule of ['DP-001', 'DP-002', 'DP-003', 'DP-004']) {
-      set(rule, STATUS_NOT_EVALUATED, '网表匹配不完整，差分对识别可能漏检')
+      set(rule, STATUS_NOT_EVALUATED, reasonNetlist)
     }
   } else {
-    set('DP-001', STATUS_EVALUATED)
-    set('DP-002', STATUS_EVALUATED)
+    // DP-001/002 的 skew/共模辐射计算需要传播延时，而传播延时要 εr；
+    // 快照没有介质参数，不能静默使用默认 εr=4.4。
+    set('DP-001', STATUS_NOT_EVALUATED, reasonDielectric)
+    set('DP-002', STATUS_NOT_EVALUATED, reasonDielectric)
     set('DP-003', data.hasDifferentialPairs ? STATUS_NOT_EVALUATED : STATUS_EVALUATED,
       data.hasDifferentialPairs ? reasonLayerTransitions : '')
     set('DP-004', STATUS_EVALUATED)
@@ -1253,6 +1278,9 @@ function evaluateRuleAvailability(data) {
   if (!data.powerRegulators || !data.lcFilters) {
     set('EF-001', STATUS_NOT_EVALUATED, !data.powerRegulators ? reasonNetlist : '原理图 LC 滤波识别未完成')
     set('EF-002', STATUS_NOT_EVALUATED, !data.powerRegulators ? reasonNetlist : '原理图 LC 滤波识别未完成')
+  } else if (!netlistOk) {
+    set('EF-001', STATUS_NOT_EVALUATED, reasonNetlist)
+    set('EF-002', STATUS_NOT_EVALUATED, reasonNetlist)
   } else if (data.hasRegulators && !data.hasInputLcFilter) {
     set('EF-001', STATUS_PARTIAL, '未检测到位于稳压器输入轨的 LC 滤波器；上游对纯电容滤波不做结论')
     set('EF-002', STATUS_PARTIAL, '未检测到位于稳压器输入轨的 LC 滤波器；上游对纯电容滤波不做结论')
@@ -1264,6 +1292,9 @@ function evaluateRuleAvailability(data) {
   if (!data.protectionDevices || !data.hasPcb) {
     set('ES-001', STATUS_NOT_EVALUATED, data.hasPcb ? '原理图保护器件识别未完成' : reasonPcb)
     set('ES-002', STATUS_NOT_EVALUATED, data.hasPcb ? '原理图保护器件识别未完成' : reasonPcb)
+  } else if (!netlistOk) {
+    set('ES-001', STATUS_NOT_EVALUATED, reasonNetlist)
+    set('ES-002', STATUS_NOT_EVALUATED, reasonNetlist)
   } else if (!data.hasConnectors) {
     set('ES-001', STATUS_EVALUATED)
     set('ES-002', STATUS_EVALUATED)
@@ -1275,7 +1306,7 @@ function evaluateRuleAvailability(data) {
     set('ES-002', STATUS_EVALUATED)
   }
 
-  if (!data.powerRegulators) {
+  if (!data.powerRegulators || !netlistOk) {
     set('TH-001', STATUS_NOT_EVALUATED, reasonNetlist)
     set('TH-002', STATUS_NOT_EVALUATED, reasonNetlist)
   } else {
@@ -1283,20 +1314,30 @@ function evaluateRuleAvailability(data) {
     set('TH-002', data.hasPcb ? STATUS_EVALUATED : STATUS_NOT_EVALUATED, data.hasPcb ? '' : reasonPcb)
   }
 
-  set('SH-001', data.hasPcb ? STATUS_EVALUATED : STATUS_NOT_EVALUATED, data.hasPcb ? '' : reasonPcb)
+  if (!data.hasPcb) set('SH-001', STATUS_NOT_EVALUATED, reasonPcb)
+  else if (!data.crystals) set('SH-001', STATUS_NOT_EVALUATED, reasonCrystals)
+  else if (!data.powerRegulators || !netlistOk) set('SH-001', STATUS_NOT_EVALUATED, reasonNetlist)
+  else set('SH-001', STATUS_EVALUATED)
 
-  if (!data.powerRegulators) {
-    set('PD-001', STATUS_NOT_EVALUATED, reasonNetlist)
-    set('PD-002', STATUS_NOT_EVALUATED, reasonNetlist)
-  } else {
-    set('PD-001', STATUS_PARTIAL, `${reasonDielectric}；只用电容模型做解析阻抗扫描，平面间电容按 0 处理`)
-    set('PD-002', STATUS_PARTIAL, `${reasonDielectric}；只用电容模型做解析阻抗扫描，平面间电容按 0 处理`)
-  }
+  // PD-001/002 的解析扫描需要平面间电容；缺少介质参数时上游会按 0 处理，
+  // 这是近似而不是完整评估，按需求原文统一标为 not_evaluated。
+  set('PD-001', STATUS_NOT_EVALUATED, reasonDielectric)
+  set('PD-002', STATUS_NOT_EVALUATED, reasonDielectric)
   set('PD-003', STATUS_NOT_EVALUATED, '缺少 power_budget、负载 IC 与走线寄生参数')
   set('PD-004', STATUS_NOT_EVALUATED, '缺少 power_budget 与跨轨瞬态电流数据')
   set('RP-001', STATUS_NOT_EVALUATED, reasonLayerTransitions)
   if (!data.powerRegulators || !data.hasPcb) {
     set('ML-001', STATUS_NOT_EVALUATED, data.hasPcb ? reasonNetlist : reasonPcb)
+  } else if (!netlistOk) {
+    set('ML-001', STATUS_NOT_EVALUATED, reasonNetlist)
+  } else if (!data.crystals || !data.adcCircuits || !data.opampCircuits || !data.rfChains) {
+    const missing = [
+      !data.crystals ? '晶振' : '',
+      !data.adcCircuits ? 'ADC' : '',
+      !data.opampCircuits ? '运放' : '',
+      !data.rfChains ? 'RF' : '',
+    ].filter(Boolean).join('/')
+    set('ML-001', STATUS_NOT_EVALUATED, `${reasonSensitive}（缺：${missing}）`)
   } else {
     set('ML-001', STATUS_EVALUATED)
   }

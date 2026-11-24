@@ -405,3 +405,124 @@ python -B -m pytest -q         → 71 passed, 1 warning
   `emc_formulas.py`、`emc_prepare.py` 所依赖的 kicad-happy 检测器均通过既有
   `KICAD_HAPPY_SCRIPTS` 路径 import。
 - 未传 `--spice-enhanced`，未导入 `emc_spice` 的仿真后端；测试与样例运行均无网络请求。
+
+## 11. P5 评审修复（第二轮）
+
+本节针对 P5 评审的 1 个 Critical 与 3 个 Important 修复；与上文冲突处，以本节为准。
+
+### 11.1 Critical：ML-001 敏感器件检测器缺失
+
+**问题**：上一版 `emc.mjs` 只用 `powerRegulators && hasPcb` 判定 `ML-001` 可评估，
+但 `emc_prepare.py` 没有运行 `detect_adc_circuits`、`detect_opamp_circuits`、
+`detect_rf_chains`。上游 `check_inductor_leakage()` 的敏感器件集合来自
+晶振 + ADC + 运放 + RF 四个检测器；检测器未运行时上游拿不到结果，覆盖模型却仍显示
+`inductor_leakage: evaluated`，属于虚假通过。
+
+**修复**：
+
+1. `scripts/reuse/emc_prepare.py` 新增三个检测器：
+   - `detect_opamp_circuits(ctx)`（`signal_detectors.py`）
+   - `detect_rf_chains(ctx)`（`domain_detectors.py`）
+   - `detect_adc_circuits(ctx, rc_filters, protection_devices)`（`domain_detectors.py`）
+2. ADC finding 的 `ref` 字段补上 `reference` 与 `ic.ref` 别名，使上游
+   `check_inductor_leakage()` 实际能取到 ADC 位号（上游读取 `adc.get('ic', {}).get('ref')`
+   或 `adc.get('reference')`，而检测器原生字段名是 `ref`）。
+3. 三个检测器的运行状态写入 `_ad_happy.detectors.adc_circuits/opamp_circuits/rf_chains`
+   与 `emc.json` 的 `coverage.detectors`。
+4. `emc.mjs` 的 `ML-001` 判定改为：`powerRegulators && hasPcb && netlistComplete
+   && crystals.ok && adc_circuits.ok && opamp_circuits.ok && rf_chains.ok`；
+   任一条件不满足标 `not_evaluated`，原因写明缺哪类检测器。
+5. 新增聚焦测试：把样例 L1 改为未屏蔽电感、在 L1 旁 2 mm 放置 `U2=OPA333AIDBVR`，
+   断言四个检测器均为 `ok`、`inductor_leakage` 类别为 `evaluated`，并实际产生
+   `EM-ML-001`（组件包含 `L1`、`U2`，中文说明包含两者）。
+
+样例本身没有 ADC/运放/RF，但三个检测器现在确实运行且返回空结果，因此样例中
+`ML-001` 的 `evaluated` 是真实结论（没有敏感器件可触发），不是未运行导致的假通过。
+
+### 11.2 Important 1：晶振检测器状态参与判定
+
+`emc.mjs` 现在读取 `detectors.crystals.status`。以下规则在晶振检测器未成功运行时
+标记 `not_evaluated` 并写明「晶振检测器未成功运行，依赖晶振频率的规则无法下结论」：
+
+- `CK-001`、`CK-002`（时钟网络识别/长度）
+- `VS-001`（过孔缝合频率要求）
+- `SH-001`（连接器开口谐振与发射源匹配）
+- `ML-001`（晶振也是敏感器件来源之一）
+
+新增测试：构造 `crystals.status = failed` 的输入，断言上述规则全部未评估，
+且不保留上游结果，同时 `CK-003`（只依赖 PCB 走线/连接器）保持可评估。
+
+### 11.3 Important 2：网表完整性统一降级
+
+`emc.mjs` 现在把 `netlistComplete` 作为所有原理图检测器驱动规则的前置条件。
+当 `netlistComplete === false` 时，以下规则标 `not_evaluated`（原因：原理图网表匹配
+不完整，依赖网表的规则无法下结论）：
+
+- `SW-001`、`SW-003`、`EE-002`（稳压器检测）
+- `TH-001`、`TH-002`（输出电容/磁珠）
+- `IO-001`、`ES-001`、`ES-002`（保护器件）
+- `EF-001`、`EF-002`（LC 滤波）
+- `ML-001`（敏感器件）
+- `CK-001`、`CK-002`（晶振时钟网络）
+- `DP-001`、`DP-002`、`DP-003`、`DP-004`（差分对）
+
+`IO-002` 只依赖 PCB 焊盘网络，不受原理图网表完整性影响；`CK-003`、`BE-003` 同理。
+`coverage.netlist.complete` 与 `summary.emc.netlistComplete` 对外可见，报告 EMC
+章节新增「网表完整性」一栏（完整 / 不完整（相关规则已降级）/ 未知）。
+新增测试：`netlistComplete=false` 时上述规则全部未评估，且不保留上游结果；
+`IO-002` 仍为 `evaluated`。
+
+### 11.4 Important 3：缺 zones/介质的规则改为 not_evaluated
+
+按需求原文与控制器的裁定，取消以下近似/部分评估：
+
+| 规则 | 旧状态 | 新状态 | 原因 |
+|---|---|---|---|
+| `SW-002` | partial（只算走线面积） | `not_evaluated` | 缺少 zones，无法完整计算开关节点铜面积 |
+| `PD-001`、`PD-002` | partial（平面间电容按 0） | `not_evaluated` | 缺少叠层介质厚度/εr；不再用近似值出结论 |
+| `DP-001`、`DP-002` | evaluated（默认 εr=4.4） | `not_evaluated` | 传播延时/skew 需要 εr；不静默使用默认 4.4 |
+
+`DP-003` 仍只在存在差分对时因缺少 `layer_transitions` 未评估；`DP-004` 不依赖 εr，
+保持可评估。`EE-001` 的原因文案明确写出「上游会用默认 εr=4.4 做近似，本实现未使用」。
+不再有 EMC 规则在缺介质参数时保留默认 εr 的近似结论。
+
+### 11.5 样例结果变化
+
+重新运行样例（`--emc`，`fcc-class-b`）：
+
+```text
+EMC：partial；问题 6 / 事实 1；已评估规则 23 + 部分 2 / 未评估 19
+```
+
+类别状态变化：
+
+- `switching_emc`：partial（SW-001、SW-003 可评估；SW-002 未评估）
+- `pdn`：`not_evaluated`（PD-001..004 全部未评估）
+- `diff_pair`：partial（DP-003/004 可评估；DP-001/002 因缺少 εr 未评估）
+- `inductor_leakage`：`evaluated`（晶振/ADC/运放/RF 检测器均已运行；样例无敏感器件）
+- 其余类别状态与第一轮一致
+
+上游原始输出仍为 10 条（保留 7 条：6 问题 + 1 事实，排除 GP-001/GP-002/EE-001）；
+`summary.json` 压缩后约 31 KB，仍低于 32 KB 上限。
+
+### 11.6 测试与产物
+
+```text
+node --test tests/*.test.mjs   → 155 passed, 0 failed（EMC 测试 8 条）
+python -B -m pytest -q         → 71 passed, 1 warning
+```
+
+新增/加强的测试：
+
+1. `ML-001：ADC/运放/RF 检测器实际运行，运放靠近开关电感时产生 finding`
+2. `晶振检测器失败时 CK/VS/SH/ML 降级为 not_evaluated`
+3. `网表不完整时所有依赖原理图检测器的规则降级`
+4. 原「缺少铺铜/层切换」测试的固定未评估列表加入 `SW-002`、`PD-001/002`、
+   `DP-001/002`，并断言 `pdn` 类别不再是 partial/evaluated 的通过状态。
+
+样例报告：
+
+- 默认样例 `docs/sample-report/` 仍按仓库约定不带可选阶段（无 EMC 章节，
+  `rules.emc=not_evaluated`）。
+- 本轮 `--emc` 验证输出在 `%TEMP%/ad-happy-p5-emc-fixed/`，类别表与上文一致；
+  `emc.json`、`emc-input/` 与 `report.html` 均在临时目录，未提交大 JSON。

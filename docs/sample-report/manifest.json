@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "run": {
-    "id": "20261125-044944-eb5a",
-    "startedAt": "2026-11-24T20:49:44.430Z",
+    "id": "20261125-052135-6391",
+    "startedAt": "2026-11-24T21:21:35.155Z",
     "argv": [
       "--project",
       "tests/fixtures/Student-DCDC-Buck-Converter",
@@ -208,6 +208,7 @@
     "status": "not_evaluated",
     "standard": "fcc-class-b",
     "available": false,
+    "netlistComplete": null,
     "script": null,
     "categories": {
       "total": 0,
@@ -246,6 +247,6 @@
   },
   "status": "complete",
   "exitCode": 0,
-  "finishedAt": "2026-11-24T20:49:44.999Z",
-  "durationMs": 547
+  "finishedAt": "2026-11-24T21:21:35.718Z",
+  "durationMs": 539
 }
