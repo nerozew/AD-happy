@@ -20,7 +20,8 @@
     ".agents/skills/ad-happy/SKILL.md",
     ".agents/skills/ad-happy/README.md",
     ".agents/skills/ad-happy/scripts",
-    ".agents/skills/ad-happy/templates"
+    ".agents/skills/ad-happy/templates",
+    ".agents/skills/ad-happy/vendor"
   ],
   "dsh": {
     "manifestVersion": 1,
@@ -75,6 +76,12 @@
   "dependencies": {
     "altiumts": "0.0.95"
   },
+  "bundledDependencies": [
+    "altiumts",
+    "cfb",
+    "fflate",
+    "transformation-matrix"
+  ],
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.5",
     "@deepseek-ai/dsh-tools": "0.2.0-rc.2",

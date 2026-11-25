@@ -19,10 +19,16 @@ import {
   readSync,
   statSync,
 } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 // 与 selfcheck.mjs 保持一致的默认上游路径；可用 KICAD_HAPPY_SCRIPTS 覆盖。
-const DEFAULT_KICAD_HAPPY_SCRIPTS = 'D:/Tools/kicad-happy/skills/kicad/scripts'
+// 优先使用随包分发的脚本（下载即用），没有时回退到本机安装位置。
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
+const VENDORED_KICAD_SCRIPTS = join(SCRIPT_DIR, '..', '..', 'vendor', 'kicad-happy', 'skills', 'kicad', 'scripts')
+const DEFAULT_KICAD_HAPPY_SCRIPTS = existsSync(VENDORED_KICAD_SCRIPTS)
+  ? VENDORED_KICAD_SCRIPTS
+  : 'D:/Tools/kicad-happy/skills/kicad/scripts'
 const SCRIPT_NAME = 'analyze_gerbers.py'
 const PYTHON_TIMEOUT_MS = 120 * 1000
 const MAX_BUFFER = 8 * 1024 * 1024

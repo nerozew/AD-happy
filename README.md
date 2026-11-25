@@ -4,7 +4,7 @@ Altium Designer 工程的离线设计审查 Skill + CLI：解析 `.PrjPcb` / `.S
 
 ## 快速安装（从 tgz 分发包）
 
-前提：Node ≥ 20、Python ≥ 3.10，以及 [kicad-happy](https://github.com/aklofas/kicad-happy) 仓库。
+前提：Node ≥ 20、Python ≥ 3.10。**kicad-happy 已内置**（`vendor/kicad-happy/`），无需单独安装；如需使用其他版本，可用 `KICAD_HAPPY_SCRIPTS` 覆盖。
 
 ```powershell
 # 1. 安装分发包（全局）

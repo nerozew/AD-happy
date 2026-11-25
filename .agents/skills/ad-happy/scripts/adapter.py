@@ -3,9 +3,11 @@
 # KICAD_HAPPY_SCRIPTS 环境变量，缺省用本机安装位置。
 import os
 import sys
+from pathlib import Path
 
-# 与 selfcheck.mjs 的默认路径保持一致。
-DEFAULT_KICAD_HAPPY_SCRIPTS = "D:/Tools/kicad-happy/skills/kicad/scripts"
+# 优先使用随包分发的 kicad-happy 脚本（下载即用），没有时回退到本机安装位置。
+_VENDORED = Path(__file__).resolve().parent.parent / "vendor" / "kicad-happy" / "skills" / "kicad" / "scripts"
+DEFAULT_KICAD_HAPPY_SCRIPTS = str(_VENDORED) if _VENDORED.is_dir() else "D:/Tools/kicad-happy/skills/kicad/scripts"
 
 
 def kicad_happy_scripts() -> str:

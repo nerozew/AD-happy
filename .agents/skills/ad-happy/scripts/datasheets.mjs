@@ -31,6 +31,7 @@ import {
   join,
   resolve,
 } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 // 元件位号前缀识别集成电路。U 是 Altium 里最常见的 IC 前缀，IC 用于
 // 显式命名的元件；电阻、电容、连接器等不要求数据手册，避免产生噪音。
@@ -764,6 +765,9 @@ export function resolveDatasheetsScriptsDir(options = {}, env = process.env) {
     // KICAD_HAPPY_SCRIPTS = <repo>/skills/kicad/scripts
     return join(dirname(dirname(resolve(kicadScripts))), 'datasheets', 'scripts')
   }
+  // 优先使用随包分发的脚本（下载即用），没有时回退到本机安装位置。
+  const vendored = join(dirname(fileURLToPath(import.meta.url)), '..', 'vendor', 'kicad-happy', 'skills', 'datasheets', 'scripts')
+  if (existsSync(join(vendored, 'plan_extraction.py'))) return vendored
   return resolve('D:/Tools/kicad-happy/skills/datasheets/scripts')
 }
 

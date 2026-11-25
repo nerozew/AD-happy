@@ -22,7 +22,12 @@ import { fileURLToPath } from 'node:url'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const PREPARE_PY = join(SCRIPT_DIR, 'emc_prepare.py')
-const DEFAULT_KICAD_HAPPY_SCRIPTS = 'D:/Tools/kicad-happy/skills/kicad/scripts'
+// 优先使用随包分发的 kicad-happy 脚本（下载即用）。
+const VENDORED_ROOT = join(SCRIPT_DIR, '..', '..', 'vendor', 'kicad-happy', 'skills')
+const VENDORED_KICAD_SCRIPTS = join(VENDORED_ROOT, 'kicad', 'scripts')
+const DEFAULT_KICAD_HAPPY_SCRIPTS = existsSync(VENDORED_KICAD_SCRIPTS)
+  ? VENDORED_KICAD_SCRIPTS
+  : 'D:/Tools/kicad-happy/skills/kicad/scripts'
 const DEFAULT_STANDARD = 'fcc-class-b'
 const PYTHON_TIMEOUT_MS = 120 * 1000
 const MAX_BUFFER = 16 * 1024 * 1024
@@ -1844,6 +1849,7 @@ function resolveEmcScriptsDir() {
   const candidates = []
   const kicadScripts = process.env.KICAD_HAPPY_SCRIPTS?.trim() || DEFAULT_KICAD_HAPPY_SCRIPTS
   candidates.push(join(kicadScripts, '..', '..', 'emc', 'scripts'))
+  candidates.push(join(VENDORED_ROOT, 'emc', 'scripts'))
   candidates.push('D:/Tools/kicad-happy/skills/emc/scripts')
   for (const candidate of candidates) {
     try {

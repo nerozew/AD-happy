@@ -7,7 +7,7 @@
 - 版权：Copyright (c) 2025 Andrew Klofas
 - 许可证：MIT
 - 来源：https://github.com/aklofas/kicad-happy
-- 使用方式：通过 `KICAD_HAPPY_SCRIPTS` 指向的本地脚本目录 import 其检测器，不随本项目分发其源码。
+- 使用方式：`skills/{kicad,datasheets,spice,emc}/scripts` 的源码随本包分发在 `.agents/skills/ad-happy/vendor/kicad-happy/`，完整许可证见同目录 `LICENSE`。可用 `KICAD_HAPPY_SCRIPTS` 指向其他本地副本覆盖内置版本。
 
 ## altiumts
 

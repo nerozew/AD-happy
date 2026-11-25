@@ -8,7 +8,11 @@ import { fileURLToPath } from 'node:url'
 // 相对本文件定位依赖，避免依赖调用方的 cwd（测试从仓库根目录运行）。
 const SKILL_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const REQUIRED_ALTIMTS_VERSION = '0.0.95'
-const DEFAULT_KICAD_HAPPY_SCRIPTS = 'D:/Tools/kicad-happy/skills/kicad/scripts'
+// 优先使用随包分发的 kicad-happy 脚本（下载即用），没有时回退到本机安装位置。
+const VENDORED_KICAD_HAPPY_SCRIPTS = join(SKILL_ROOT, 'vendor', 'kicad-happy', 'skills', 'kicad', 'scripts')
+const DEFAULT_KICAD_HAPPY_SCRIPTS = existsSync(VENDORED_KICAD_HAPPY_SCRIPTS)
+  ? VENDORED_KICAD_HAPPY_SCRIPTS
+  : 'D:/Tools/kicad-happy/skills/kicad/scripts'
 
 /**
  * @param {{ kicadHappyScripts?: string }} [env]

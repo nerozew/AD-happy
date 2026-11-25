@@ -34,11 +34,18 @@ import {
   resolve,
   sep,
 } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 
 // 与 selfcheck/datasheets 保持一致的默认上游路径；可用
 // KICAD_HAPPY_SPICE_SCRIPTS 或 KICAD_HAPPY_SCRIPTS 覆盖。
-const DEFAULT_KICAD_HAPPY_SPICE_SCRIPTS = 'D:/Tools/kicad-happy/skills/spice/scripts'
+// 优先使用随包分发的脚本（下载即用），没有时回退到本机安装位置。
+const VENDORED_SPICE_SCRIPTS = join(
+  dirname(fileURLToPath(import.meta.url)), '..', 'vendor', 'kicad-happy', 'skills', 'spice', 'scripts',
+)
+const DEFAULT_KICAD_HAPPY_SPICE_SCRIPTS = existsSync(VENDORED_SPICE_SCRIPTS)
+  ? VENDORED_SPICE_SCRIPTS
+  : 'D:/Tools/kicad-happy/skills/spice/scripts'
 const SCRIPT_NAME = 'simulate_subcircuits.py'
 const PYTHON_TIMEOUT_MS = 120 * 1000
 const DEFAULT_SIMULATION_TIMEOUT_SECONDS = 10

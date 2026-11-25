@@ -68,7 +68,7 @@ node "<安装目录>\scripts\analyze.mjs" --project "D:\你的工程" --out "D:\
 ## 环境要求
 
 - Node ≥ 20、Python ≥ 3.10
-- kicad-happy 的 `skills/kicad/scripts`（外部依赖，不随本包分发）
+- **kicad-happy 已内置**（`vendor/kicad-happy/`），无需单独安装；如需使用其他版本，可用 `KICAD_HAPPY_SCRIPTS` 覆盖
 - 可选：ngspice/LTspice/Xyce（SPICE）、AD-MCP + Altium 运行中（深度模式）
 
 缺什么会在运行时明确提示，不会静默失败。
