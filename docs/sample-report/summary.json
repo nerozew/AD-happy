@@ -35,7 +35,7 @@
       }
     ]
   },
-  "generatedAt": "2026-11-25 06:58:41",
+  "generatedAt": "2026-11-25 12:24:48",
   "status": "complete",
   "schematic": {
     "components": 9,
@@ -129,6 +129,7 @@
       "facts": 0
     },
     "notEvaluatedRules": [],
+    "notEvaluatedRulesOmitted": 0,
     "suppressedFindings": [],
     "unsupportedRules": [],
     "findings": 0,
@@ -369,7 +370,6 @@
         "issues": 0,
         "facts": 0
       },
-      "categories": [],
       "findings": 0,
       "facts": 0,
       "artifact": null,

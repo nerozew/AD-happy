@@ -73,7 +73,7 @@ node .agents/skills/ad-happy/scripts/analyze.mjs --project "<工程目录或 .Pr
 - 退出码：`0` 完成；`2` 输入无效或深度模式不可用（AD 未运行、AD-MCP 缺失、`mcp` 包缺失）；`3` 部分完成（解析失败、规则 failed、原生工具失败/超时或输出不完整）。
 - 默认输出到 `%LOCALAPPDATA%\ad-happy\runs\<run-id>`；`--out` 只接受空目录或带 `.ad-happy-run` 标记的 AD-Happy 输出目录，避免删除用户文件。
 
-产物：`manifest.json`（来源/版本/阶段状态）、`snapshot.json`、`raw.json`、`pcb.json`、`findings.json`、`pipeline-summary.json`、`gerber.json`（上游 Gerber 原始输出，仅在运行 Gerber 分析时生成）、`bom.csv` / `procurement.csv`（物料与采购清单）、`datasheets.json`（PDF 扫描、MPN 匹配与提取计划状态，仅在找到数据手册目录时生成）、`spice.json`（仿真器、逐子电路结果与测试台路径，仅在 `--spice` 时生成）、`spice/`（分析输入、上游仿真结果与 `.cir`/日志；每次运行重建）、`emc.json`（EMC 覆盖、类别、检测器状态与归一化 finding，仅在 `--emc` 时生成）、`emc-input/`（适配后的 schematic/pcb、raw 与上游 `analyze_emc.py` 原始输出；每次运行重建）、`ad.json`（AD 原生检查的可用性、覆盖、逐库结果与归一化 finding，仅在 `--with-ad` 时生成）、`ad/`（MCP 请求/原始结果与本次运行的 AD-MCP home；每次运行重建）、`summary.json`（<32KB，给模型读）、`report.html`（单文件中文报告）。
+产物：`manifest.json`（来源/版本/阶段状态）、`snapshot.json`、`raw.json`、`pcb.json`、`findings.json`、`pipeline-summary.json`、`gerber.json`（上游 Gerber 原始输出，仅在运行 Gerber 分析时生成）、`bom.csv` / `procurement.csv`（物料与采购清单）、`datasheets.json`（PDF 扫描、MPN 匹配与提取计划状态，仅在找到数据手册目录时生成）、`spice.json`（仿真器、逐子电路结果与测试台路径，仅在 `--spice` 时生成）、`spice/`（分析输入、上游仿真结果与 `.cir`/日志；每次运行重建）、`emc.json`（EMC 覆盖、类别、检测器状态与归一化 finding，仅在 `--emc` 时生成）、`emc-input/`（适配后的 schematic/pcb、raw 与上游 `analyze_emc.py` 原始输出；每次运行重建）、`ad.json`（AD 原生检查的可用性、覆盖、逐库结果与归一化 finding，仅在 `--with-ad` 时生成）、`ad/`（MCP 请求/原始结果与本次运行的 AD-MCP home；每次运行重建）、`summary.json`（<32KB，给模型读；超限时先裁剪 top findings、板卡清单与 EMC/可选阶段覆盖明细，完整信息在 `report.html` / `emc.json`）、`report.html`（单文件中文报告）。
 
 `SKILL.md` 描述 AI harness 的固定使用流程；直接运行 CLI 时以本 README 为准。
 

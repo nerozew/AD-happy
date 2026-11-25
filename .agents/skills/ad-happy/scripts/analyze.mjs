@@ -80,6 +80,7 @@ import {
   runSpice,
   spiceErrorFinding,
 } from './spice.mjs'
+import { fitSummaryText } from './summary.mjs'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const PIPELINE_PY = join(SCRIPT_DIR, 'pipeline.py')
@@ -168,7 +169,6 @@ const ARTIFACT_FILES = [
 // datasheets/ 是跨运行缓存，不在清理范围内。
 const ARTIFACT_DIRS = ['spice', 'emc-input', 'ad']
 
-const SUMMARY_LIMIT = 32 * 1024 // summary.json 必须严格小于 32KB
 const TOP_FINDINGS_LIMIT = 20
 const SUMMARY_TEXT_LIMIT = 400
 // 大文件与 Python 进程都需要硬边界，避免把工具拖死或写满内存。
@@ -1840,24 +1840,24 @@ function buildEmcSummary(coverage) {
     available: coverage.available === true,
     netlistComplete: coverage.netlist?.complete ?? null,
     script: coverage.upstream?.script ?? null,
-    // 32KB 限制下不在顶层重复类别内的规则列表；逐规则原因保留前 2 条。
+    // 32KB 限制下 summary 只保留类别计数；逐规则/逐类别原因在
+    // emc.json / report.html 中。notEvaluatedRules 最多 10 条，其余计数。
     categories: categories.map(category => ({
       key: category.key,
-      label: category.label,
       status: category.status,
-      evaluatedRules: category.evaluatedRules ?? [],
-      partiallyEvaluatedRules: category.partiallyEvaluatedRules ?? [],
-      notEvaluatedRules: (category.notEvaluatedRules ?? []).map(entry => entry.rule),
-      reasons: (category.reasons ?? []).slice(0, 2).map(reason => truncateText(reason, 200)),
+      evaluated: (category.evaluatedRules ?? []).length,
+      partial: (category.partiallyEvaluatedRules ?? []).length,
+      notEvaluated: (category.notEvaluatedRules ?? []).length,
     })),
     counts: coverage.counts ?? {},
-    notEvaluatedRules: (coverage.notEvaluatedRules ?? []).map(entry => entry.rule),
-    suppressedFindings: coverage.suppressedFindings ?? [],
-    unsupportedRules: coverage.unsupportedRules ?? [],
+    notEvaluatedRules: (coverage.notEvaluatedRules ?? []).slice(0, 10).map(entry => entry.rule),
+    notEvaluatedRulesOmitted: Math.max(0, (coverage.notEvaluatedRules ?? []).length - 10),
+    suppressedFindings: (coverage.suppressedFindings ?? []).slice(0, 10),
+    unsupportedRules: (coverage.unsupportedRules ?? []).slice(0, 10),
     findings: coverage.findings ?? 0,
     facts: coverage.facts ?? 0,
     artifact: coverage.artifacts?.index ?? null,
-    reasons: (coverage.reasons ?? []).slice(0, 8).map(reason => truncateText(reason, 240)),
+    reasons: (coverage.reasons ?? []).slice(0, 4).map(reason => truncateText(reason, 180)),
   }
 }
 
@@ -1872,12 +1872,6 @@ function compactEmcCoverage(emc) {
     available: emc.available === true,
     netlistComplete: emc.netlistComplete ?? null,
     counts: isPlainObject(emc.counts) ? emc.counts : {},
-    categories: Array.isArray(emc.categories)
-      ? emc.categories.map(category => ({
-        key: scalarText(category.key),
-        status: scalarText(category.status),
-      }))
-      : [],
     findings: numberOrZero(emc.findings),
     facts: numberOrZero(emc.facts),
     artifact: emc.artifact ?? null,
@@ -2451,34 +2445,6 @@ function compactBomCoverage(coverage) {
     },
     imported,
   }
-}
-
-// 保证 summary.json 严格小于 32KB：先按条数丢弃 top findings，再截断板卡清单。
-function fitSummaryText(summary) {
-  let text = serializeSummary(summary)
-  while (Buffer.byteLength(text, 'utf8') >= SUMMARY_LIMIT && summary.findings.length > 0) {
-    summary.findings.pop()
-    summary.findingsOmitted += 1
-    text = serializeSummary(summary)
-  }
-  if (
-    Buffer.byteLength(text, 'utf8') >= SUMMARY_LIMIT
-    && summary.project.boards.length > 50
-  ) {
-    summary.project.boardsTruncated = summary.project.boards.length - 50
-    summary.project.boards = summary.project.boards.slice(0, 50)
-    text = serializeSummary(summary)
-  }
-  if (Buffer.byteLength(text, 'utf8') >= SUMMARY_LIMIT) {
-    throw new Error(
-      `summary.json 无法压缩到 32KB 以内（当前 ${Buffer.byteLength(text, 'utf8')} 字节）`,
-    )
-  }
-  return text
-}
-
-function serializeSummary(summary) {
-  return `${JSON.stringify(summary, null, 2)}\n`
 }
 
 // ---------------------------------------------------------------------------

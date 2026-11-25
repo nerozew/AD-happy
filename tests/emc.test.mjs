@@ -21,6 +21,10 @@ import {
   buildEmcInputs,
   runEmc,
 } from '../.agents/skills/ad-happy/scripts/reuse/emc.mjs'
+import {
+  SUMMARY_LIMIT,
+  fitSummaryText,
+} from '../.agents/skills/ad-happy/scripts/summary.mjs'
 
 const testsDir = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(testsDir, '..')
@@ -443,6 +447,108 @@ test('CLI --emc 上游执行失败：rules.emc=failed、EM-000 可见且退出�
   assert.ok(errorFinding, '缺少 EM-000 执行失败说明')
   assert.equal(errorFinding.kind, 'issue')
   assert.ok(errorFinding.description.includes('分析执行错误'))
+})
+
+test('EMC 覆盖很大时 summary 先裁剪明细，仍小于 32KB 且保留关键计数', () => {
+  const largeReasons = Array.from({ length: 80 }, () => '原因'.repeat(80))
+  const largeCategories = Array.from({ length: 80 }, (_, index) => ({
+    key: `category-${index}`,
+    label: `类别-${index}`,
+    status: 'partial',
+    evaluatedRules: Array.from({ length: 100 }, (_, rule) => `R-${index}-${rule}`),
+    partiallyEvaluatedRules: Array.from({ length: 20 }, (_, rule) => `P-${index}-${rule}`),
+    notEvaluatedRules: Array.from(
+      { length: 100 },
+      (_, rule) => ({ rule: `NE-${index}-${rule}`, reason: '原因'.repeat(40) }),
+    ),
+    reasons: largeReasons,
+  }))
+  const summary = {
+    schemaVersion: 1,
+    project: { name: '大工程', boards: [] },
+    generatedAt: '2026-01-01 00:00:00',
+    status: 'partial',
+    schematic: { components: 1, pins: 1, nets: 1 },
+    pcb: { components: 1, pads: 1, tracks: 1, vias: 1 },
+    bom: null,
+    datasheets: null,
+    spice: null,
+    emc: {
+      requested: true,
+      status: 'partial',
+      standard: 'fcc-class-b',
+      available: true,
+      netlistComplete: true,
+      script: 'D:/x'.repeat(100),
+      categories: largeCategories,
+      counts: { evaluated: 23, partial: 2, notEvaluated: 19, issues: 6, facts: 1 },
+      evaluatedRules: Array.from({ length: 200 }, (_, index) => `E-${index}`),
+      partiallyEvaluatedRules: Array.from({ length: 50 }, (_, index) => `P-${index}`),
+      notEvaluatedRules: Array.from({ length: 300 }, (_, index) => `NE-${index}`),
+      suppressedFindings: Array.from(
+        { length: 100 },
+        (_, index) => ({ rule: `SUP-${index}`, count: 1, reason: '原因'.repeat(30) }),
+      ),
+      unsupportedRules: Array.from({ length: 50 }, (_, index) => `U-${index}`),
+      findings: 6,
+      facts: 1,
+      artifact: 'emc.json',
+      reasons: largeReasons,
+    },
+    coverage: {
+      documents: 1,
+      parsed: 1,
+      notEvaluated: 0,
+      emc: {
+        requested: true,
+        status: 'partial',
+        standard: 'fcc-class-b',
+        available: true,
+        netlistComplete: true,
+        counts: { evaluated: 23, partial: 2, notEvaluated: 19, issues: 6, facts: 1 },
+        categories: largeCategories,
+        findings: 6,
+        facts: 1,
+        artifact: 'emc.json',
+        reasons: largeReasons,
+      },
+      gerber: { status: 'pass', files: Array.from({ length: 200 }, (_, index) => `f-${index}`) },
+    },
+    counts: {
+      must_fix: 0,
+      should_fix: 2,
+      nice_to_have: 1,
+      total: 3,
+      facts: 1,
+      rules: { pass: 1, found: 1, partial: 1, not_evaluated: 0, failed: 0 },
+    },
+    rules: { emc: 'partial' },
+    findings: [],
+    findingsOmitted: 0,
+    report: 'report.html',
+  }
+
+  const text = fitSummaryText(summary)
+  assert.ok(
+    Buffer.byteLength(text, 'utf8') < SUMMARY_LIMIT,
+    `summary 仍超限：${Buffer.byteLength(text, 'utf8')}`,
+  )
+  const parsed = JSON.parse(text)
+  assert.equal(parsed.emc.status, 'partial')
+  assert.equal(parsed.emc.counts.evaluated, 23)
+  assert.equal(parsed.emc.counts.notEvaluated, 19)
+  assert.equal(parsed.emc.findings, 6)
+  assert.equal(parsed.emc.facts, 1)
+  assert.equal(parsed.counts.total, 3)
+  assert.ok(parsed.coverage.emc, 'coverage.emc 关键计数应保留')
+  assert.equal(parsed.coverage.emc.counts.evaluated, 23)
+  // 明细被裁剪：类别不再带规则数组/长原因。
+  if (Array.isArray(parsed.emc.categories)) {
+    for (const category of parsed.emc.categories) {
+      assert.ok(!Array.isArray(category.evaluatedRules))
+      assert.ok(!Array.isArray(category.notEvaluatedRules))
+    }
+  }
 })
 
 test('CLI --emc 缺少上游脚本：not_evaluated，退出码不变，不伪造 EM finding', () => {

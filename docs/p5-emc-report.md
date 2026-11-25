@@ -526,3 +526,55 @@ python -B -m pytest -q         → 71 passed, 1 warning
   `rules.emc=not_evaluated`）。
 - 本轮 `--emc` 验证输出在 `%TEMP%/ad-happy-p5-emc-fixed/`，类别表与上文一致；
   `emc.json`、`emc-input/` 与 `report.html` 均在临时目录，未提交大 JSON。
+
+## 12. summary 32KB 上限收尾（第三轮）
+
+### 12.1 问题
+
+完整运行（`--gerber + --emc`）的 `docs/full-report/summary.json` 达到 **32,765 字节**，
+距 32,768 上限只剩 3 字节。原 `fitSummaryText` 只裁剪 top findings 与 boards，
+不处理 EMC 覆盖信息；任何稍大的工程都会超限，导致整次运行在写 summary 时失败。
+
+### 12.2 修复
+
+1. **新增 `scripts/summary.mjs`**：把 `fitSummaryText` / `serializeSummary` /
+   `SUMMARY_LIMIT` 从 `analyze.mjs` 拆出，便于聚焦测试。
+2. **初始摘要压缩**（`buildEmcSummary`）：
+   - `emc.categories` 只保留 `key/status/evaluated/partial/notEvaluated` 计数，
+     不再在 summary 中重复规则 ID 数组与逐类别长原因；
+   - `emc.notEvaluatedRules` 最多 10 条，其余用 `notEvaluatedRulesOmitted` 计数；
+   - `emc.reasons` 最多 4 条、每条截断 180 字符；
+   - `coverage.emc` 只保留状态、计数、findings/facts、artifact 与前 5 条原因，
+     不再重复类别列表。
+3. **超限兜底阶段**（`fitSummaryText`，按顺序执行，命中即停）：
+   - top findings 逐条丢弃 → boards 截到 50 → boards 清空；
+   - EMC `notEvaluatedRules` 截到 10 / 计数；
+   - EMC categories 降为计数；
+   - EMC 原因/抑制列表清空，script 置空；
+   - `emc` 降为 `{requested,status,standard,available,netlistComplete,counts,findings,facts,artifact}`；
+   - `coverage.emc` 同样降为关键计数；
+   - Gerber/BOM/数据手册/SPICE/AD 原生覆盖降为 status；
+   - 最后返回极简信封（保留 status、counts、emc 计数与 report）。
+4. **不变式**：`fitSummaryText` 不再因超限抛异常；所有兜底阶段都保留
+   `counts` 与 `summary.emc.counts/findings/facts/status`。完整规则、原因与
+   `suppressedFindings` 仍可在 `emc.json`、`report.html`、`manifest.json` 中查看。
+
+### 12.3 验证与样例
+
+- 新增测试：构造 80 个 EMC 类别 × 100 条评估规则 / 300 条未评估规则 /
+  100 条抑制结果 / 大量长原因，断言 `fitSummaryText` 输出 **< 32KB**，
+  且 `emc.counts.evaluated/notEvaluated`、`emc.findings/facts`、`counts.total`
+  与 `coverage.emc.counts` 均保留。
+- 重新生成 `docs/full-report/`（`--gerber tests/fixtures/gerber-basic --emc`）：
+
+```text
+summary.json = 28,954 字节（目标 <30KB，余量 3,814 字节）
+```
+
+- 重新生成默认 `docs/sample-report/`（无 `--emc`）：summary 约 20.5KB。
+- `docs/full-report/` 已在 `.gitignore` 中，只作为本地完整报告样例，不提交大 JSON。
+
+```text
+node --test tests/*.test.mjs   → 174 passed, 0 failed（EMC 测试 9 条）
+python -B -m pytest -q         → 79 passed, 1 warning
+```
