@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.pyo
+node_modules/
+tests/
+.tmp-*/
+ad-happy-*.tgz

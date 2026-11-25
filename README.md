@@ -2,7 +2,34 @@
 
 Altium Designer 工程的离线设计审查 Skill + CLI：解析 `.PrjPcb` / `.SchDoc` / `.PcbDoc`，自建原理图网表，复用 [kicad-happy](https://github.com/aklofas/kicad-happy) 的检测器，产出中文 `findings.json`、`summary.json` 与 `report.html`。不启动 Altium Designer，不修改源工程。
 
-## 安装
+## 快速安装（从 tgz 分发包）
+
+前提：Node ≥ 20、Python ≥ 3.10，以及 [kicad-happy](https://github.com/aklofas/kicad-happy) 仓库。
+
+```powershell
+# 1. 安装分发包（全局）
+npm install -g .\ad-happy-0.1.0.tgz
+
+# 2. 把技能链接到本机已有的 harness 技能目录（dsh / .agents / Claude Code）
+ad-happy-install
+
+# 3. kicad-happy 不在默认位置时，设置路径
+$env:KICAD_HAPPY_SCRIPTS = "D:/path/to/kicad-happy/skills/kicad/scripts"
+```
+
+安装完成后，在 dsh 或 opencode 里直接说：
+
+> 分析 `D:\你的工程` 这个 AD 工程
+
+技能会先问你要不要开 Altium 做深度检查，然后自动分析并输出中文报告。
+
+直接命令行使用：
+
+```powershell
+node "<安装目录>\scripts\analyze.mjs" --project "D:\你的工程" --out "D:\报告输出"
+```
+
+## 从源码安装
 
 需要 Node ≥ 20、Python ≥ 3.10，以及 kicad-happy 的 scripts 目录。
 

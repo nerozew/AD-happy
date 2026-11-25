@@ -1,13 +1,33 @@
 {
   "name": "ad-happy",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
-  "description": "Altium 设计审查 Skill（离线解析 PrjPcb/SchDoc/PcbDoc）",
+  "description": "Altium 设计审查 Skill：离线解析 PrjPcb/SchDoc/PcbDoc，复用 kicad-happy 规则，产出中文 JSON/HTML 报告",
+  "keywords": [
+    "altium",
+    "altium-designer",
+    "pcb",
+    "design-review",
+    "skill",
+    "dsh",
+    "opencode"
+  ],
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
     "altiumts": "0.0.95"
+  },
+  "files": [
+    "SKILL.md",
+    "scripts/",
+    "templates/",
+    "README.md"
+  ],
+  "bin": {
+    "ad-happy-install": "./scripts/install.mjs"
+  },
+  "scripts": {
+    "install-skill": "node ./scripts/install.mjs"
   }
 }
