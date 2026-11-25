@@ -73,15 +73,7 @@
     "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
     "@deepseek-ai/schemastery": "~3.18.4"
   },
-  "dependencies": {
-    "altiumts": "0.0.95"
-  },
-  "bundledDependencies": [
-    "altiumts",
-    "cfb",
-    "fflate",
-    "transformation-matrix"
-  ],
+  "//runtime-deps": "altiumts 及依赖已提交在 .agents/skills/ad-happy/node_modules，GitHub 安装时无需从 registry 拉取；不要在这里声明 dependencies，否则 pnpm 会尝试联网安装。",
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.5",
     "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
