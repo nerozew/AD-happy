@@ -1,0 +1,9 @@
+# AD-Happy：Altium 工程离线设计审查。
+# 可在 profile 中按 id 覆盖配置（例如 kicadHappyScripts、pythonCommand）。
+- insert:
+    - id: ad-happy
+      name: ad-happy
+      config:
+        pythonCommand: 'python'
+        kicadHappyScripts: ''
+        adMcpServer: ''

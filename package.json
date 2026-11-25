@@ -1,0 +1,89 @@
+{
+  "name": "ad-happy",
+  "version": "0.1.0",
+  "description": "Altium 设计审查：给一个工程文件夹，离线解析 PrjPcb/SchDoc/PcbDoc，复用 kicad-happy 规则，产出中文 JSON/HTML 报告",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "cordis.patch.yml",
+    "README.md",
+    "THIRD-PARTY-NOTICES.md",
+    ".agents/skills/ad-happy/SKILL.md",
+    ".agents/skills/ad-happy/README.md",
+    ".agents/skills/ad-happy/scripts",
+    ".agents/skills/ad-happy/templates"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dshWorkshop": {
+    "schema": "omdsh-workshop-package/v1",
+    "type": "plugin",
+    "integration": {
+      "protocol": "harness-profile",
+      "artifact": "cordis.patch.yml"
+    },
+    "install": {
+      "mode": "transactional",
+      "adapter": "profile-bundle",
+      "failurePolicy": "generation-rollback",
+      "touchesCurrentBeforeActivation": false
+    },
+    "lifecycle": {
+      "activation": "restart",
+      "dispose": "supported"
+    },
+    "permissions": ["process:node", "process:python", "filesystem:project"],
+    "capability": {
+      "id": "ad-happy",
+      "kind": "tool",
+      "invocation": "adhappy_analyze",
+      "expected": "分析一个 Altium 工程文件夹，输出中文设计审查报告"
+    }
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "altium",
+    "altium-designer",
+    "pcb",
+    "design-review"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "~3.18.4"
+  },
+  "dependencies": {
+    "altiumts": "0.0.95"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/dsh-tools": "0.2.0-rc.2",
+    "@deepseek-ai/schemastery": "3.18.5",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  },
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.0-0 <0.3.0"
+  }
+}
